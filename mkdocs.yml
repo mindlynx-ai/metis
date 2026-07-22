@@ -53,6 +53,8 @@ theme:
     - toc.follow
     - search.suggest
     - content.code.copy
+extra_css:
+  - assets/extra.css
 markdown_extensions:
   - admonition
   - pymdownx.superfences

@@ -9,15 +9,15 @@ for the two quickstarts (Docker and the CLI), then come back for the deeper guid
 
 ## Guides
 
-- [Architecture](architecture.md) — the package map, the data flow, and the
+- [Architecture](architecture.md) - the package map, the data flow, and the
   invariants that hold the system together.
-- [Adding a node](adding-a-node.md) — how a new node type goes from catalogue
+- [Adding a node](adding-a-node.md) - how a new node type goes from catalogue
   entry to running handler.
-- [Connectors](connectors.md) — the data-driven integration model: definitions,
+- [Connectors](connectors.md) - the data-driven integration model: definitions,
   credentials, and the operation catalogue.
-- [Running tests](running-tests.md) — the unit suites, the real-Temporal e2e
+- [Running tests](running-tests.md) - the unit suites, the real-Temporal e2e
   suites, and the six release gates.
-- [AI tools (MCP)](mcp.md) — let Claude and other MCP-capable tools browse the
+- [AI tools (MCP)](mcp.md) - let Claude and other MCP-capable tools browse the
   catalogue, build workflows and run them.
 
 ## Node reference

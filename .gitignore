@@ -14,3 +14,6 @@ deploy/aws*/*.pem
 
 # Internal planning/porting notes: never ship in the public repo.
 docs/internal/
+
+# MkDocs build output (docs.metisflow.io is built in CI)
+site/

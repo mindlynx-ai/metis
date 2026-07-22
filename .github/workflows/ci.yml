@@ -75,6 +75,9 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      # The spawned 'metis up' child resolves @mindlynx/* through node (dist),
+      # unlike vitest's source aliases - without built packages it dies on boot.
+      - run: npm run build --workspaces --if-present
       - run: npm run test:cli-e2e
 
   compose-boot:

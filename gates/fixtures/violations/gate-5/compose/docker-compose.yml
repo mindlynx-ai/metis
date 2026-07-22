@@ -1,0 +1,26 @@
+name: metis-violation
+
+services:
+  temporal:
+    image: temporalio/admin-tools:1.4.1
+    networks:
+      - metis
+  metis:
+    build:
+      context: ..
+      dockerfile: compose/Dockerfile
+    environment:
+      METIS_REMOTE_DB: 'https://db.example.com/prod'
+    ports:
+      - '3000:3000'
+      - '5432:5432'
+    networks:
+      - metis
+  analytics:
+    image: grafana/grafana:latest
+    ports:
+      - '9000:3000'
+
+networks:
+  metis:
+    driver: bridge

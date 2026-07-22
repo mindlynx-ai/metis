@@ -1,0 +1,34 @@
+{
+  "name": "@mindlynx/metis-core",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mindlynx-ai/metis.git",
+    "directory": "packages/metis-core"
+  },
+  "homepage": "https://github.com/mindlynx-ai/metis#readme",
+  "bugs": "https://github.com/mindlynx-ai/metis/issues",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "metis": {
+    "edition": "open"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@mindlynx/metis-catalogue": "0.1.0",
+    "@mindlynx/metis-data-gateway": "0.1.0",
+    "@mindlynx/metis-engine": "0.1.0",
+    "@mindlynx/metis-ports": "0.1.0",
+    "fastify": "^5.0.0",
+    "jose": "^6.2.3",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "vitest": "^2.0.0"
+  }
+}

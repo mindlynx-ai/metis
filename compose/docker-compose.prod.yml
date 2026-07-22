@@ -1,0 +1,63 @@
+# Copyright 2026 Seillen Ltd
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# Production overlay for the public demo. Layer it on the hero compose:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# It fronts Metis with Caddy for automatic HTTPS (Let's Encrypt), turns on the
+# production admin-secret guard, and seeds a demo user - all from a .env file.
+# This overlay is deliberately separate from docker-compose.yml so the offline
+# hero quickstart (gate 5) stays a pure two-service, no-internet boot.
+
+services:
+  temporal:
+    restart: unless-stopped
+
+  metis:
+    restart: unless-stopped
+    environment:
+      METIS_ENV: production
+      METIS_ADMIN_SECRET: ${METIS_ADMIN_SECRET:?set METIS_ADMIN_SECRET in .env}
+      METIS_DEMO_USER: ${METIS_DEMO_USER:-}
+      METIS_DEMO_SECRET: ${METIS_DEMO_SECRET:-}
+      METIS_DEMO_ROLE: ${METIS_DEMO_ROLE:-editor}
+      # Helix cloud identity. GATEWAY_URL unset = the uplift
+      # kill switch (control-server buildUpliftDeps): no account routes at all.
+      # Both empty = demo box unaffected.
+      METIS_HELIX_GATEWAY_URL: ${METIS_HELIX_GATEWAY_URL:-}
+      METIS_HELIX_IDENTITY_URL: ${METIS_HELIX_IDENTITY_URL:-}
+      METIS_HELIX_CLIENT_ID: ${METIS_HELIX_CLIENT_ID:-metis-editor}
+      METIS_HELIX_REDIRECT_BASE: ${METIS_HELIX_REDIRECT_BASE:-}
+
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    depends_on:
+      - metis
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      METIS_DEMO_HOST: ${METIS_DEMO_HOST:?set METIS_DEMO_HOST in .env}
+    networks:
+      - metis
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  caddy-data:
+  caddy-config:

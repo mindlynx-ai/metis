@@ -1,0 +1,6 @@
+{
+  "name": "@mindlynx/fake-gated",
+  "version": "0.0.0",
+  "type": "module",
+  "metis": { "edition": "helix" }
+}

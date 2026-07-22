@@ -1,0 +1,12 @@
+# Automatic HTTPS for the Metis demo. Caddy fetches and renews a Let's Encrypt
+# certificate for METIS_DEMO_HOST, then reverse-proxies everything (including the
+# run-status WebSocket, which Caddy upgrades transparently) to the Metis app.
+{$METIS_DEMO_HOST} {
+	encode zstd gzip
+	reverse_proxy metis:3000
+}
+
+# www -> apex (Caddy gets a cert for www too; harmless on sslip.io demo hosts).
+www.{$METIS_DEMO_HOST} {
+	redir https://{$METIS_DEMO_HOST}{uri} permanent
+}

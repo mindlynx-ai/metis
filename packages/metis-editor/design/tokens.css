@@ -1,0 +1,221 @@
+/*
+ * Copyright 2026 Seillen Ltd
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ *
+ * The Metis design identity: dark-first Helix. Near-black ink surfaces lit by
+ * brand blue (#4d76b8) and its luminous partner (#9cdded), with a warm accent
+ * and four functional node-category hues. The token NAMES are stable - every
+ * surface reads through them - so a reskin is a value change, not a rename.
+ * Every contrast-checked text/surface pair is held to WCAG AA by
+ * contrast.spec.ts; change a value and the test tells you if a pairing breaks.
+ */
+
+@font-face {
+  font-family: 'Inter Variable';
+  src: url('./fonts/inter-latin-wght-normal.woff2') format('woff2');
+  font-weight: 100 900;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono Variable';
+  src: url('./fonts/jetbrains-mono-latin-wght-normal.woff2') format('woff2');
+  font-weight: 100 800;
+  font-display: swap;
+}
+
+:root {
+  /* Type: Inter for everything (display + ui), JetBrains Mono for code. */
+  --font-display: 'Inter Variable', ui-sans-serif, -apple-system, 'Segoe UI', sans-serif;
+  --font-ui: 'Inter Variable', ui-sans-serif, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, 'SF Mono', Menlo, monospace;
+
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-base: 0.875rem;
+  --text-md: 1rem;
+  --text-lg: 1.25rem;
+  --text-xl: 1.75rem;
+
+  /* Shape */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* Motion: killed entirely under prefers-reduced-motion below. */
+  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 320ms;
+
+  /* Spacing rhythm (4px grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* Brand blues + gradient, theme-independent (used on gradients/glass). */
+  --brand-blue: #4d76b8;
+  --brand-cyan: #9cdded;
+  --gradient-brand: linear-gradient(135deg, #4d76b8 0%, #9cdded 100%);
+}
+
+:root,
+[data-theme='light'] {
+  color-scheme: light;
+
+  --surface-base: #ffffff;
+  --surface-raised: #ffffff;
+  --surface-sunken: #eef0f4;
+  --surface-canvas: #f3f4f7;
+  --border-subtle: #e3e6ec;
+  --border-strong: #c3c8d2;
+
+  --text-primary: #161920;
+  --text-muted: #555c6b;
+  --text-faint: #5c6474;
+
+  --brand: #3f6aad;
+  --brand-hover: #345a97;
+  --on-brand: #ffffff;
+  --brand-wash: #e7eef8;
+
+  --accent: #a35c14;
+  --accent-hover: #8f4f0f;
+  --on-accent: #ffffff;
+  --accent-text: #8a4e0f;
+
+  --danger-text: #b3372f;
+  --success-text: #157347;
+  --warning-text: #92400e;
+
+  --focus-ring: #3f6aad;
+
+  --cat-trigger-text: #7c4a03;
+  --cat-trigger-wash: #f7e6d0;
+  --cat-trigger-dot: #a35c14;
+  --cat-logic-text: #5b3a8c;
+  --cat-logic-wash: #ece3f7;
+  --cat-logic-dot: #7a4fc9;
+  --cat-transform-text: #155e73;
+  --cat-transform-wash: #d8eef5;
+  --cat-transform-dot: #2c7ba0;
+  --cat-integration-text: #1f4f86;
+  --cat-integration-wash: #dde8f7;
+  --cat-integration-dot: #3a66b4;
+
+  --status-running: #2c6fa0;
+  --status-completed: #157347;
+  --status-failed: #b3372f;
+  --status-cancelled: #5c6474;
+
+  --panel-glass: rgba(255, 255, 255, 0.88);
+  --shadow-soft: 0 1px 2px rgba(15, 18, 24, 0.06), 0 4px 16px rgba(15, 18, 24, 0.08);
+  --shadow-lift: 0 2px 4px rgba(15, 18, 24, 0.08), 0 24px 40px -12px rgba(15, 18, 24, 0.16);
+  --canvas-dot: rgba(15, 18, 24, 0.12);
+  --mesh-a: rgba(77, 118, 184, 0.06);
+  --mesh-b: rgba(156, 221, 237, 0.06);
+
+  /* Sky: the cloud accent (uplift affordances) + the degraded modifier. */
+  --cloud-text: #16657f;
+  --cloud-wash: #e2f2f8;
+  --cloud-dot: #1f7ba6;
+  --gradient-cloud: linear-gradient(135deg, #4d76b8, #16657f);
+  --status-degraded: #92400e;
+}
+
+[data-theme='dark'] {
+  color-scheme: dark;
+
+  --surface-base: #0d0f14;
+  --surface-raised: #14171f;
+  --surface-sunken: #07080b;
+  --surface-canvas: #07080b;
+  --border-subtle: #1e222b;
+  --border-strong: #353a45;
+
+  --text-primary: #eef0f4;
+  --text-muted: #9aa0ad;
+  /* Clears AA even on tinted row backgrounds (e.g. the history hover), not just
+     the flat surfaces the contrast test checks. */
+  --text-faint: #868d9c;
+
+  --brand: #9cdded;
+  --brand-hover: #b7e6f2;
+  --on-brand: #062a30;
+  --brand-wash: #12242c;
+
+  --accent: #ffb874;
+  --accent-hover: #ffc78f;
+  --on-accent: #2a1704;
+  --accent-text: #ffb874;
+
+  --danger-text: #f4a1a1;
+  --success-text: #7fe0a0;
+  --warning-text: #e5b567;
+
+  --focus-ring: #9cdded;
+
+  /* Node category hues: text on wash, dot as solid. */
+  --cat-trigger-text: #ffce9b;
+  --cat-trigger-wash: #2a1d0f;
+  --cat-trigger-dot: #ffb874;
+  --cat-logic-text: #d8bcff;
+  --cat-logic-wash: #211a30;
+  --cat-logic-dot: #c8a4ff;
+  --cat-transform-text: #b6e6f2;
+  --cat-transform-wash: #10262c;
+  --cat-transform-dot: #9cdded;
+  --cat-integration-text: #a9cdff;
+  --cat-integration-wash: #111d30;
+  --cat-integration-dot: #7bb6ff;
+
+  --status-running: #9cdded;
+  --status-completed: #7fe0a0;
+  --status-failed: #f4a1a1;
+  --status-cancelled: #8a92a1;
+
+  /* Glass panels (inspector, header, library) + canvas texture. */
+  --panel-glass: rgba(13, 15, 20, 0.82);
+  --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.35), 0 4px 16px rgba(0, 0, 0, 0.4);
+  --shadow-lift: 0 2px 6px rgba(0, 0, 0, 0.4), 0 24px 48px -12px rgba(0, 0, 0, 0.6);
+  --canvas-dot: rgba(255, 255, 255, 0.09);
+  --mesh-a: rgba(77, 118, 184, 0.1);
+  --mesh-b: rgba(156, 221, 237, 0.06);
+
+  /* Sky: the cloud accent (uplift affordances) + the degraded modifier.
+     The gradient is decorative only - never a text background. */
+  --cloud-text: #8fd6ea;
+  --cloud-wash: #0e2530;
+  --cloud-dot: #5fb8d4;
+  --gradient-cloud: linear-gradient(135deg, #4d76b8, #5fb8d4);
+  --status-degraded: #e5b567;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+    --duration-slow: 0ms;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

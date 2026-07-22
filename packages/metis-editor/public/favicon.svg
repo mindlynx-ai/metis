@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="mRoyal" x1="10" y1="8" x2="88" y2="92" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2f55c0" />
+      <stop offset="1" stop-color="#4d76b8" />
+    </linearGradient>
+    <linearGradient id="mCyan" x1="90" y1="8" x2="12" y2="92" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#57c8f2" />
+      <stop offset="1" stop-color="#9cdded" />
+    </linearGradient>
+  </defs>
+  <rect width="100" height="100" rx="22" fill="#0d0f14" />
+  <g fill="none" stroke-linejoin="miter" stroke-miterlimit="4" transform="translate(50 50) scale(0.8) translate(-50 -50)">
+    <polyline points="17,92 15,13 85,89" stroke="url(#mRoyal)" stroke-width="15" />
+    <polyline points="83,92 85,13 15,89" stroke="url(#mCyan)" stroke-width="15" />
+    <line x1="36" y1="36" x2="64" y2="66" stroke="url(#mRoyal)" stroke-width="15" />
+  </g>
+</svg>

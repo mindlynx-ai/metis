@@ -1,0 +1,42 @@
+{
+  "name": "@mindlynx/metis-cli",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mindlynx-ai/metis.git",
+    "directory": "packages/metis-cli"
+  },
+  "homepage": "https://github.com/mindlynx-ai/metis#readme",
+  "bugs": "https://github.com/mindlynx-ai/metis/issues",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "metis": {
+    "edition": "open"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "bin": {
+    "metis": "dist/bin.js"
+  },
+  "devDependencies": {
+    "@temporalio/client": "^1.11.7",
+    "vitest": "^2.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@mindlynx/metis-catalogue": "0.1.0",
+    "@mindlynx/metis-core": "0.1.0",
+    "@mindlynx/metis-data-gateway": "0.1.0",
+    "@mindlynx/metis-engine": "0.1.0",
+    "@mindlynx/metis-nodes": "0.1.0",
+    "@mindlynx/metis-orchestrator": "0.1.0",
+    "@mindlynx/metis-ports": "0.1.0",
+    "@temporalio/worker": "^1.11.7",
+    "fastify": "^5.0.0",
+    "zod": "^3.25.76"
+  }
+}

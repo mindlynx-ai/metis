@@ -1,0 +1,43 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "declaration": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "isolatedModules": true,
+    "types": [
+      "node"
+    ],
+    "paths": {
+      "@mindlynx/metis-ports": [
+        "./packages/metis-ports/src/index.ts"
+      ],
+      "@mindlynx/metis-data-gateway": [
+        "./packages/metis-data-gateway/src/index.ts"
+      ],
+      "@mindlynx/metis-engine": [
+        "./packages/metis-engine/src/index.ts"
+      ],
+      "@mindlynx/metis-nodes": [
+        "./packages/metis-nodes/src/index.ts"
+      ],
+      "@mindlynx/metis-catalogue": [
+        "./packages/metis-catalogue/src/index.ts"
+      ],
+      "@mindlynx/metis-orchestrator": [
+        "./packages/metis-orchestrator/src/index.ts"
+      ],
+      "@mindlynx/metis-core": [
+        "./packages/metis-core/src/index.ts"
+      ],
+      "@mindlynx/metis-cli": [
+        "./packages/metis-cli/src/index.ts"
+      ]
+    }
+  }
+}

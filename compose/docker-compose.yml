@@ -1,0 +1,64 @@
+# Copyright 2026 Seillen Ltd
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+# The Metis hero quickstart: two services, the official
+# Temporal image and the Metis image, SQLite in a mounted volume. One
+# command, no AWS, no Java. The services talk over an internal network;
+# only the editor port is published to the host.
+name: metis
+
+services:
+  temporal:
+    # The official Temporal CLI image (its entrypoint is "temporal"):
+    # bundles the dev server and Web UI. The tag is the CLI version.
+    image: temporalio/temporal:1.4.1
+    command: ['server', 'start-dev', '--ip', '0.0.0.0', '--ui-port', '8233', '--db-filename', '/home/temporal/temporal.db', '--log-level', 'error']
+    networks:
+      - metis
+    ports:
+      # The Temporal Web UI - the raw view of every run (mission control).
+      # Localhost-bound: observability for the developer, not the network.
+      - '127.0.0.1:8233:8233'
+    volumes:
+      - temporal-data:/home/temporal
+    healthcheck:
+      test: ['CMD', 'temporal', 'operator', 'namespace', 'describe', '--address', '127.0.0.1:7233', 'default']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  metis:
+    build:
+      context: ..
+      dockerfile: compose/Dockerfile
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      METIS_TEMPORAL_ADDRESS: temporal:7233
+      METIS_DATA_DIR: /data
+    networks:
+      - metis
+    ports:
+      - '3000:3000'
+    volumes:
+      - metis-data:/data
+
+networks:
+  metis:
+    driver: bridge
+
+volumes:
+  metis-data:
+  temporal-data:

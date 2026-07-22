@@ -1,0 +1,478 @@
+{
+  "github": {
+    "baseUrl": "https://api.github.com",
+    "authScheme": "bearer"
+  },
+  "hubspot": {
+    "baseUrl": "https://api.hubapi.com",
+    "authScheme": "bearer"
+  },
+  "shopify": {
+    "baseUrl": "https://admin.shopify.com",
+    "authScheme": "header",
+    "authHeaderName": "X-Shopify-Access-Token",
+    "site": true
+  },
+  "box": {
+    "baseUrl": "https://api.box.com",
+    "authScheme": "bearer"
+  },
+  "zendesk": {
+    "baseUrl": "https://api.zendesk.com",
+    "authScheme": "bearer",
+    "site": true
+  },
+  "dropbox": {
+    "baseUrl": "https://api.dropboxapi.com",
+    "authScheme": "bearer"
+  },
+  "stripe": {
+    "baseUrl": "https://api.stripe.com",
+    "authScheme": "bearer"
+  },
+  "clickup": {
+    "baseUrl": "https://api.clickup.com",
+    "authScheme": "header",
+    "authHeaderName": "Authorization"
+  },
+  "salesforce": {
+    "baseUrl": "https://login.salesforce.com",
+    "authScheme": "bearer",
+    "tier": "premium",
+    "site": true
+  },
+  "trello": {
+    "baseUrl": "https://api.trello.com",
+    "authScheme": "none",
+    "site": true
+  },
+  "notion": {
+    "baseUrl": "https://api.notion.com",
+    "authScheme": "bearer",
+    "headers": {
+      "Notion-Version": "2022-06-28"
+    }
+  },
+  "pipedrive": {
+    "baseUrl": "https://api.pipedrive.com",
+    "authScheme": "none",
+    "site": true
+  },
+  "mailchimp": {
+    "baseUrl": "https://api.mailchimp.com",
+    "authScheme": "bearer",
+    "site": true
+  },
+  "intercom": {
+    "baseUrl": "https://api.intercom.io",
+    "authScheme": "bearer"
+  },
+  "slack": {
+    "baseUrl": "https://slack.com/api",
+    "authScheme": "bearer"
+  },
+  "zoom": {
+    "baseUrl": "https://api.zoom.us",
+    "authScheme": "bearer"
+  },
+  "asana": {
+    "baseUrl": "https://app.asana.com",
+    "authScheme": "bearer"
+  },
+  "airtable": {
+    "baseUrl": "https://api.airtable.com",
+    "authScheme": "bearer"
+  },
+  "twilio": {
+    "baseUrl": "https://api.twilio.com",
+    "authScheme": "basic"
+  },
+  "sendgrid": {
+    "baseUrl": "https://api.sendgrid.com",
+    "authScheme": "bearer"
+  },
+  "linear": {
+    "baseUrl": "https://api.linear.app",
+    "authScheme": "header",
+    "authHeaderName": "Authorization"
+  },
+  "openai": {
+    "baseUrl": "https://api.openai.com",
+    "authScheme": "bearer"
+  },
+  "gmail": {
+    "baseUrl": "https://gmail.googleapis.com",
+    "authScheme": "bearer"
+  },
+  "typeform": {
+    "baseUrl": "https://api.typeform.com",
+    "authScheme": "bearer"
+  },
+  "jira": {
+    "baseUrl": "https://api.atlassian.com",
+    "authScheme": "bearer",
+    "site": true
+  },
+  "google drive": {
+    "baseUrl": "https://www.googleapis.com",
+    "authScheme": "bearer"
+  },
+  "confluence": {
+    "baseUrl": "https://api.atlassian.com",
+    "authScheme": "bearer",
+    "site": true
+  },
+  "xero": {
+    "baseUrl": "https://api.xero.com",
+    "authScheme": "bearer",
+    "tier": "premium"
+  },
+  "discord": {
+    "baseUrl": "https://discord.com",
+    "authScheme": "header",
+    "authHeaderName": "Authorization"
+  },
+  "google sheets": {
+    "baseUrl": "https://sheets.googleapis.com",
+    "authScheme": "bearer"
+  },
+  "google calendar": {
+    "baseUrl": "https://www.googleapis.com",
+    "authScheme": "bearer"
+  },
+  "microsoft outlook": {
+    "baseUrl": "https://graph.microsoft.com",
+    "authScheme": "bearer"
+  },
+  "microsoft teams": {
+    "baseUrl": "https://graph.microsoft.com",
+    "authScheme": "bearer"
+  },
+  "monday": {
+    "baseUrl": "https://api.monday.com",
+    "authScheme": "header",
+    "authHeaderName": "Authorization"
+  },
+  "quickbooks": {
+    "baseUrl": "https://quickbooks.api.intuit.com",
+    "authScheme": "bearer",
+    "tier": "premium"
+  },
+  "telegram": {
+    "baseUrl": "https://api.telegram.org",
+    "authScheme": "none",
+    "site": true
+  },
+  "google gemini": {
+    "baseUrl": "https://generativelanguage.googleapis.com",
+    "authScheme": "header",
+    "authHeaderName": "x-goog-api-key"
+  },
+  "anthropic": {
+    "baseUrl": "https://api.anthropic.com",
+    "authScheme": "header",
+    "authHeaderName": "x-api-key",
+    "headers": {
+      "anthropic-version": "2023-06-01"
+    }
+  },
+  "gitlab": {
+    "baseUrl": "https://gitlab.com",
+    "authScheme": "bearer"
+  },
+  "snowflake": {
+    "baseUrl": "https://app.snowflake.com",
+    "authScheme": "bearer",
+    "tier": "premium",
+    "site": true
+  },
+  "mongodb": {
+    "baseUrl": "https://data.mongodb-api.com",
+    "authScheme": "header",
+    "authHeaderName": "api-key",
+    "site": true
+  },
+  "freshdesk": {
+    "baseUrl": "https://api.freshdesk.com",
+    "authScheme": "basic",
+    "site": true
+  },
+  "figma": {
+    "baseUrl": "https://api.figma.com",
+    "authScheme": "header",
+    "authHeaderName": "X-Figma-Token"
+  },
+  "freshservice": {
+    "baseUrl": "https://api.freshservice.com",
+    "authScheme": "basic",
+    "site": true
+  },
+  "activecampaign": {
+    "baseUrl": "https://api.activecampaign.com",
+    "authScheme": "header",
+    "authHeaderName": "Api-Token",
+    "site": true
+  },
+  "quickbooks online": {
+    "baseUrl": "https://quickbooks.api.intuit.com",
+    "authScheme": "bearer",
+    "tier": "premium"
+  },
+  "harvest": {
+    "baseUrl": "https://api.harvestapp.com",
+    "authScheme": "bearer"
+  },
+  "convertkit": {
+    "baseUrl": "https://api.convertkit.com",
+    "authScheme": "none",
+    "site": true
+  },
+  "chargebee": {
+    "baseUrl": "https://api.chargebee.com",
+    "authScheme": "basic",
+    "site": true
+  },
+  "copper": {
+    "baseUrl": "https://api.copper.com",
+    "authScheme": "header",
+    "authHeaderName": "X-PW-AccessToken"
+  },
+  "webflow": {
+    "baseUrl": "https://api.webflow.com",
+    "authScheme": "bearer"
+  },
+  "spotify": {
+    "baseUrl": "https://api.spotify.com",
+    "authScheme": "bearer"
+  },
+  "woocommerce": {
+    "baseUrl": "https://api.woocommerce.com",
+    "authScheme": "basic",
+    "site": true
+  },
+  "brevo": {
+    "baseUrl": "https://api.brevo.com",
+    "authScheme": "header",
+    "authHeaderName": "api-key"
+  },
+  "clockify": {
+    "baseUrl": "https://api.clockify.me",
+    "authScheme": "header",
+    "authHeaderName": "X-Api-Key"
+  },
+  "mautic": {
+    "baseUrl": "https://api.mautic.org",
+    "authScheme": "bearer",
+    "site": true
+  },
+  "mailgun": {
+    "baseUrl": "https://api.mailgun.net",
+    "authScheme": "basic"
+  },
+  "linkedin": {
+    "baseUrl": "https://api.linkedin.com",
+    "authScheme": "bearer"
+  },
+  "reddit": {
+    "baseUrl": "https://oauth.reddit.com",
+    "authScheme": "bearer"
+  },
+  "discourse": {
+    "baseUrl": "https://api.discourse.org",
+    "authScheme": "header",
+    "authHeaderName": "Api-Key",
+    "site": true
+  },
+  "odoo": {
+    "baseUrl": "https://www.odoo.com",
+    "authScheme": "none",
+    "site": true
+  },
+  "coda": {
+    "baseUrl": "https://coda.io",
+    "authScheme": "bearer"
+  },
+  "tapfiliate": {
+    "baseUrl": "https://api.tapfiliate.com",
+    "authScheme": "header",
+    "authHeaderName": "X-Api-Key"
+  },
+  "vero": {
+    "baseUrl": "https://api.getvero.com",
+    "authScheme": "none",
+    "site": true
+  },
+  "workday": {
+    "baseUrl": "https://www.workday.com",
+    "authScheme": "bearer",
+    "tier": "premium",
+    "site": true
+  },
+  "lemlist": {
+    "baseUrl": "https://api.lemlist.com",
+    "authScheme": "basic"
+  },
+  "paddle": {
+    "baseUrl": "https://api.paddle.com",
+    "authScheme": "bearer"
+  },
+  "hunter": {
+    "baseUrl": "https://api.hunter.io",
+    "authScheme": "none",
+    "site": true
+  },
+  "segment": {
+    "baseUrl": "https://api.segment.io",
+    "authScheme": "basic"
+  },
+  "airtop": {
+    "baseUrl": "https://api.airtop.ai",
+    "authScheme": "bearer"
+  },
+  "netlify": {
+    "baseUrl": "https://api.netlify.com",
+    "authScheme": "bearer"
+  },
+  "pagerduty": {
+    "baseUrl": "https://api.pagerduty.com",
+    "authScheme": "header",
+    "authHeaderName": "Authorization"
+  },
+  "quickbase": {
+    "baseUrl": "https://api.quickbase.com",
+    "authScheme": "header",
+    "authHeaderName": "Authorization",
+    "site": true
+  },
+  "bitly": {
+    "baseUrl": "https://api-ssl.bitly.com",
+    "authScheme": "bearer"
+  },
+  "getresponse": {
+    "baseUrl": "https://api.getresponse.com",
+    "authScheme": "header",
+    "authHeaderName": "X-Auth-Token"
+  },
+  "mailjet": {
+    "baseUrl": "https://api.mailjet.com",
+    "authScheme": "basic"
+  },
+  "matrix": {
+    "baseUrl": "https://matrix.org",
+    "authScheme": "bearer",
+    "site": true
+  },
+  "okta": {
+    "baseUrl": "https://api.okta.com",
+    "authScheme": "header",
+    "authHeaderName": "Authorization",
+    "site": true
+  },
+  "supabase": {
+    "baseUrl": "https://api.supabase.com",
+    "authScheme": "bearer",
+    "site": true
+  },
+  "metabase": {
+    "baseUrl": "https://www.metabase.com",
+    "authScheme": "header",
+    "authHeaderName": "X-Api-Key",
+    "site": true
+  },
+  "nocodb": {
+    "baseUrl": "https://app.nocodb.com",
+    "authScheme": "header",
+    "authHeaderName": "xc-token",
+    "site": true
+  },
+  "posthog": {
+    "baseUrl": "https://app.posthog.com",
+    "authScheme": "bearer"
+  },
+  "sendy": {
+    "baseUrl": "https://sendy.co",
+    "authScheme": "none",
+    "site": true
+  },
+  "wufoo": {
+    "baseUrl": "https://www.wufoo.com",
+    "authScheme": "basic",
+    "site": true
+  },
+  "grist": {
+    "baseUrl": "https://docs.getgrist.com",
+    "authScheme": "bearer"
+  },
+  "contentful": {
+    "baseUrl": "https://api.contentful.com",
+    "authScheme": "bearer"
+  },
+  "formstack": {
+    "baseUrl": "https://www.formstack.com",
+    "authScheme": "bearer"
+  },
+  "bannerbear": {
+    "baseUrl": "https://api.bannerbear.com",
+    "authScheme": "bearer"
+  },
+  "jotform": {
+    "baseUrl": "https://api.jotform.com",
+    "authScheme": "header",
+    "authHeaderName": "APIKEY",
+    "site": true
+  },
+  "line": {
+    "baseUrl": "https://api.line.me",
+    "authScheme": "bearer"
+  },
+  "phantombuster": {
+    "baseUrl": "https://api.phantombuster.com",
+    "authScheme": "header",
+    "authHeaderName": "X-Phantombuster-Key-1"
+  },
+  "bubble": {
+    "baseUrl": "https://bubble.io",
+    "authScheme": "bearer",
+    "site": true
+  },
+  "rabbitmq": {
+    "baseUrl": "https://www.rabbitmq.com",
+    "authScheme": "basic",
+    "site": true
+  },
+  "kafka": {
+    "baseUrl": "https://kafka.apache.org",
+    "authScheme": "basic",
+    "site": true
+  },
+  "pushbullet": {
+    "baseUrl": "https://api.pushbullet.com",
+    "authScheme": "header",
+    "authHeaderName": "Access-Token"
+  },
+  "gotify": {
+    "baseUrl": "https://gotify.net",
+    "authScheme": "header",
+    "authHeaderName": "X-Gotify-Key",
+    "site": true
+  },
+  "amqp sender": {
+    "baseUrl": "https://www.amqp.org",
+    "authScheme": "basic",
+    "site": true
+  },
+  "mqtt": {
+    "baseUrl": "https://mqtt.org",
+    "authScheme": "basic",
+    "site": true
+  },
+  "pushover": {
+    "baseUrl": "https://api.pushover.net",
+    "authScheme": "none"
+  },
+  "deepl": {
+    "baseUrl": "https://api-free.deepl.com",
+    "authScheme": "header",
+    "authHeaderName": "Authorization"
+  }
+}

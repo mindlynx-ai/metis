@@ -1,0 +1,1868 @@
+{
+  "schemaVersion": "1",
+  "generated": "2026-05-02",
+  "count": 100,
+  "connectors": [
+    {
+      "connectorId": "github",
+      "name": "GitHub",
+      "baseUrl": "https://api.github.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "ai-agent-tool",
+      "priority": "P1",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "getRepo",
+          "method": "GET",
+          "pathTemplate": "/repos/{owner}/{repo}",
+          "description": "Get a repository",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "listIssues",
+          "method": "GET",
+          "pathTemplate": "/repos/{owner}/{repo}/issues",
+          "description": "List issues on a repository",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "createIssue",
+          "method": "POST",
+          "pathTemplate": "/repos/{owner}/{repo}/issues",
+          "description": "Open an issue (title, body params)",
+          "wireStatus": "verified"
+        }
+      ],
+      "events": [
+        {
+          "name": "push",
+          "kind": "webhook"
+        },
+        {
+          "name": "issues",
+          "kind": "webhook"
+        },
+        {
+          "name": "pullRequest",
+          "kind": "webhook"
+        }
+      ]
+    },
+    {
+      "connectorId": "hubspot",
+      "name": "HubSpot",
+      "baseUrl": "https://api.hubapi.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "data-flow",
+      "priority": "P0",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "listContacts",
+          "method": "GET",
+          "pathTemplate": "/crm/v3/objects/contacts",
+          "description": "List contacts",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "getContact",
+          "method": "GET",
+          "pathTemplate": "/crm/v3/objects/contacts/{contactId}",
+          "description": "Get a contact",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "createContact",
+          "method": "POST",
+          "pathTemplate": "/crm/v3/objects/contacts",
+          "description": "Create a contact (properties param)",
+          "wireStatus": "verified"
+        }
+      ],
+      "events": [
+        {
+          "name": "newContact",
+          "kind": "poll",
+          "pollConfig": {
+            "cursorField": "createdAt"
+          }
+        }
+      ]
+    },
+    {
+      "connectorId": "shopify",
+      "name": "Shopify",
+      "baseUrl": "https://admin.shopify.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "commerce",
+      "priority": "P1",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "X-Shopify-Access-Token",
+      "events": [
+        {
+          "name": "orderCreated",
+          "kind": "webhook"
+        }
+      ]
+    },
+    {
+      "connectorId": "box",
+      "name": "Box",
+      "baseUrl": "https://api.box.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "content-and-files",
+      "priority": "P1",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "getCurrentUser",
+          "method": "GET",
+          "pathTemplate": "/2.0/users/me",
+          "description": "Get the current user",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "getFolder",
+          "method": "GET",
+          "pathTemplate": "/2.0/folders/{folderId}",
+          "description": "Get a folder",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "listFolderItems",
+          "method": "GET",
+          "pathTemplate": "/2.0/folders/{folderId}/items",
+          "description": "List items in a folder",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "zendesk",
+      "name": "Zendesk",
+      "baseUrl": "https://api.zendesk.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "customer-support",
+      "priority": "P1",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "dropbox",
+      "name": "Dropbox",
+      "baseUrl": "https://api.dropboxapi.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "content-and-files",
+      "priority": "P1",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "stripe",
+      "name": "Stripe",
+      "baseUrl": "https://api.stripe.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "commerce",
+      "priority": "P1",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "listCustomers",
+          "method": "GET",
+          "pathTemplate": "/v1/customers",
+          "description": "List customers",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "getCustomer",
+          "method": "GET",
+          "pathTemplate": "/v1/customers/{customerId}",
+          "description": "Retrieve a customer",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "listCharges",
+          "method": "GET",
+          "pathTemplate": "/v1/charges",
+          "description": "List charges",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "getBalance",
+          "method": "GET",
+          "pathTemplate": "/v1/balance",
+          "description": "Retrieve the account balance",
+          "wireStatus": "verified"
+        }
+      ],
+      "events": [
+        {
+          "name": "event",
+          "kind": "webhook"
+        }
+      ]
+    },
+    {
+      "connectorId": "clickup",
+      "name": "ClickUp",
+      "baseUrl": "https://api.clickup.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "productivity",
+      "priority": "P1",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "authHeaderName": "Authorization",
+      "operations": [
+        {
+          "name": "getTask",
+          "method": "GET",
+          "pathTemplate": "/api/v2/task/{taskId}",
+          "description": "Get a task",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "createTask",
+          "method": "POST",
+          "pathTemplate": "/api/v2/list/{listId}/task",
+          "description": "Create a task in a list (name param)",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "salesforce",
+      "name": "Salesforce",
+      "baseUrl": "https://login.salesforce.com",
+      "authScheme": "bearer",
+      "tier": "premium",
+      "category": "data-flow",
+      "priority": "P1",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "trello",
+      "name": "Trello",
+      "baseUrl": "https://api.trello.com",
+      "authScheme": "none",
+      "tier": "open",
+      "category": "productivity",
+      "priority": "P1",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "notion",
+      "name": "Notion",
+      "baseUrl": "https://api.notion.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "productivity",
+      "priority": "P1",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "headers": {
+        "Notion-Version": "2022-06-28"
+      },
+      "operations": [
+        {
+          "name": "getDatabase",
+          "method": "GET",
+          "pathTemplate": "/v1/databases/{databaseId}",
+          "description": "Retrieve a database",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "queryDatabase",
+          "method": "POST",
+          "pathTemplate": "/v1/databases/{databaseId}/query",
+          "description": "Query a database",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "createPage",
+          "method": "POST",
+          "pathTemplate": "/v1/pages",
+          "description": "Create a page (parent, properties params)",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "pipedrive",
+      "name": "Pipedrive",
+      "baseUrl": "https://api.pipedrive.com",
+      "authScheme": "none",
+      "tier": "open",
+      "category": "sales-and-crm",
+      "priority": "P1",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "mailchimp",
+      "name": "Mailchimp",
+      "baseUrl": "https://api.mailchimp.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "marketing",
+      "priority": "P1",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "intercom",
+      "name": "Intercom",
+      "baseUrl": "https://api.intercom.io",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "customer-support",
+      "priority": "P1",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "listContacts",
+          "method": "GET",
+          "pathTemplate": "/contacts",
+          "description": "List contacts",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "getContact",
+          "method": "GET",
+          "pathTemplate": "/contacts/{contactId}",
+          "description": "Get a contact",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "createContact",
+          "method": "POST",
+          "pathTemplate": "/contacts",
+          "description": "Create a contact (role, email params)",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "slack",
+      "name": "Slack",
+      "baseUrl": "https://slack.com/api",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "communication",
+      "priority": "P1",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "postMessage",
+          "method": "POST",
+          "pathTemplate": "/chat.postMessage",
+          "description": "Send a message to a channel",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "listConversations",
+          "method": "GET",
+          "pathTemplate": "/conversations.list",
+          "description": "List channels",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "getUser",
+          "method": "GET",
+          "pathTemplate": "/users.info",
+          "description": "Get a user by id (user param)",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "zoom",
+      "name": "Zoom",
+      "baseUrl": "https://api.zoom.us",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "communication",
+      "priority": "P1",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "getUser",
+          "method": "GET",
+          "pathTemplate": "/v2/users/{userId}",
+          "description": "Get a user",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "createMeeting",
+          "method": "POST",
+          "pathTemplate": "/v2/users/{userId}/meetings",
+          "description": "Schedule a meeting (topic, start_time params)",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "asana",
+      "name": "Asana",
+      "baseUrl": "https://app.asana.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "productivity",
+      "priority": "P1",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "getTask",
+          "method": "GET",
+          "pathTemplate": "/api/1.0/tasks/{taskGid}",
+          "description": "Get a task",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "createTask",
+          "method": "POST",
+          "pathTemplate": "/api/1.0/tasks",
+          "description": "Create a task (data param)",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "airtable",
+      "name": "Airtable",
+      "baseUrl": "https://api.airtable.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "data-flow",
+      "priority": "P1",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "listRecords",
+          "method": "GET",
+          "pathTemplate": "/v0/{baseId}/{tableName}",
+          "description": "List records in a table",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "createRecord",
+          "method": "POST",
+          "pathTemplate": "/v0/{baseId}/{tableName}",
+          "description": "Create records (records/fields params)",
+          "wireStatus": "verified"
+        }
+      ],
+      "events": [
+        {
+          "name": "newRecord",
+          "kind": "poll",
+          "pollConfig": {
+            "cursorField": "createdTime"
+          }
+        }
+      ]
+    },
+    {
+      "connectorId": "twilio",
+      "name": "Twilio",
+      "baseUrl": "https://api.twilio.com",
+      "authScheme": "basic",
+      "tier": "open",
+      "category": "communication",
+      "priority": "P1",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "sendgrid",
+      "name": "SendGrid",
+      "baseUrl": "https://api.sendgrid.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "communication",
+      "priority": "P1",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "sendMail",
+          "method": "POST",
+          "pathTemplate": "/v3/mail/send",
+          "description": "Send an email",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "linear",
+      "name": "Linear",
+      "baseUrl": "https://api.linear.app",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "productivity",
+      "priority": "P1",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "authHeaderName": "Authorization",
+      "operations": [
+        {
+          "name": "graphql",
+          "method": "POST",
+          "pathTemplate": "/graphql",
+          "description": "Run a GraphQL query/mutation (query, variables params)",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "openai",
+      "name": "OpenAI",
+      "baseUrl": "https://api.openai.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "artificial-intelligence",
+      "priority": "P2",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "chatCompletion",
+          "method": "POST",
+          "pathTemplate": "/v1/chat/completions",
+          "description": "Create a chat completion",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "listModels",
+          "method": "GET",
+          "pathTemplate": "/v1/models",
+          "description": "List available models",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "gmail",
+      "name": "Gmail",
+      "baseUrl": "https://gmail.googleapis.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "communication",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "typeform",
+      "name": "Typeform",
+      "baseUrl": "https://api.typeform.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "forms-and-surveys",
+      "priority": "P2",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "listForms",
+          "method": "GET",
+          "pathTemplate": "/forms",
+          "description": "List forms",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "getForm",
+          "method": "GET",
+          "pathTemplate": "/forms/{formId}",
+          "description": "Retrieve a form",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "listResponses",
+          "method": "GET",
+          "pathTemplate": "/forms/{formId}/responses",
+          "description": "List form responses",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "jira",
+      "name": "Jira",
+      "baseUrl": "https://api.atlassian.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "other",
+      "priority": "P0",
+      "provenance": {
+        "source": "n8n",
+        "licence": "sustainable-use (inspiration)"
+      }
+    },
+    {
+      "connectorId": "google-drive",
+      "name": "Google Drive",
+      "baseUrl": "https://www.googleapis.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "ai-agent-tool",
+      "priority": "P0",
+      "provenance": {
+        "source": "composio",
+        "licence": "catalogue-metadata"
+      }
+    },
+    {
+      "connectorId": "confluence",
+      "name": "Confluence",
+      "baseUrl": "https://api.atlassian.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "content-and-files",
+      "priority": "P0",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "xero",
+      "name": "Xero",
+      "baseUrl": "https://api.xero.com",
+      "authScheme": "bearer",
+      "tier": "premium",
+      "category": "accounting",
+      "priority": "P1",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "discord",
+      "name": "Discord",
+      "baseUrl": "https://discord.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "communication",
+      "priority": "P2",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "authHeaderName": "Authorization",
+      "operations": [
+        {
+          "name": "getChannel",
+          "method": "GET",
+          "pathTemplate": "/api/v10/channels/{channelId}",
+          "description": "Get a channel (auth = Bot token)",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "sendMessage",
+          "method": "POST",
+          "pathTemplate": "/api/v10/channels/{channelId}/messages",
+          "description": "Post a message (content param)",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "getGuild",
+          "method": "GET",
+          "pathTemplate": "/api/v10/guilds/{guildId}",
+          "description": "Get a guild",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "google-sheets",
+      "name": "Google Sheets",
+      "baseUrl": "https://sheets.googleapis.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "other",
+      "priority": "P0",
+      "provenance": {
+        "source": "pipedream",
+        "licence": "catalogue-metadata"
+      }
+    },
+    {
+      "connectorId": "google-calendar",
+      "name": "Google Calendar",
+      "baseUrl": "https://www.googleapis.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "other",
+      "priority": "P0",
+      "provenance": {
+        "source": "pipedream",
+        "licence": "catalogue-metadata"
+      }
+    },
+    {
+      "connectorId": "microsoft-outlook",
+      "name": "Microsoft Outlook",
+      "baseUrl": "https://graph.microsoft.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "other",
+      "priority": "P0",
+      "provenance": {
+        "source": "pipedream",
+        "licence": "catalogue-metadata"
+      }
+    },
+    {
+      "connectorId": "microsoft-teams",
+      "name": "Microsoft Teams",
+      "baseUrl": "https://graph.microsoft.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "business-intelligence",
+      "priority": "P0",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "monday",
+      "name": "Monday",
+      "baseUrl": "https://api.monday.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "other",
+      "priority": "P1",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "authHeaderName": "Authorization",
+      "operations": [
+        {
+          "name": "query",
+          "method": "POST",
+          "pathTemplate": "/v2",
+          "description": "Run a GraphQL query/mutation (query, variables params)",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "quickbooks",
+      "name": "QuickBooks",
+      "baseUrl": "https://quickbooks.api.intuit.com",
+      "authScheme": "bearer",
+      "tier": "premium",
+      "category": "api",
+      "priority": "P2",
+      "provenance": {
+        "source": "airbyte",
+        "licence": "catalogue-metadata"
+      }
+    },
+    {
+      "connectorId": "telegram",
+      "name": "Telegram",
+      "baseUrl": "https://api.telegram.org",
+      "authScheme": "none",
+      "tier": "open",
+      "category": "communication",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "google-gemini",
+      "name": "Google Gemini",
+      "baseUrl": "https://generativelanguage.googleapis.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "artificial-intelligence",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "x-goog-api-key"
+    },
+    {
+      "connectorId": "anthropic",
+      "name": "Anthropic",
+      "baseUrl": "https://api.anthropic.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "other",
+      "priority": "P2",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "authHeaderName": "x-api-key",
+      "headers": {
+        "anthropic-version": "2023-06-01"
+      },
+      "operations": [
+        {
+          "name": "createMessage",
+          "method": "POST",
+          "pathTemplate": "/v1/messages",
+          "description": "Create a message (model, messages, max_tokens params)",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "gitlab",
+      "name": "GitLab",
+      "baseUrl": "https://gitlab.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "data-flow",
+      "priority": "P1",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "getProject",
+          "method": "GET",
+          "pathTemplate": "/api/v4/projects/{projectId}",
+          "description": "Get a project",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "listIssues",
+          "method": "GET",
+          "pathTemplate": "/api/v4/projects/{projectId}/issues",
+          "description": "List project issues",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "createIssue",
+          "method": "POST",
+          "pathTemplate": "/api/v4/projects/{projectId}/issues",
+          "description": "Create an issue (title param)",
+          "wireStatus": "verified"
+        }
+      ],
+      "events": [
+        {
+          "name": "push",
+          "kind": "webhook"
+        }
+      ]
+    },
+    {
+      "connectorId": "snowflake",
+      "name": "Snowflake",
+      "baseUrl": "https://app.snowflake.com",
+      "authScheme": "bearer",
+      "tier": "premium",
+      "category": "data-flow",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "mongodb",
+      "name": "MongoDB",
+      "baseUrl": "https://data.mongodb-api.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "data-flow",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "api-key"
+    },
+    {
+      "connectorId": "freshdesk",
+      "name": "Freshdesk",
+      "baseUrl": "https://api.freshdesk.com",
+      "authScheme": "basic",
+      "tier": "open",
+      "category": "customer-support",
+      "priority": "P1",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "figma",
+      "name": "Figma",
+      "baseUrl": "https://api.figma.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "other",
+      "priority": "P1",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "authHeaderName": "X-Figma-Token",
+      "operations": [
+        {
+          "name": "getFile",
+          "method": "GET",
+          "pathTemplate": "/v1/files/{fileKey}",
+          "description": "Get a file by key",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "freshservice",
+      "name": "Freshservice",
+      "baseUrl": "https://api.freshservice.com",
+      "authScheme": "basic",
+      "tier": "open",
+      "category": "customer-support",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "activecampaign",
+      "name": "ActiveCampaign",
+      "baseUrl": "https://api.activecampaign.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "marketing",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "Api-Token"
+    },
+    {
+      "connectorId": "quickbooks-online",
+      "name": "Quickbooks Online",
+      "baseUrl": "https://quickbooks.api.intuit.com",
+      "authScheme": "bearer",
+      "tier": "premium",
+      "category": "other",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "harvest",
+      "name": "Harvest",
+      "baseUrl": "https://api.harvestapp.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "productivity",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "convertkit",
+      "name": "ConvertKit",
+      "baseUrl": "https://api.convertkit.com",
+      "authScheme": "none",
+      "tier": "open",
+      "category": "marketing",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "chargebee",
+      "name": "Chargebee",
+      "baseUrl": "https://api.chargebee.com",
+      "authScheme": "basic",
+      "tier": "open",
+      "category": "accounting",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "copper",
+      "name": "Copper",
+      "baseUrl": "https://api.copper.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "sales-and-crm",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "X-PW-AccessToken"
+    },
+    {
+      "connectorId": "webflow",
+      "name": "Webflow",
+      "baseUrl": "https://api.webflow.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "marketing",
+      "priority": "P2",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "listSites",
+          "method": "GET",
+          "pathTemplate": "/v2/sites",
+          "description": "List sites",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "getSite",
+          "method": "GET",
+          "pathTemplate": "/v2/sites/{siteId}",
+          "description": "Get a site",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "listCollectionItems",
+          "method": "GET",
+          "pathTemplate": "/v2/collections/{collectionId}/items",
+          "description": "List items in a collection",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "spotify",
+      "name": "Spotify",
+      "baseUrl": "https://api.spotify.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "other",
+      "priority": "P2",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "getCurrentUser",
+          "method": "GET",
+          "pathTemplate": "/v1/me",
+          "description": "Get the current user's profile",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "getTrack",
+          "method": "GET",
+          "pathTemplate": "/v1/tracks/{trackId}",
+          "description": "Get a track",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "search",
+          "method": "GET",
+          "pathTemplate": "/v1/search",
+          "description": "Search (q, type params)",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "woocommerce",
+      "name": "WooCommerce",
+      "baseUrl": "https://api.woocommerce.com",
+      "authScheme": "basic",
+      "tier": "open",
+      "category": "commerce",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "brevo",
+      "name": "Brevo",
+      "baseUrl": "https://api.brevo.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "marketing",
+      "priority": "P2",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "authHeaderName": "api-key",
+      "operations": [
+        {
+          "name": "sendEmail",
+          "method": "POST",
+          "pathTemplate": "/v3/smtp/email",
+          "description": "Send a transactional email",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "listContacts",
+          "method": "GET",
+          "pathTemplate": "/v3/contacts",
+          "description": "List contacts",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "getAccount",
+          "method": "GET",
+          "pathTemplate": "/v3/account",
+          "description": "Get account information",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "clockify",
+      "name": "Clockify",
+      "baseUrl": "https://api.clockify.me",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "other",
+      "priority": "P2",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "authHeaderName": "X-Api-Key",
+      "operations": [
+        {
+          "name": "getCurrentUser",
+          "method": "GET",
+          "pathTemplate": "/api/v1/user",
+          "description": "Get the current user",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "listWorkspaces",
+          "method": "GET",
+          "pathTemplate": "/api/v1/workspaces",
+          "description": "List workspaces",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "mautic",
+      "name": "Mautic",
+      "baseUrl": "https://api.mautic.org",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "marketing",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "mailgun",
+      "name": "Mailgun",
+      "baseUrl": "https://api.mailgun.net",
+      "authScheme": "basic",
+      "tier": "open",
+      "category": "marketing",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "linkedin",
+      "name": "LinkedIn",
+      "baseUrl": "https://api.linkedin.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "marketing",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "reddit",
+      "name": "Reddit",
+      "baseUrl": "https://oauth.reddit.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "communication",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "discourse",
+      "name": "Discourse",
+      "baseUrl": "https://api.discourse.org",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "communication",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "Api-Key"
+    },
+    {
+      "connectorId": "odoo",
+      "name": "Odoo",
+      "baseUrl": "https://www.odoo.com",
+      "authScheme": "none",
+      "tier": "open",
+      "category": "other",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "coda",
+      "name": "Coda",
+      "baseUrl": "https://coda.io",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "productivity",
+      "priority": "P2",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "operations": [
+        {
+          "name": "listDocs",
+          "method": "GET",
+          "pathTemplate": "/apis/v1/docs",
+          "description": "List docs",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "tapfiliate",
+      "name": "Tapfiliate",
+      "baseUrl": "https://api.tapfiliate.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "marketing",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "X-Api-Key"
+    },
+    {
+      "connectorId": "vero",
+      "name": "Vero",
+      "baseUrl": "https://api.getvero.com",
+      "authScheme": "none",
+      "tier": "open",
+      "category": "communication",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "workday",
+      "name": "Workday",
+      "baseUrl": "https://www.workday.com",
+      "authScheme": "bearer",
+      "tier": "premium",
+      "category": "data-flow",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "lemlist",
+      "name": "Lemlist",
+      "baseUrl": "https://api.lemlist.com",
+      "authScheme": "basic",
+      "tier": "open",
+      "category": "other",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "paddle",
+      "name": "Paddle",
+      "baseUrl": "https://api.paddle.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "commerce",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "hunter",
+      "name": "Hunter",
+      "baseUrl": "https://api.hunter.io",
+      "authScheme": "none",
+      "tier": "open",
+      "category": "sales-and-crm",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "segment",
+      "name": "Segment",
+      "baseUrl": "https://api.segment.io",
+      "authScheme": "basic",
+      "tier": "open",
+      "category": "other",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "airtop",
+      "name": "Airtop",
+      "baseUrl": "https://api.airtop.ai",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "other",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "netlify",
+      "name": "Netlify",
+      "baseUrl": "https://api.netlify.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "developer-tools",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "pagerduty",
+      "name": "PagerDuty",
+      "baseUrl": "https://api.pagerduty.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "developer-tools",
+      "priority": "P2",
+      "provenance": {
+        "source": "public-docs",
+        "licence": "n8n/activepieces (inspiration)"
+      },
+      "authHeaderName": "Authorization",
+      "operations": [
+        {
+          "name": "listIncidents",
+          "method": "GET",
+          "pathTemplate": "/incidents",
+          "description": "List incidents (auth = Token token=key)",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "getIncident",
+          "method": "GET",
+          "pathTemplate": "/incidents/{incidentId}",
+          "description": "Get an incident",
+          "wireStatus": "verified"
+        },
+        {
+          "name": "listServices",
+          "method": "GET",
+          "pathTemplate": "/services",
+          "description": "List services",
+          "wireStatus": "verified"
+        }
+      ]
+    },
+    {
+      "connectorId": "quickbase",
+      "name": "Quickbase",
+      "baseUrl": "https://api.quickbase.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "productivity",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "Authorization"
+    },
+    {
+      "connectorId": "bitly",
+      "name": "Bitly",
+      "baseUrl": "https://api-ssl.bitly.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "marketing",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "getresponse",
+      "name": "GetResponse",
+      "baseUrl": "https://api.getresponse.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "marketing",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "X-Auth-Token"
+    },
+    {
+      "connectorId": "mailjet",
+      "name": "Mailjet",
+      "baseUrl": "https://api.mailjet.com",
+      "authScheme": "basic",
+      "tier": "open",
+      "category": "communication",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "matrix",
+      "name": "Matrix",
+      "baseUrl": "https://matrix.org",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "communication",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "okta",
+      "name": "Okta",
+      "baseUrl": "https://api.okta.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "productivity",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "Authorization"
+    },
+    {
+      "connectorId": "supabase",
+      "name": "Supabase",
+      "baseUrl": "https://api.supabase.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "developer-tools",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "metabase",
+      "name": "Metabase",
+      "baseUrl": "https://www.metabase.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "other",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "X-Api-Key"
+    },
+    {
+      "connectorId": "nocodb",
+      "name": "NocoDB",
+      "baseUrl": "https://app.nocodb.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "other",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "xc-token"
+    },
+    {
+      "connectorId": "posthog",
+      "name": "PostHog",
+      "baseUrl": "https://app.posthog.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "business-intelligence",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "sendy",
+      "name": "Sendy",
+      "baseUrl": "https://sendy.co",
+      "authScheme": "none",
+      "tier": "open",
+      "category": "marketing",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "wufoo",
+      "name": "Wufoo",
+      "baseUrl": "https://www.wufoo.com",
+      "authScheme": "basic",
+      "tier": "open",
+      "category": "other",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "grist",
+      "name": "Grist",
+      "baseUrl": "https://docs.getgrist.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "productivity",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "contentful",
+      "name": "Contentful",
+      "baseUrl": "https://api.contentful.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "marketing",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "formstack",
+      "name": "Formstack",
+      "baseUrl": "https://www.formstack.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "other",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "bannerbear",
+      "name": "Bannerbear",
+      "baseUrl": "https://api.bannerbear.com",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "marketing",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "jotform",
+      "name": "Jotform",
+      "baseUrl": "https://api.jotform.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "forms-and-surveys",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "APIKEY"
+    },
+    {
+      "connectorId": "line",
+      "name": "Line",
+      "baseUrl": "https://api.line.me",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "communication",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "phantombuster",
+      "name": "PhantomBuster",
+      "baseUrl": "https://api.phantombuster.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "marketing",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "X-Phantombuster-Key-1"
+    },
+    {
+      "connectorId": "bubble",
+      "name": "Bubble",
+      "baseUrl": "https://bubble.io",
+      "authScheme": "bearer",
+      "tier": "open",
+      "category": "developer-tools",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "rabbitmq",
+      "name": "RabbitMQ",
+      "baseUrl": "https://www.rabbitmq.com",
+      "authScheme": "basic",
+      "tier": "open",
+      "category": "other",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "kafka",
+      "name": "Kafka",
+      "baseUrl": "https://kafka.apache.org",
+      "authScheme": "basic",
+      "tier": "open",
+      "category": "data-flow",
+      "priority": "P2",
+      "provenance": {
+        "source": "n8n",
+        "licence": "sustainable-use (inspiration)"
+      }
+    },
+    {
+      "connectorId": "pushbullet",
+      "name": "Pushbullet",
+      "baseUrl": "https://api.pushbullet.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "communication",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "Access-Token"
+    },
+    {
+      "connectorId": "gotify",
+      "name": "Gotify",
+      "baseUrl": "https://gotify.net",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "developer-tools",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "X-Gotify-Key"
+    },
+    {
+      "connectorId": "amqp-sender",
+      "name": "AMQP Sender",
+      "baseUrl": "https://www.amqp.org",
+      "authScheme": "basic",
+      "tier": "open",
+      "category": "data-flow",
+      "priority": "P2",
+      "provenance": {
+        "source": "n8n",
+        "licence": "sustainable-use (inspiration)"
+      }
+    },
+    {
+      "connectorId": "mqtt",
+      "name": "MQTT",
+      "baseUrl": "https://mqtt.org",
+      "authScheme": "basic",
+      "tier": "open",
+      "category": "data-flow",
+      "priority": "P2",
+      "provenance": {
+        "source": "n8n",
+        "licence": "sustainable-use (inspiration)"
+      }
+    },
+    {
+      "connectorId": "pushover",
+      "name": "Pushover",
+      "baseUrl": "https://api.pushover.net",
+      "authScheme": "none",
+      "tier": "open",
+      "category": "communication",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      }
+    },
+    {
+      "connectorId": "deepl",
+      "name": "DeepL",
+      "baseUrl": "https://api-free.deepl.com",
+      "authScheme": "header",
+      "tier": "open",
+      "category": "other",
+      "priority": "P2",
+      "provenance": {
+        "source": "activepieces",
+        "licence": "MIT"
+      },
+      "authHeaderName": "Authorization"
+    }
+  ]
+}

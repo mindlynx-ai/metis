@@ -1,0 +1,92 @@
+# Copyright 2026 Seillen Ltd
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: metis
+          POSTGRES_DB: metis_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PG_URL: postgres://postgres:metis@localhost:5432/metis_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run release-audit
+
+  # The gated CLI e2e suite: boots a REAL downloaded Temporal dev server and
+  # worker per spec. Kept out of the unit run (slow, network) but IN CI so it
+  # cannot silently drift - it rotted twice while skip-gated and invisible.
+  # METIS_E2E=1 is what un-skips the specs; without it they no-op to a false
+  # green, so it is set explicitly here (and Postgres is provided so the
+  # pg-gated real-nodes case runs too, matching the quality job).
+  cli-e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: metis
+          POSTGRES_DB: metis_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      METIS_E2E: '1'
+      PG_URL: postgres://postgres:metis@localhost:5432/metis_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run test:cli-e2e
+
+  compose-boot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Standalone boot on an egress-blocked network
+        run: |
+          docker compose -f compose/docker-compose.yml up -d --build
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3000/ >/dev/null; then break; fi
+            sleep 5
+          done
+          curl -sf http://localhost:3000/ >/dev/null
+          docker compose -f compose/docker-compose.yml down

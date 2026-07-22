@@ -1,0 +1,1440 @@
+{
+  "schemaVersion": "1.0.0",
+  "edition": "open",
+  "entries": [
+    {
+      "type": "apiconfig",
+      "category": "trigger",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "The URL this workflow answers on, e.g. \"orders\" -> POST /api/apiworkflow/orders."
+          },
+          "method": {
+            "type": "string",
+            "title": "Method",
+            "enum": [
+              "POST",
+              "GET",
+              "PUT",
+              "PATCH",
+              "DELETE",
+              "ANY"
+            ],
+            "default": "POST",
+            "description": "The HTTP method the endpoint accepts."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "API Start",
+        "icon": "plug",
+        "colour": "slate-500",
+        "description": "Declarative API trigger. Config-only \u2014 never executed."
+      },
+      "tier": "open",
+      "docs": "## What it is\nThe start of a synchronous API workflow: callers POST to `/api/apiworkflow/<path>` and WAIT for the response your graph builds.\n\n## How it works\nConfig-only. The request body becomes this node's output (`{{node-<id>.data.<field>}}`); the run executes synchronously and the API End node shapes the HTTP response.\n\n## Gotchas\n- An api graph must start here and contain exactly one API End.\n- Synchronous means bounded: long work belongs in a normal workflow, not an api one (loops are not allowed here)."
+    },
+    {
+      "type": "apiend",
+      "category": "trigger",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "properties": {
+          "responseType": {
+            "type": "string",
+            "enum": [
+              "sourcedata",
+              "mappeddata"
+            ],
+            "default": "sourcedata",
+            "title": "Response",
+            "description": "Pass through a node's output, or build a mapped JSON object."
+          },
+          "responseNodeId": {
+            "type": "string",
+            "title": "From node",
+            "description": "Which node's output to return (pass-through). Defaults to the node wired into API End."
+          },
+          "responseMapping": {
+            "type": "object",
+            "title": "Mapped JSON",
+            "description": "A JSON object; use {{node-id.data.field}} to pull values from the run."
+          },
+          "statusCode": {
+            "type": "number",
+            "title": "Status code",
+            "default": 200,
+            "minimum": 100,
+            "maximum": 599,
+            "description": "The HTTP status to return."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "API End",
+        "icon": "flag",
+        "colour": "slate-500",
+        "description": "Declarative API response marker. Config-only \u2014 never executed."
+      },
+      "tier": "open",
+      "docs": "## What it is\nThe API workflow's response: what the HTTP caller gets back.\n\n## How it works\nPass a node's output through unchanged (`sourcedata`), or build a mapped JSON object with `{{node-id.data.field}}` references (`mappeddata`). Set the status code (default 200).\n\n## Gotchas\n- Exactly one API End per api graph.\n- If the run fails before reaching it, the caller gets the failure instead."
+    },
+    {
+      "type": "scheduleconfig",
+      "category": "trigger",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "properties": {
+          "cron": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "Schedule",
+        "icon": "calendar",
+        "colour": "slate-500",
+        "description": "Declarative cron-based schedule. Config-only \u2014 never executed."
+      },
+      "tier": "open",
+      "docs": "## What it is\nA cron trigger: the workflow runs on a schedule (backed by a real Temporal Schedule).\n\n## How it works\nConfig-only - publishing creates the Temporal schedule from your cron expression and timezone; each firing starts a run. The run input is empty; the schedule's metadata is available on the trigger node's output.\n\n## Gotchas\n- Cron is standard 5-field syntax (`*/5 * * * *` = every 5 minutes).\n- Pausing/removing happens when you unpublish or delete the workflow."
+    },
+    {
+      "type": "webhookconfig",
+      "category": "trigger",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "properties": {
+          "triggerType": {
+            "type": "string",
+            "enum": [
+              "manual",
+              "webhook",
+              "event"
+            ]
+          },
+          "path": {
+            "type": "string"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object"
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "Webhook Start",
+        "icon": "webhook",
+        "colour": "slate-500",
+        "description": "Declarative webhook trigger. Config-only \u2014 never executed."
+      },
+      "tier": "open",
+      "docs": "## What it is\nThe workflow's front door: an HTTP endpoint that starts a run whenever something POSTs to it.\n\n## How it works\nConfig-only - it never executes. Publishing the workflow registers the endpoint; each delivery becomes a run, and the request lands as this node's output: reference it downstream as `{{node-<id>.data.body.<field>}}` (the envelope carries `body`, headers and metadata).\n\n## Gotchas\n- A published workflow must start with a trigger (this, Schedule or Signal).\n- Paste a sample payload in the inspector (\"declare outputs\") so downstream steps can pick fields before the first real delivery."
+    },
+    {
+      "type": "signal",
+      "category": "logic",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "required": [
+          "signalType"
+        ],
+        "properties": {
+          "signalType": {
+            "type": "string",
+            "description": "External signal name (e.g. 'adobesign.signed'). Matched against incoming helixSignal payloads."
+          },
+          "timeoutMs": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 86400000,
+            "description": "Max wait in ms. Default 24h."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "const": "wait"
+          },
+          "signalType": {
+            "type": "string"
+          }
+        }
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "Signal",
+        "icon": "radio",
+        "colour": "amber-500",
+        "description": "Pause the workflow until an external signal arrives."
+      },
+      "tier": "open",
+      "docs": "## What it is\nWait for the outside world: the run parks until a named signal arrives (or a timeout).\n\n## How it works\nThe run pauses durably (a Temporal condition - no compute burned while waiting). An external system resumes it by signalling the execution with a matching `signalType`; the signal's params become this node's output.\n\n## Gotchas\n- Default timeout is 24h; a timeout fails the run.\n- Signal names are matched case-insensitively."
+    },
+    {
+      "type": "switch",
+      "category": "logic",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "properties": {
+          "switchOptions": {
+            "type": "array",
+            "title": "Branches",
+            "description": "Name each branch and say when it is taken. Anything matching none takes the Otherwise path.",
+            "x-helix-widget": "switchBuilder",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "name",
+                "conditions"
+              ],
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "conditions": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": [
+                      "property",
+                      "checkValue",
+                      "checkOperator"
+                    ],
+                    "properties": {
+                      "property": {},
+                      "checkValue": {},
+                      "checkOperator": {
+                        "type": "string",
+                        "enum": [
+                          "===",
+                          "!==",
+                          "<",
+                          ">",
+                          "<=",
+                          ">=",
+                          "contains",
+                          "isTrue",
+                          "isFalse",
+                          "isNull",
+                          "isNotNull",
+                          "isEmpty",
+                          "isIn",
+                          "isNotIn",
+                          "isBetween"
+                        ]
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "selectedTargetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "orphanedTargetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "Switch",
+        "icon": "git-branch",
+        "colour": "amber-500",
+        "description": "Evaluate conditions and route to a selected branch."
+      },
+      "tier": "open",
+      "docs": "## What it is\nMulti-way branching on a value from an earlier step - \"route big orders here, the rest there\".\n\n## How it works\nBranches are evaluated top-down; the first branch whose conditions ALL hold wins, and only that branch's edge runs. Everything else is orphaned (skipped, not failed). No branch matching means the Otherwise (default) handle runs. The value to check is usually a reference like `{{step.data.row.amount}}`.\n\n## Config\nName each branch and add conditions (15 operators: equals, greater than, contains, is in list, is between, is null...). The value input adapts to the operator.\n\n## Gotchas\n- Branch handles are stable: renaming a branch keeps its edge.\n- Switch tests STEP OUTPUTS (`{{...}}` references). To branch on the run's trigger input, use Logic."
+    },
+    {
+      "type": "logic",
+      "category": "logic",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "properties": {
+          "predicate": {
+            "type": "object",
+            "title": "Rule",
+            "description": "Build a rule from conditions grouped with AND / OR / NOT.",
+            "x-helix-widget": "logicBuilder",
+            "properties": {
+              "op": {
+                "type": "string",
+                "enum": [
+                  "AND",
+                  "OR",
+                  "NOT"
+                ]
+              },
+              "children": {
+                "type": "array"
+              },
+              "leaf": {
+                "type": "object",
+                "properties": {
+                  "lhs": {
+                    "type": "string"
+                  },
+                  "op": {
+                    "type": "string",
+                    "enum": [
+                      "eq",
+                      "neq",
+                      "gt",
+                      "gte",
+                      "lt",
+                      "lte",
+                      "contains",
+                      "startsWith",
+                      "endsWith",
+                      "exists",
+                      "isEmpty"
+                    ]
+                  },
+                  "rhs": {
+                    "type": [
+                      "string",
+                      "number",
+                      "boolean",
+                      "null"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "branchTaken": {
+            "type": "string",
+            "enum": [
+              "true",
+              "false"
+            ]
+          },
+          "selectedTargetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "orphanedTargetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "Logic",
+        "icon": "git-fork",
+        "colour": "amber-600",
+        "description": "Branch on a predicate tree (AND/OR/NOT with leaf conditions)."
+      },
+      "tier": "open",
+      "docs": "## What it is\nA yes/no gate on the workflow's trigger input: an AND/OR/NOT rule tree routes to the Yes or No branch.\n\n## How it works\nThe rule tests the run's INPUT (what the trigger received) via `ctx.input.<field>` paths. Groups combine children with AND / OR / NOT; nest groups for complex rules. Yes runs when the tree holds; No otherwise; the losing branch is orphaned.\n\n## Gotchas\n- `ctx.input.` paths only - a `{{step.data...}}` reference will not resolve here. To branch on a step's output, use Switch.\n- A missing field is falsy, never an error."
+    },
+    {
+      "type": "waituntil",
+      "category": "logic",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "properties": {
+          "waitDays": {
+            "type": "number",
+            "default": 0
+          },
+          "waitHours": {
+            "type": "number",
+            "default": 0
+          },
+          "waitMinutes": {
+            "type": "number",
+            "default": 0
+          },
+          "waitSeconds": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 59,
+            "default": 0
+          },
+          "dateFrom": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Optional absolute reference point; offsets are relative if omitted."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "const": "sleep"
+          },
+          "durationMs": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "Wait Until",
+        "icon": "clock",
+        "colour": "amber-500",
+        "description": "Pause execution for a configurable duration."
+      },
+      "tier": "open",
+      "docs": "## What it is\nA durable pause: continue after a delay or at a specific time.\n\n## How it works\nTemporal sleeps the run (no worker resources consumed - it survives restarts and deploys). When the timer fires the walk continues.\n\n## Gotchas\n- The wait is calculated when the node starts, not when the run starts."
+    },
+    {
+      "type": "noop",
+      "category": "logic",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "tier": "open",
+      "configSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "No Operation",
+        "icon": "minus",
+        "colour": "slate-400",
+        "description": "Does nothing: a junction or label to keep a flow readable. Passes the walk straight through."
+      },
+      "docs": "## What it is\nNo Operation: does nothing, on purpose.\n\n## How it works\nPasses the walk straight through. Use it as a junction to fan out from a clean point, or as a labelled landmark that keeps a big flow readable."
+    },
+    {
+      "type": "stopanderror",
+      "category": "logic",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "tier": "open",
+      "configSchema": {
+        "type": "object",
+        "required": [
+          "message"
+        ],
+        "properties": {
+          "message": {
+            "type": "string",
+            "title": "Error message",
+            "description": "The run fails with this message. Reference upstream values, e.g. Rejected: {{step.data.row.reason}}."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {}
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "Stop and Error",
+        "icon": "alert",
+        "colour": "rose-500",
+        "description": "Halt the workflow on purpose and fail the run with your message. A guard for states that should never continue."
+      },
+      "docs": "## What it is\nAn intentional kill switch: fail the run, loudly, with your message.\n\n## How it works\nThe run stops here and is marked failed with the configured message (template-resolvable, e.g. `Rejected: {{step.data.row.reason}}`). Wire it behind a Switch/Logic branch as a guard for states that must never continue.\n\n## Gotchas\n- Terminal: it has no output handle.\n- The message is the run's failure reason - make it say WHY."
+    },
+    {
+      "type": "merge",
+      "category": "logic",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "tier": "open",
+      "configSchema": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "description": "Append: an items array of every branch's output. Combine: shallow-merge the outputs into one object (later branches win). Pick: the first live branch's output.",
+            "enum": [
+              "append",
+              "combine",
+              "pick"
+            ],
+            "default": "append"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array"
+          },
+          "count": {
+            "type": "integer"
+          }
+        }
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "Merge",
+        "icon": "link",
+        "colour": "teal-500",
+        "description": "Join branches back together: waits for every incoming branch, then combines the live outputs (append, combine or pick)."
+      },
+      "docs": "## What it is\nThe join that brings branches back together.\n\n## How it works\nThe engine already waits for every incoming branch (fan-in). Merge makes the joined DATA explicit, combining the live branches' outputs by mode:\n- **append** - `{ items: [outputA, outputB, ...], count }` in edge order\n- **combine** - one object, shallow-merged, later branches win shared keys\n- **pick** - the first live branch's output, unchanged\n\n## Gotchas\n- Orphaned branches (a switch's losers) are excluded automatically.\n- Reference the result as `{{merge.data.items}}` (append) or the merged fields directly (combine/pick)."
+    },
+    {
+      "type": "loop",
+      "category": "logic",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "tier": "open",
+      "configSchema": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "string",
+            "title": "Items",
+            "description": "A reference to the array to iterate, e.g. {{step.data.rows}}. Each batch runs the 'Each item' branch as its own child workflow."
+          },
+          "batchSize": {
+            "type": "integer",
+            "title": "Batch size",
+            "minimum": 1,
+            "default": 1,
+            "description": "How many items each iteration receives ({{loop.data.items}} carries the batch; {{loop.data.item}} is the first)."
+          },
+          "maxIterations": {
+            "type": "integer",
+            "title": "Max iterations",
+            "minimum": 1,
+            "default": 1000,
+            "description": "Safety cap. The run fails before starting if the items need more iterations than this."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "item": {},
+          "items": {
+            "type": "array"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "iterations": {
+            "type": "integer"
+          },
+          "results": {
+            "type": "array"
+          },
+          "lastResult": {}
+        }
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "Loop",
+        "icon": "refresh",
+        "colour": "amber-500",
+        "description": "Iterate over items: each batch runs the 'Each item' branch as a real Temporal child workflow; 'Done' continues with the collected results."
+      },
+      "docs": "## What it is\nIterate over items: run the `Each item` branch once per batch, then continue down `Done`.\n\n## How it works\nPoint `Items` at an array (`{{step.data.rows}}`). Each batch runs the Each-item subgraph as a REAL Temporal child workflow with its own run id (`<run>-loop-<node>-<i>`) - visible in the runs list and Temporal UI. Inside the body, reference `{{node-<loopId>.data.item}}` (the current item), `.items` (the batch) and `.index`. After the last iteration the Done branch runs with `{{...data.iterations}}`, `.results` (collected leaf outputs, capped) and `.lastResult`.\n\n## Config\n`items` (the array reference), `batchSize` (default 1), `maxIterations` (default 1000 - the run fails BEFORE starting if the items need more).\n\n## Gotchas\n- Sequential and fail-fast: a failing iteration fails the run and spawns nothing further.\n- Do not wire the body back to the loop (no back-edges; cycles are rejected at start).\n- Body steps can still reference outside-loop steps - their outputs are carried in."
+    },
+    {
+      "type": "filter",
+      "category": "logic",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "tier": "open",
+      "configSchema": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "string",
+            "title": "Items",
+            "description": "A reference to the array to filter, e.g. {{step.data.rows}}."
+          },
+          "conditions": {
+            "type": "array",
+            "title": "Conditions",
+            "description": "Every condition must hold for an element to be kept.",
+            "x-helix-widget": "filterBuilder",
+            "items": {
+              "type": "object",
+              "properties": {
+                "field": {
+                  "type": "string"
+                },
+                "checkOperator": {
+                  "type": "string"
+                },
+                "checkValue": {}
+              }
+            }
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "kept": {
+            "type": "array"
+          },
+          "discarded": {
+            "type": "array"
+          },
+          "keptCount": {
+            "type": "integer"
+          },
+          "discardedCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "Filter",
+        "icon": "search",
+        "colour": "emerald-500",
+        "description": "Split an array's elements into Kept and Discarded by conditions; an empty side's branch does not run."
+      },
+      "docs": "## What it is\nSplit an array's ELEMENTS into Kept and Discarded by conditions.\n\n## How it works\nPoint `Items` at an array; each element is tested against every condition (AND). `field` is a dot-path INTO the element (`status`, `customer.tier`). Kept elements flow out the Kept handle as `{{...data.kept}}`, the rest out Discarded. A side with zero elements is orphaned - its branch simply does not run.\n\n## Gotchas\n- Same 15 operators as Switch.\n- This filters items INSIDE one payload; to gate the whole run, use Logic or Switch."
+    },
+    {
+      "type": "comparedatasets",
+      "category": "logic",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "tier": "open",
+      "configSchema": {
+        "type": "object",
+        "required": [
+          "itemsA",
+          "itemsB",
+          "matchFields"
+        ],
+        "properties": {
+          "itemsA": {
+            "type": "string",
+            "title": "Input A",
+            "description": "A reference to the first array, e.g. {{stepA.data.rows}}."
+          },
+          "itemsB": {
+            "type": "string",
+            "title": "Input B",
+            "description": "A reference to the second array, e.g. {{stepB.data.rows}}."
+          },
+          "matchFields": {
+            "type": "string",
+            "title": "Match fields",
+            "description": "Comma-separated keys that identify the same record in both inputs, e.g. email or id, region."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "aOnly": {
+            "type": "array"
+          },
+          "same": {
+            "type": "array"
+          },
+          "different": {
+            "type": "array"
+          },
+          "bOnly": {
+            "type": "array"
+          },
+          "counts": {
+            "type": "object"
+          }
+        }
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "Compare Datasets",
+        "icon": "grid",
+        "colour": "cyan-500",
+        "description": "Diff two arrays keyed by match fields into In A only / Same / Different / In B only; empty branches do not run."
+      },
+      "docs": "## What it is\nDiff two arrays: what's only in A, what's the same, what changed, what's only in B.\n\n## How it works\nPoint Input A and Input B at two array references and name the match fields (comma-separated keys that identify the same record in both, e.g. `email`). Records pair up by key; paired records with identical remaining fields go to Same, otherwise Different (carrying both versions as `{a, b}`). Unpaired records go to In A only / In B only. Empty sides are orphaned.\n\n## Gotchas\n- Wire both source steps into this node so their data exists before it runs.\n- Field-order differences do not count as Different (canonical comparison)."
+    },
+    {
+      "type": "code",
+      "category": "transform",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "required": [
+          "code"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "JavaScript/TypeScript code. Use ctx.input to access workflow input."
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "javascript",
+              "typescript",
+              "python"
+            ],
+            "default": "typescript"
+          },
+          "timeout": {
+            "type": "integer",
+            "minimum": 1000,
+            "maximum": 300000,
+            "default": 30000,
+            "description": "Execution timeout in milliseconds."
+          },
+          "script": {
+            "type": "string",
+            "description": "DEPRECATED: use `code` instead. Backward-compatible alias for existing workflows."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "integer"
+          },
+          "data": {}
+        }
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "Code",
+        "icon": "terminal",
+        "colour": "emerald-500",
+        "description": "Run a sandboxed JavaScript snippet."
+      },
+      "tier": "open",
+      "docs": "## What it is\nRun a JavaScript snippet in a sandbox - the escape hatch when no node fits.\n\n## How it works\nYour code runs sandboxed with a time limit and must `return` a value; that value becomes the step's output for downstream references. `{{...}}` references in the code string are substituted before it runs.\n\n## Gotchas\n- No network or filesystem access - transform data, don't fetch it (use the HTTP/API node to fetch).\n- Keep returns small; outputs ride the workflow state."
+    },
+    {
+      "type": "sql",
+      "category": "transform",
+      "tier": "open",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "required": [
+          "connectorId",
+          "query"
+        ],
+        "properties": {
+          "connectorId": {
+            "type": "string",
+            "title": "Connection",
+            "description": "The Postgres connection to run the query against.",
+            "x-helix-widget": "connectorRef",
+            "x-helix-options": "/_resource/connectors?provider=postgres"
+          },
+          "query": {
+            "type": "string",
+            "description": "A SQL query. Its rows become this step's output. Use $1, $2 for parameter values."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array"
+          },
+          "rowCount": {
+            "type": "integer"
+          }
+        }
+      },
+      "handler_status": "not-a-node",
+      "palette": {
+        "label": "SQL",
+        "icon": "database",
+        "colour": "sky-500",
+        "description": "Run a SQL query on a Postgres connection and pass its rows on."
+      }
+    },
+    {
+      "type": "data",
+      "category": "transform",
+      "tier": "open",
+      "execution": "both",
+      "entitlement": "cap.data",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "properties": {
+          "connectorId": {
+            "type": "string",
+            "title": "Connection",
+            "description": "The data source connection to run against.",
+            "x-helix-widget": "connectorRef",
+            "x-helix-options": "/_resource/connectors?provider=postgres"
+          },
+          "query": {
+            "type": "string",
+            "title": "Data",
+            "description": "A SQL query, or build one visually. Its rows become this step's output. Use $1, $2 for parameter values.",
+            "x-helix-widget": "dataBuilder"
+          },
+          "output": {
+            "type": "string",
+            "title": "Output",
+            "description": "Rows: the result set, inline (capped). Reference: a small handle a later step can open on demand - it never hits the payload limit and is how big data flows on Tachyon.",
+            "enum": [
+              "rows",
+              "reference"
+            ],
+            "default": "rows"
+          },
+          "sourceRef": {
+            "type": "string",
+            "title": "Open a dataset",
+            "description": "Materialise a dataset an earlier step handed on. Reference its dataset output, e.g. {{step.data.dataset}}."
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "rows": {
+            "type": "array"
+          },
+          "rowCount": {
+            "type": "integer"
+          },
+          "totalRows": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "dataset": {
+            "type": "object"
+          }
+        }
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "Data",
+        "icon": "database",
+        "colour": "sky-500",
+        "description": "Read or write any data source: a SQL query or a visual table builder."
+      },
+      "docs": "## What it is\nRead or write ANY data source through one node: write SQL or build a query visually.\n\n## How it works\nPick a connection (the connection IS the engine - Postgres in the open edition). Then either write SQL (Validate checks it against the live database and publishes the result columns as downstream variables like `{{step.data.row.email}}`) or Build a query: pick a real table, an operation (select/insert/update/delete) and filters - no SQL needed.\n\n## Output\n`rows` (capped ~1,000 rows / 256 KB so results fit through the workflow), `rowCount`, `truncated`, and `row` (the first record, for single-record references). Or set Output to **reference** to hand downstream a small dataset handle instead of rows - a later Data step opens it with \"Open a dataset\".\n\n## Gotchas\n- Use $1, $2 parameter placeholders in SQL; values never concatenate into the query.\n- Big results truncate at the cap - larger data belongs in a warehouse engine (Helix edition)."
+    },
+    {
+      "type": "transform",
+      "alias_of": "code",
+      "category": "transform",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "handler_status": "ready",
+      "palette": {
+        "label": "Transform",
+        "icon": "shuffle",
+        "colour": "emerald-400",
+        "description": "Data transform \u2014 alias of Code."
+      },
+      "tier": "open"
+    },
+    {
+      "type": "api",
+      "category": "integration",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "required": [
+          "url",
+          "method"
+        ],
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "GET",
+              "POST",
+              "PUT",
+              "PATCH",
+              "DELETE",
+              "HEAD",
+              "OPTIONS"
+            ]
+          },
+          "headers": {
+            "type": "object"
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "json",
+                  "form",
+                  "text",
+                  "none"
+                ]
+              },
+              "content": {}
+            }
+          },
+          "auth": {
+            "type": "object"
+          },
+          "timeout": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 10000
+          },
+          "retries": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 0
+          },
+          "retryDelay": {
+            "type": "integer",
+            "minimum": 0,
+            "default": 500
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "integer"
+          },
+          "data": {}
+        }
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "HTTP API",
+        "icon": "network",
+        "colour": "indigo-500",
+        "description": "Call an external HTTP API. Supports retry, configurable timeout, and headers array format."
+      },
+      "tier": "open",
+      "docs": "## What it is\nCall any HTTP API: method, URL, headers, body.\n\n## How it works\nConfigure the request; `{{...}}` references work in the URL, headers and body. The response (status, headers, parsed body) becomes the step's output. A 4xx/5xx completes the step but is surfaced as an error in the Test tab - check `status`/`ok` downstream if you branch on it.\n\n## Gotchas\n- Secrets belong in a connection, not pasted into headers."
+    },
+    {
+      "type": "connector",
+      "category": "integration",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "handler_status": "not-a-node",
+      "palette": {
+        "label": "Connector",
+        "icon": "link",
+        "colour": "zinc-400",
+        "description": "Connectors are named connections, not a step. A node references one; manage them on the Connectors page."
+      },
+      "tier": "open",
+      "configSchema": {
+        "type": "object",
+        "properties": {
+          "connectorId": {
+            "type": "string",
+            "title": "Connector",
+            "x-helix-widget": "connectorRef"
+          },
+          "operation": {
+            "type": "string",
+            "title": "Operation",
+            "description": "A named operation on the chosen connector (leave blank for a raw call)."
+          },
+          "params": {
+            "type": "object",
+            "title": "Parameters",
+            "description": "Operation parameters (path placeholders and query/body values)."
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "GET",
+              "POST",
+              "PUT",
+              "PATCH",
+              "DELETE"
+            ],
+            "default": "GET"
+          },
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Relative to the connector base URL (raw mode)."
+          },
+          "headers": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "body": {}
+        },
+        "required": [
+          "connectorId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "number"
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "data": {}
+        }
+      }
+    },
+    {
+      "type": "http",
+      "alias_of": "api",
+      "category": "integration",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "handler_status": "ready",
+      "palette": {
+        "label": "HTTP",
+        "icon": "globe",
+        "colour": "indigo-400",
+        "description": "HTTP request \u2014 alias of API."
+      },
+      "tier": "open"
+    },
+    {
+      "type": "postgres",
+      "category": "integration",
+      "displayName": "PostgreSQL",
+      "match": {
+        "names": [
+          "PostgreSQL",
+          "Postgres"
+        ],
+        "keywords": [
+          "postgres",
+          "postgresql",
+          "psql"
+        ],
+        "intentVerbs": [
+          "sql",
+          "query the database",
+          "query",
+          "insert into",
+          "update row",
+          "delete row",
+          "upsert",
+          "select from"
+        ],
+        "operationHints": {
+          "select": [
+            "query",
+            "fetch",
+            "read",
+            "select",
+            "get rows"
+          ],
+          "insert": [
+            "insert",
+            "create row",
+            "add record"
+          ],
+          "update": [
+            "update",
+            "change row",
+            "modify"
+          ],
+          "delete": [
+            "delete",
+            "remove row"
+          ],
+          "upsert": [
+            "upsert",
+            "merge",
+            "insert or update"
+          ]
+        }
+      },
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "required": [
+          "connectorId",
+          "operation"
+        ],
+        "properties": {
+          "connectorId": {
+            "type": "string",
+            "description": "Id of a registered `postgres` connector.",
+            "x-helix-widget": "connectorRef",
+            "x-helix-options": "/_resource/connectors?provider=postgres"
+          },
+          "operation": {
+            "type": "string",
+            "enum": [
+              "select",
+              "insert",
+              "update",
+              "delete",
+              "upsert"
+            ]
+          },
+          "database": {
+            "type": "string"
+          },
+          "schema": {
+            "type": "string"
+          },
+          "tables": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "alias": {
+                  "type": "string"
+                },
+                "columns": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "values": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "join": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "INNER",
+                    "LEFT",
+                    "RIGHT",
+                    "FULL"
+                  ]
+                },
+                "on": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "where": {
+            "type": "array"
+          },
+          "orderBy": {
+            "type": "array"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "conflictColumns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updateColumns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "integer"
+          },
+          "data": {
+            "oneOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "array"
+              }
+            ]
+          }
+        }
+      },
+      "handler_status": "not-a-node",
+      "palette": {
+        "label": "Postgres",
+        "icon": "database",
+        "colour": "sky-500",
+        "description": "Query or mutate Postgres via a tenant connector: a visual builder (operation + tables/where/order) or a raw parameterised query."
+      },
+      "tier": "open"
+    },
+    {
+      "type": "sendgrid",
+      "category": "integration",
+      "displayName": "SendGrid",
+      "match": {
+        "names": [
+          "SendGrid"
+        ],
+        "keywords": [
+          "sendgrid"
+        ],
+        "intentVerbs": [
+          "email",
+          "send email",
+          "mail me",
+          "email transactional",
+          "send transactional email",
+          "email via sendgrid"
+        ]
+      },
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "required": [
+          "connectorId",
+          "to",
+          "from",
+          "subject"
+        ],
+        "properties": {
+          "connectorId": {
+            "type": "string",
+            "description": "Id of a `sendgrid_api_key` connector.",
+            "x-helix-widget": "connectorRef",
+            "x-helix-options": "/_resource/connectors?provider=sendgrid"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "body",
+              "template"
+            ],
+            "default": "body"
+          },
+          "templateId": {
+            "type": "string",
+            "description": "Dynamic template id when type=template."
+          },
+          "substitutions": {
+            "type": "object",
+            "description": "Template variable substitutions."
+          },
+          "to": {
+            "type": "string"
+          },
+          "cc": {
+            "type": "string"
+          },
+          "bcc": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "body": {
+            "type": "object",
+            "properties": {
+              "html": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            }
+          },
+          "fieldMapping": {
+            "type": "array"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "integer"
+          },
+          "data": {
+            "type": "object"
+          }
+        }
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "SendGrid",
+        "icon": "mail",
+        "colour": "rose-500",
+        "description": "Send transactional email via a SendGrid connector. Supports basic to/from/subject/text/html; templates, cc/bcc and open-tracking are not yet supported."
+      },
+      "tier": "open",
+      "docs": "## What it is\nSend transactional email via a SendGrid connection.\n\n## How it works\nPick your SendGrid connection, set from/to/subject/body; `{{...}}` references personalise any field. The response (message id) is the step's output.\n\n## Gotchas\n- The from address must be verified in SendGrid.\n- Templates, cc/bcc and open-tracking are not yet supported."
+    }
+  ]
+}

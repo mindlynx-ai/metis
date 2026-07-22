@@ -1,0 +1,24 @@
+{
+  "_comment": "Trigger events per connector: webhook events (push delivery) and poll events (cursor-tracked). Bound to a workflow via a TriggerService record. pollConfig.cursorField names the field on each item the poll-bridge advances its cursor by. Event names/shapes informed by public provider docs; n8n/activepieces as inspiration only.",
+  "github": [
+    { "name": "push", "kind": "webhook" },
+    { "name": "issues", "kind": "webhook" },
+    { "name": "pullRequest", "kind": "webhook" }
+  ],
+  "gitlab": [
+    { "name": "push", "kind": "webhook" }
+  ],
+  "stripe": [
+    { "name": "event", "kind": "webhook" }
+  ],
+  "shopify": [
+    { "name": "orderCreated", "kind": "webhook" }
+  ],
+  "hubspot": [
+    { "name": "newContact", "kind": "poll", "pollConfig": { "cursorField": "createdAt" } }
+  ],
+  "airtable": [
+    { "name": "newRecord", "kind": "poll", "pollConfig": { "cursorField": "createdTime" } }
+  ],
+  "openai": []
+}

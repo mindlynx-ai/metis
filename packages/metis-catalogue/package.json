@@ -1,0 +1,26 @@
+{
+  "name": "@mindlynx/metis-catalogue",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mindlynx-ai/metis.git",
+    "directory": "packages/metis-catalogue"
+  },
+  "homepage": "https://github.com/mindlynx-ai/metis#readme",
+  "bugs": "https://github.com/mindlynx-ai/metis/issues",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "metis": {
+    "edition": "open"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json && node --input-type=module -e \"import{cpSync}from'node:fs';cpSync('src/nodeTypes.v1.json','dist/nodeTypes.v1.json');cpSync('src/connectors.v1.json','dist/connectors.v1.json')\"",
+    "generate:connectors": "tsx src/generate-connectors.ts"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0"
+  }
+}

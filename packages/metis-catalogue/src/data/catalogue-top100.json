@@ -1,0 +1,1007 @@
+{
+  "_comment": "Frozen merged top-100 popularity ranking. Factual API-surface metadata harvested from the open-source connector catalogue (n8n/activepieces/pipedream/airbyte/nifi/composio), deduplicated + canonicalised, market-pinned, Helix-priority-overlaid. Generated 2026-05-02 harvest; frozen for the Metis catalogue generator. Provenance input only \u2014 not shipped at runtime.",
+  "generated": "2026-05-02",
+  "count": 100,
+  "apps": [
+    {
+      "rank": 1,
+      "canonical": "github",
+      "name": "GitHub",
+      "category": "ai-agent-tool",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 5,
+      "sources": "activepieces, composio, n8n, nifi, pipedream"
+    },
+    {
+      "rank": 2,
+      "canonical": "hubspot",
+      "name": "HubSpot",
+      "category": "data-flow",
+      "priority": "P0",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 4,
+      "sources": "activepieces, n8n, nifi, pipedream"
+    },
+    {
+      "rank": 3,
+      "canonical": "shopify",
+      "name": "Shopify",
+      "category": "commerce",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 4,
+      "sources": "activepieces, n8n, nifi, pipedream"
+    },
+    {
+      "rank": 4,
+      "canonical": "box",
+      "name": "Box",
+      "category": "content-and-files",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 4,
+      "sources": "activepieces, n8n, nifi, pipedream"
+    },
+    {
+      "rank": 5,
+      "canonical": "zendesk",
+      "name": "Zendesk",
+      "category": "customer-support",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 4,
+      "sources": "activepieces, n8n, nifi, pipedream"
+    },
+    {
+      "rank": 6,
+      "canonical": "dropbox",
+      "name": "Dropbox",
+      "category": "content-and-files",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 4,
+      "sources": "activepieces, n8n, nifi, pipedream"
+    },
+    {
+      "rank": 7,
+      "canonical": "stripe",
+      "name": "Stripe",
+      "category": "commerce",
+      "priority": "P1",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 8,
+      "canonical": "clickup",
+      "name": "ClickUp",
+      "category": "productivity",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 9,
+      "canonical": "salesforce",
+      "name": "Salesforce",
+      "category": "data-flow",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, nifi"
+    },
+    {
+      "rank": 10,
+      "canonical": "trello",
+      "name": "Trello",
+      "category": "productivity",
+      "priority": "P1",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 11,
+      "canonical": "notion",
+      "name": "Notion",
+      "category": "productivity",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 12,
+      "canonical": "pipedrive",
+      "name": "Pipedrive",
+      "category": "sales-and-crm",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 13,
+      "canonical": "mailchimp",
+      "name": "Mailchimp",
+      "category": "marketing",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 14,
+      "canonical": "intercom",
+      "name": "Intercom",
+      "category": "customer-support",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 15,
+      "canonical": "slack",
+      "name": "Slack",
+      "category": "communication",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, nifi"
+    },
+    {
+      "rank": 16,
+      "canonical": "zoom",
+      "name": "Zoom",
+      "category": "communication",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 17,
+      "canonical": "asana",
+      "name": "Asana",
+      "category": "productivity",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 18,
+      "canonical": "airtable",
+      "name": "Airtable",
+      "category": "data-flow",
+      "priority": "P1",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, nifi"
+    },
+    {
+      "rank": 19,
+      "canonical": "twilio",
+      "name": "Twilio",
+      "category": "communication",
+      "priority": "P1",
+      "authMethod": "Basic Auth (Username + Password)",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 20,
+      "canonical": "sendgrid",
+      "name": "SendGrid",
+      "category": "communication",
+      "priority": "P1",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 21,
+      "canonical": "linear",
+      "name": "Linear",
+      "category": "productivity",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 22,
+      "canonical": "openai",
+      "name": "OpenAI",
+      "category": "artificial-intelligence",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 23,
+      "canonical": "gmail",
+      "name": "Gmail",
+      "category": "communication",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 24,
+      "canonical": "typeform",
+      "name": "Typeform",
+      "category": "forms-and-surveys",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 25,
+      "canonical": "jira",
+      "name": "Jira",
+      "category": "other",
+      "priority": "P0",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 2,
+      "sources": "n8n, pipedream"
+    },
+    {
+      "rank": 26,
+      "canonical": "google drive",
+      "name": "Google Drive",
+      "category": "ai-agent-tool",
+      "priority": "P0",
+      "authMethod": "Platform-managed (verify direct API exists)",
+      "sourceCount": 2,
+      "sources": "composio, n8n"
+    },
+    {
+      "rank": 27,
+      "canonical": "confluence",
+      "name": "Confluence",
+      "category": "content-and-files",
+      "priority": "P0",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 2,
+      "sources": "activepieces, pipedream"
+    },
+    {
+      "rank": 28,
+      "canonical": "xero",
+      "name": "Xero",
+      "category": "accounting",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 2,
+      "sources": "activepieces, n8n"
+    },
+    {
+      "rank": 29,
+      "canonical": "discord",
+      "name": "Discord",
+      "category": "communication",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 2,
+      "sources": "activepieces, pipedream"
+    },
+    {
+      "rank": 30,
+      "canonical": "google sheets",
+      "name": "Google Sheets",
+      "category": "other",
+      "priority": "P0",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 1,
+      "sources": "pipedream"
+    },
+    {
+      "rank": 31,
+      "canonical": "google calendar",
+      "name": "Google Calendar",
+      "category": "other",
+      "priority": "P0",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 1,
+      "sources": "pipedream"
+    },
+    {
+      "rank": 32,
+      "canonical": "microsoft outlook",
+      "name": "Microsoft Outlook",
+      "category": "other",
+      "priority": "P0",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 1,
+      "sources": "pipedream"
+    },
+    {
+      "rank": 33,
+      "canonical": "microsoft teams",
+      "name": "Microsoft Teams",
+      "category": "business-intelligence",
+      "priority": "P0",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 1,
+      "sources": "activepieces"
+    },
+    {
+      "rank": 34,
+      "canonical": "monday",
+      "name": "Monday Oauth",
+      "category": "other",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 1,
+      "sources": "pipedream"
+    },
+    {
+      "rank": 35,
+      "canonical": "quickbooks",
+      "name": "QuickBooks (source)",
+      "category": "api",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 1,
+      "sources": "airbyte"
+    },
+    {
+      "rank": 36,
+      "canonical": "telegram",
+      "name": "Telegram Bot",
+      "category": "communication",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 1,
+      "sources": "activepieces"
+    },
+    {
+      "rank": 37,
+      "canonical": "google gemini",
+      "name": "Google Gemini",
+      "category": "artificial-intelligence",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 1,
+      "sources": "activepieces"
+    },
+    {
+      "rank": 38,
+      "canonical": "anthropic",
+      "name": "Anthropic",
+      "category": "other",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 1,
+      "sources": "pipedream"
+    },
+    {
+      "rank": 39,
+      "canonical": "gitlab",
+      "name": "GitLab",
+      "category": "data-flow",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 4,
+      "sources": "activepieces, n8n, nifi, pipedream"
+    },
+    {
+      "rank": 40,
+      "canonical": "snowflake",
+      "name": "Snowflake",
+      "category": "data-flow",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 4,
+      "sources": "activepieces, n8n, nifi, pipedream"
+    },
+    {
+      "rank": 41,
+      "canonical": "mongodb",
+      "name": "MongoDB",
+      "category": "data-flow",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 4,
+      "sources": "activepieces, n8n, nifi, pipedream"
+    },
+    {
+      "rank": 42,
+      "canonical": "freshdesk",
+      "name": "Freshdesk",
+      "category": "customer-support",
+      "priority": "P1",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 43,
+      "canonical": "figma",
+      "name": "Figma",
+      "category": "other",
+      "priority": "P1",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 44,
+      "canonical": "freshservice",
+      "name": "Freshservice",
+      "category": "customer-support",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 45,
+      "canonical": "activecampaign",
+      "name": "ActiveCampaign",
+      "category": "marketing",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 46,
+      "canonical": "quickbooks online",
+      "name": "Quickbooks Online",
+      "category": "other",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 47,
+      "canonical": "harvest",
+      "name": "Harvest",
+      "category": "productivity",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 48,
+      "canonical": "convertkit",
+      "name": "ConvertKit",
+      "category": "marketing",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 49,
+      "canonical": "chargebee",
+      "name": "Chargebee",
+      "category": "accounting",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 50,
+      "canonical": "copper",
+      "name": "Copper",
+      "category": "sales-and-crm",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 51,
+      "canonical": "webflow",
+      "name": "Webflow",
+      "category": "marketing",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 52,
+      "canonical": "spotify",
+      "name": "Spotify",
+      "category": "other",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 53,
+      "canonical": "woocommerce",
+      "name": "WooCommerce",
+      "category": "commerce",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 54,
+      "canonical": "brevo",
+      "name": "Brevo",
+      "category": "marketing",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 55,
+      "canonical": "clockify",
+      "name": "Clockify",
+      "category": "other",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 56,
+      "canonical": "mautic",
+      "name": "Mautic",
+      "category": "marketing",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 57,
+      "canonical": "mailgun",
+      "name": "Mailgun",
+      "category": "marketing",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 58,
+      "canonical": "linkedin",
+      "name": "LinkedIn",
+      "category": "marketing",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 59,
+      "canonical": "reddit",
+      "name": "Reddit",
+      "category": "communication",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 60,
+      "canonical": "discourse",
+      "name": "Discourse",
+      "category": "communication",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 61,
+      "canonical": "odoo",
+      "name": "Odoo",
+      "category": "other",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 62,
+      "canonical": "coda",
+      "name": "Coda",
+      "category": "productivity",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 63,
+      "canonical": "tapfiliate",
+      "name": "Tapfiliate",
+      "category": "marketing",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 64,
+      "canonical": "vero",
+      "name": "Vero",
+      "category": "communication",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 65,
+      "canonical": "workday",
+      "name": "Workday",
+      "category": "data-flow",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, nifi, pipedream"
+    },
+    {
+      "rank": 66,
+      "canonical": "lemlist",
+      "name": "Lemlist",
+      "category": "other",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 67,
+      "canonical": "paddle",
+      "name": "Paddle",
+      "category": "commerce",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 68,
+      "canonical": "hunter",
+      "name": "Hunter",
+      "category": "sales-and-crm",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 69,
+      "canonical": "segment",
+      "name": "Segment",
+      "category": "other",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 70,
+      "canonical": "airtop",
+      "name": "Airtop",
+      "category": "other",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 71,
+      "canonical": "netlify",
+      "name": "Netlify",
+      "category": "developer-tools",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 72,
+      "canonical": "pagerduty",
+      "name": "PagerDuty",
+      "category": "developer-tools",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 73,
+      "canonical": "quickbase",
+      "name": "Quickbase",
+      "category": "productivity",
+      "priority": "P2",
+      "authMethod": "Platform-managed (verify direct API exists)",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 74,
+      "canonical": "bitly",
+      "name": "Bitly",
+      "category": "marketing",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 75,
+      "canonical": "getresponse",
+      "name": "GetResponse",
+      "category": "marketing",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 76,
+      "canonical": "mailjet",
+      "name": "Mailjet",
+      "category": "communication",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 77,
+      "canonical": "matrix",
+      "name": "Matrix",
+      "category": "communication",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 78,
+      "canonical": "okta",
+      "name": "Okta",
+      "category": "productivity",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 79,
+      "canonical": "supabase",
+      "name": "Supabase",
+      "category": "developer-tools",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 80,
+      "canonical": "metabase",
+      "name": "Metabase",
+      "category": "other",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 81,
+      "canonical": "nocodb",
+      "name": "NocoDB",
+      "category": "other",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 82,
+      "canonical": "posthog",
+      "name": "PostHog",
+      "category": "business-intelligence",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 83,
+      "canonical": "sendy",
+      "name": "Sendy",
+      "category": "marketing",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 84,
+      "canonical": "wufoo",
+      "name": "Wufoo",
+      "category": "other",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 85,
+      "canonical": "grist",
+      "name": "Grist",
+      "category": "productivity",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 86,
+      "canonical": "contentful",
+      "name": "Contentful",
+      "category": "marketing",
+      "priority": "P2",
+      "authMethod": "Platform-managed (verify direct API exists)",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 87,
+      "canonical": "formstack",
+      "name": "Formstack",
+      "category": "other",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 88,
+      "canonical": "bannerbear",
+      "name": "Bannerbear",
+      "category": "marketing",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 89,
+      "canonical": "jotform",
+      "name": "Jotform",
+      "category": "forms-and-surveys",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 90,
+      "canonical": "line",
+      "name": "Line",
+      "category": "communication",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 91,
+      "canonical": "phantombuster",
+      "name": "PhantomBuster",
+      "category": "marketing",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 92,
+      "canonical": "bubble",
+      "name": "Bubble",
+      "category": "developer-tools",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 93,
+      "canonical": "rabbitmq",
+      "name": "RabbitMQ",
+      "category": "other",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 94,
+      "canonical": "kafka",
+      "name": "Kafka",
+      "category": "data-flow",
+      "priority": "P2",
+      "authMethod": "Basic Auth (Username + Password)",
+      "sourceCount": 3,
+      "sources": "n8n, nifi, pipedream"
+    },
+    {
+      "rank": 95,
+      "canonical": "pushbullet",
+      "name": "Pushbullet",
+      "category": "communication",
+      "priority": "P2",
+      "authMethod": "OAuth 2.0",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 96,
+      "canonical": "gotify",
+      "name": "Gotify",
+      "category": "developer-tools",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 97,
+      "canonical": "amqp sender",
+      "name": "AMQP Sender",
+      "category": "data-flow",
+      "priority": "P2",
+      "authMethod": "Basic Auth (Username + Password)",
+      "sourceCount": 3,
+      "sources": "n8n, nifi, pipedream"
+    },
+    {
+      "rank": 98,
+      "canonical": "mqtt",
+      "name": "MQTT",
+      "category": "data-flow",
+      "priority": "P2",
+      "authMethod": "Basic Auth (Username + Password)",
+      "sourceCount": 3,
+      "sources": "n8n, nifi, pipedream"
+    },
+    {
+      "rank": 99,
+      "canonical": "pushover",
+      "name": "Pushover",
+      "category": "communication",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    },
+    {
+      "rank": 100,
+      "canonical": "deepl",
+      "name": "DeepL",
+      "category": "other",
+      "priority": "P2",
+      "authMethod": "API Key",
+      "sourceCount": 3,
+      "sources": "activepieces, n8n, pipedream"
+    }
+  ]
+}

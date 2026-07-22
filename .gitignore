@@ -1,0 +1,16 @@
+node_modules/
+dist/
+coverage/
+.metis/
+*.local.md
+.env
+test-results/
+playwright-report/
+
+# AWS demo box: local-only secrets, state and private key
+deploy/aws*/.env
+deploy/aws*/.state
+deploy/aws*/*.pem
+
+# Internal planning/porting notes: never ship in the public repo.
+docs/internal/

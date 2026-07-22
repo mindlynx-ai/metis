@@ -1,0 +1,116 @@
+{
+  "_comment": "Verified operations for the wireable core: method + path authored from each vendor's public REST API documentation. n8n (fair-code) and Activepieces (MIT) were read as INSPIRATION for which operations matter and their shapes; no source was copied. Every operation here is JSON-over-HTTPS against a fixed base URL so it dispatches unchanged through the generic connector node.",
+  "slack": [
+    { "name": "postMessage", "method": "POST", "pathTemplate": "/chat.postMessage", "description": "Send a message to a channel" },
+    { "name": "listConversations", "method": "GET", "pathTemplate": "/conversations.list", "description": "List channels" },
+    { "name": "getUser", "method": "GET", "pathTemplate": "/users.info", "description": "Get a user by id (user param)" }
+  ],
+  "github": [
+    { "name": "getRepo", "method": "GET", "pathTemplate": "/repos/{owner}/{repo}", "description": "Get a repository" },
+    { "name": "listIssues", "method": "GET", "pathTemplate": "/repos/{owner}/{repo}/issues", "description": "List issues on a repository" },
+    { "name": "createIssue", "method": "POST", "pathTemplate": "/repos/{owner}/{repo}/issues", "description": "Open an issue (title, body params)" }
+  ],
+  "hubspot": [
+    { "name": "listContacts", "method": "GET", "pathTemplate": "/crm/v3/objects/contacts", "description": "List contacts" },
+    { "name": "getContact", "method": "GET", "pathTemplate": "/crm/v3/objects/contacts/{contactId}", "description": "Get a contact" },
+    { "name": "createContact", "method": "POST", "pathTemplate": "/crm/v3/objects/contacts", "description": "Create a contact (properties param)" }
+  ],
+  "notion": [
+    { "name": "getDatabase", "method": "GET", "pathTemplate": "/v1/databases/{databaseId}", "description": "Retrieve a database" },
+    { "name": "queryDatabase", "method": "POST", "pathTemplate": "/v1/databases/{databaseId}/query", "description": "Query a database" },
+    { "name": "createPage", "method": "POST", "pathTemplate": "/v1/pages", "description": "Create a page (parent, properties params)" }
+  ],
+  "sendgrid": [
+    { "name": "sendMail", "method": "POST", "pathTemplate": "/v3/mail/send", "description": "Send an email" }
+  ],
+  "airtable": [
+    { "name": "listRecords", "method": "GET", "pathTemplate": "/v0/{baseId}/{tableName}", "description": "List records in a table" },
+    { "name": "createRecord", "method": "POST", "pathTemplate": "/v0/{baseId}/{tableName}", "description": "Create records (records/fields params)" }
+  ],
+  "asana": [
+    { "name": "getTask", "method": "GET", "pathTemplate": "/api/1.0/tasks/{taskGid}", "description": "Get a task" },
+    { "name": "createTask", "method": "POST", "pathTemplate": "/api/1.0/tasks", "description": "Create a task (data param)" }
+  ],
+  "openai": [
+    { "name": "chatCompletion", "method": "POST", "pathTemplate": "/v1/chat/completions", "description": "Create a chat completion" },
+    { "name": "listModels", "method": "GET", "pathTemplate": "/v1/models", "description": "List available models" }
+  ],
+  "anthropic": [
+    { "name": "createMessage", "method": "POST", "pathTemplate": "/v1/messages", "description": "Create a message (model, messages, max_tokens params)" }
+  ],
+  "gitlab": [
+    { "name": "getProject", "method": "GET", "pathTemplate": "/api/v4/projects/{projectId}", "description": "Get a project" },
+    { "name": "listIssues", "method": "GET", "pathTemplate": "/api/v4/projects/{projectId}/issues", "description": "List project issues" },
+    { "name": "createIssue", "method": "POST", "pathTemplate": "/api/v4/projects/{projectId}/issues", "description": "Create an issue (title param)" }
+  ],
+  "figma": [
+    { "name": "getFile", "method": "GET", "pathTemplate": "/v1/files/{fileKey}", "description": "Get a file by key" }
+  ],
+  "zoom": [
+    { "name": "getUser", "method": "GET", "pathTemplate": "/v2/users/{userId}", "description": "Get a user" },
+    { "name": "createMeeting", "method": "POST", "pathTemplate": "/v2/users/{userId}/meetings", "description": "Schedule a meeting (topic, start_time params)" }
+  ],
+  "clickup": [
+    { "name": "getTask", "method": "GET", "pathTemplate": "/api/v2/task/{taskId}", "description": "Get a task" },
+    { "name": "createTask", "method": "POST", "pathTemplate": "/api/v2/list/{listId}/task", "description": "Create a task in a list (name param)" }
+  ],
+  "linear": [
+    { "name": "graphql", "method": "POST", "pathTemplate": "/graphql", "description": "Run a GraphQL query/mutation (query, variables params)" }
+  ],
+  "coda": [
+    { "name": "listDocs", "method": "GET", "pathTemplate": "/apis/v1/docs", "description": "List docs" }
+  ],
+  "stripe": [
+    { "name": "listCustomers", "method": "GET", "pathTemplate": "/v1/customers", "description": "List customers" },
+    { "name": "getCustomer", "method": "GET", "pathTemplate": "/v1/customers/{customerId}", "description": "Retrieve a customer" },
+    { "name": "listCharges", "method": "GET", "pathTemplate": "/v1/charges", "description": "List charges" },
+    { "name": "getBalance", "method": "GET", "pathTemplate": "/v1/balance", "description": "Retrieve the account balance" }
+  ],
+  "intercom": [
+    { "name": "listContacts", "method": "GET", "pathTemplate": "/contacts", "description": "List contacts" },
+    { "name": "getContact", "method": "GET", "pathTemplate": "/contacts/{contactId}", "description": "Get a contact" },
+    { "name": "createContact", "method": "POST", "pathTemplate": "/contacts", "description": "Create a contact (role, email params)" }
+  ],
+  "discord": [
+    { "name": "getChannel", "method": "GET", "pathTemplate": "/api/v10/channels/{channelId}", "description": "Get a channel (auth = Bot token)" },
+    { "name": "sendMessage", "method": "POST", "pathTemplate": "/api/v10/channels/{channelId}/messages", "description": "Post a message (content param)" },
+    { "name": "getGuild", "method": "GET", "pathTemplate": "/api/v10/guilds/{guildId}", "description": "Get a guild" }
+  ],
+  "typeform": [
+    { "name": "listForms", "method": "GET", "pathTemplate": "/forms", "description": "List forms" },
+    { "name": "getForm", "method": "GET", "pathTemplate": "/forms/{formId}", "description": "Retrieve a form" },
+    { "name": "listResponses", "method": "GET", "pathTemplate": "/forms/{formId}/responses", "description": "List form responses" }
+  ],
+  "monday": [
+    { "name": "query", "method": "POST", "pathTemplate": "/v2", "description": "Run a GraphQL query/mutation (query, variables params)" }
+  ],
+  "webflow": [
+    { "name": "listSites", "method": "GET", "pathTemplate": "/v2/sites", "description": "List sites" },
+    { "name": "getSite", "method": "GET", "pathTemplate": "/v2/sites/{siteId}", "description": "Get a site" },
+    { "name": "listCollectionItems", "method": "GET", "pathTemplate": "/v2/collections/{collectionId}/items", "description": "List items in a collection" }
+  ],
+  "spotify": [
+    { "name": "getCurrentUser", "method": "GET", "pathTemplate": "/v1/me", "description": "Get the current user's profile" },
+    { "name": "getTrack", "method": "GET", "pathTemplate": "/v1/tracks/{trackId}", "description": "Get a track" },
+    { "name": "search", "method": "GET", "pathTemplate": "/v1/search", "description": "Search (q, type params)" }
+  ],
+  "brevo": [
+    { "name": "sendEmail", "method": "POST", "pathTemplate": "/v3/smtp/email", "description": "Send a transactional email" },
+    { "name": "listContacts", "method": "GET", "pathTemplate": "/v3/contacts", "description": "List contacts" },
+    { "name": "getAccount", "method": "GET", "pathTemplate": "/v3/account", "description": "Get account information" }
+  ],
+  "clockify": [
+    { "name": "getCurrentUser", "method": "GET", "pathTemplate": "/api/v1/user", "description": "Get the current user" },
+    { "name": "listWorkspaces", "method": "GET", "pathTemplate": "/api/v1/workspaces", "description": "List workspaces" }
+  ],
+  "box": [
+    { "name": "getCurrentUser", "method": "GET", "pathTemplate": "/2.0/users/me", "description": "Get the current user" },
+    { "name": "getFolder", "method": "GET", "pathTemplate": "/2.0/folders/{folderId}", "description": "Get a folder" },
+    { "name": "listFolderItems", "method": "GET", "pathTemplate": "/2.0/folders/{folderId}/items", "description": "List items in a folder" }
+  ],
+  "pagerduty": [
+    { "name": "listIncidents", "method": "GET", "pathTemplate": "/incidents", "description": "List incidents (auth = Token token=key)" },
+    { "name": "getIncident", "method": "GET", "pathTemplate": "/incidents/{incidentId}", "description": "Get an incident" },
+    { "name": "listServices", "method": "GET", "pathTemplate": "/services", "description": "List services" }
+  ]
+}

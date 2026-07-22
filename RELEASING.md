@@ -18,7 +18,7 @@ git commit -am "release: 0.2.0"
 # 3. Dry run - builds all packages and shows exactly what each tarball ships
 node scripts/publish-all.mjs
 
-# 4. The real thing (needs `npm login` with publish rights on @seillen)
+# 4. The real thing (needs `npm login` with publish rights on @mindlynx)
 node scripts/publish-all.mjs --publish
 
 # 5. Prove the outsider path: in an empty directory

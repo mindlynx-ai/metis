@@ -17,7 +17,7 @@
 /**
  * Publish every @mindlynx/metis-* package in dependency order. DRY RUN by
  * default; pass --publish to actually publish (requires `npm login` with
- * publish rights on the @seillen org). All packages must share ONE version -
+ * publish rights on the @mindlynx org). All packages must share ONE version -
  * bump them together with `npm version <v> --workspaces` before publishing.
  *
  *   node scripts/publish-all.mjs              # dry run (npm publish --dry-run)

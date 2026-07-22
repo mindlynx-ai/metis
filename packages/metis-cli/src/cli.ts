@@ -111,7 +111,7 @@ function loadConfig(cwd: string): MetisConfig {
 }
 
 function editorDir(cwd: string): string | undefined {
-  const candidates = [join(cwd, 'editor'), join(cwd, 'node_modules', '@seillen', 'metis-editor', 'dist')];
+  const candidates = [join(cwd, 'editor'), join(cwd, 'node_modules', '@mindlynx', 'metis-editor', 'dist')];
   return candidates.find((candidate) => existsSync(candidate));
 }
 

@@ -74,7 +74,7 @@ reason your workflows are reliable.
 3. Click **Create your first workflow**.
 4. From the left rail, add a **Webhook Start** trigger, then a **Code** step.
 5. Click the code step and, in the panel on the right, set its code to
-   `return { message: 'hello from metis' };`, then **Apply**.
+   `return { message: 'hello from metis' };`, then **Save**.
 6. Drag from the trigger's right dot to the code step's left dot to connect them.
 7. Click **Run**. You land on the run viewer and watch the run turn green, with
    the code step's result shown beneath it.

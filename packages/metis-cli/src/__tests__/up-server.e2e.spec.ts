@@ -67,11 +67,19 @@ describe.skipIf(!enabled)('metis up stays alive until a signal (METIS_E2E)', () 
       }),
     );
 
+    // Pipe the child's output so a CI failure says WHY it never served -
+    // stdio: 'ignore' made the first public CI run undebuggable.
     const child = spawn(process.execPath, [tsxCli, bin, 'up'], {
       cwd: dir,
       detached: true,
-      stdio: 'ignore',
+      stdio: ['ignore', 'pipe', 'pipe'],
     });
+    let childOutput = '';
+    const capture = (chunk: Buffer) => {
+      childOutput = (childOutput + chunk.toString()).slice(-4000);
+    };
+    child.stdout?.on('data', capture);
+    child.stderr?.on('data', capture);
 
     try {
       let up = false;
@@ -79,7 +87,7 @@ describe.skipIf(!enabled)('metis up stays alive until a signal (METIS_E2E)', () 
         up = await serves();
         if (!up) await sleep(1000);
       }
-      expect(up, 'metis up should come up and serve').toBe(true);
+      expect(up, `metis up should come up and serve; child output:\n${childOutput}`).toBe(true);
 
       // The regression: it must STILL be serving a few seconds later. The old
       // bug exited (process.exit(0)) the instant the server was listening.

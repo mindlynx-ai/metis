@@ -20,6 +20,42 @@ site_name: Metis
 site_url: https://docs.metisflow.io/
 site_description: The open workflow engine - durable by Temporal, Apache-2.0.
 repo_url: https://github.com/mindlynx-ai/metis
+repo_name: mindlynx-ai/metis
 docs_dir: docs
+# Internal planning notes live gitignored under docs/internal/ - excluded so
+# even a LOCAL build can never publish them (CI checkouts never have them).
+exclude_docs: |
+  internal/
 theme:
-  name: readthedocs
+  name: material
+  logo: assets/logo.svg
+  favicon: assets/logo.svg
+  palette:
+    # Dark-first, matching the product and the one-pager.
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: cyan
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: black
+      accent: cyan
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.footer
+    - toc.follow
+    - search.suggest
+    - content.code.copy
+markdown_extensions:
+  - admonition
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - toc:
+      permalink: true

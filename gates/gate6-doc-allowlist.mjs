@@ -32,6 +32,7 @@ const ALLOWED = new Set([
   'SECURITY.md',
   'CHANGELOG.md',
   'RELEASING.md',
+  'docs/README.md',
   'docs/adding-a-node.md',
   'docs/architecture.md',
   'docs/connectors.md',

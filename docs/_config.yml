@@ -1,0 +1,6 @@
+# GitHub Pages (docs.metisflow.io) builds this folder with Jekyll.
+# jekyll-relative-links (on by default) rewrites the .md links between pages;
+# jekyll-readme-index makes README.md the site index.
+title: Metis
+description: The open workflow engine — durable by Temporal, Apache-2.0.
+theme: jekyll-theme-primer

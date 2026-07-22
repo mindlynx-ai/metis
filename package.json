@@ -23,7 +23,7 @@
     "check:headers": "node scripts/check-headers.mjs",
     "test": "vitest run",
     "test:system": "vitest run --config vitest.system.config.ts",
-    "test:cli-e2e": "vitest run packages/metis-cli/src/__tests__/up-run.e2e.spec.ts packages/metis-cli/src/__tests__/up-server.e2e.spec.ts packages/metis-cli/src/__tests__/real-nodes.e2e.spec.ts packages/metis-cli/src/temporal/__tests__/boot.e2e.spec.ts",
+    "test:cli-e2e": "vitest run --no-file-parallelism packages/metis-cli/src/__tests__/up-run.e2e.spec.ts packages/metis-cli/src/__tests__/up-server.e2e.spec.ts packages/metis-cli/src/__tests__/real-nodes.e2e.spec.ts packages/metis-cli/src/temporal/__tests__/boot.e2e.spec.ts",
     "gates": "node gates/run-gates.mjs",
     "build": "node scripts/build-edition.mjs",
     "e2e": "playwright test",

@@ -19,6 +19,9 @@ npm run e2e            # Playwright editor suite (self-hosting dev harness)
   (the first run downloads the test server).
 - **Editor e2e** boots its own control plane + Vite dev server on
   127.0.0.1:4181/:4180 (`packages/metis-editor/e2e/dev-core.ts`); no docker.
+  Visual (screenshot) baselines are not tracked - they are platform-specific,
+  so Playwright creates them on your machine the first time a visual spec
+  runs (that first run reports "snapshot missing"; the second run compares).
 - **System tests** (`npm run test:system`) exercise live paths; enable with
   `METIS_E2E=1`, and set `PG_URL` for the database cases.
 - **Proof scripts** (`scripts/prove-webhook.sh`, `scripts/prove-schedule.sh`)

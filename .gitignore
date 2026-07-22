@@ -17,3 +17,10 @@ docs/internal/
 
 # MkDocs build output (docs.metisflow.io is built in CI)
 site/
+
+# OS noise
+.DS_Store
+
+# Playwright visual baselines are LOCAL: platform-suffixed (-darwin/-linux),
+# validated by no CI job, regenerated on first run. Never ship them.
+*-snapshots/

@@ -116,7 +116,26 @@ export function buildCoreServer(deps: CoreDependencies): FastifyInstance {
     const parsed = loginBody.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'userId and secret are required' });
     const session = await deps.identity.authenticate(parsed.data.userId, parsed.data.secret);
-    if (!session) return reply.code(401).send({ error: 'invalid credentials' });
+    if (!session) {
+      // A rejected sign-in is the entry an auditor looks for first.
+      await deps.audit?.record({
+        tenantId: 't1',
+        actor: parsed.data.userId,
+        action: 'auth.login',
+        entityType: 'user',
+        entityId: parsed.data.userId,
+        outcome: 'denied',
+      });
+      return reply.code(401).send({ error: 'invalid credentials' });
+    }
+    await deps.audit?.record({
+      tenantId: session.tenantId,
+      actor: session.userId,
+      action: 'auth.login',
+      entityType: 'user',
+      entityId: session.userId,
+      outcome: 'ok',
+    });
     const token = deps.identity.issueToken(session);
     return reply.send({ token, session });
   });
@@ -185,7 +204,7 @@ export function buildCoreServer(deps: CoreDependencies): FastifyInstance {
     });
 
     if (deps.credentials) {
-      registerConnectionRoutes(authed, deps.credentials, deps.connectionTester);
+      registerConnectionRoutes(authed, deps.credentials, deps.connectionTester, deps.audit);
       registerOAuthAuthedRoutes(authed, oauthConfig, oauthState);
       if (deps.dataSources) {
         registerDataResourceRoutes(authed, deps.credentials, deps.dataSources);
@@ -205,7 +224,7 @@ export function buildCoreServer(deps: CoreDependencies): FastifyInstance {
     }
 
     if (deps.store) {
-      registerWorkflowRoutes(authed, deps.store, deps.triggers);
+      registerWorkflowRoutes(authed, deps.store, deps.triggers, deps.audit);
       registerExecutionReadRoutes(authed, deps.store);
       if (deps.executions) {
         registerExecutionLifecycleRoutes(authed, deps.store, deps.executions, deps.audit);

@@ -23,7 +23,7 @@
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import type { Session } from '@mindlynx/metis-ports';
-import type { WorkflowStore } from '@mindlynx/metis-data-gateway';
+import type { AuditStore, WorkflowStore } from '@mindlynx/metis-data-gateway';
 import { validateDefinition, type WorkflowDefinition } from '@mindlynx/metis-engine';
 import { requireAction } from './auth-gate.js';
 import {
@@ -37,7 +37,25 @@ export function registerWorkflowRoutes(
   app: FastifyInstance,
   store: WorkflowStore,
   triggers?: TriggersPort,
+  audit?: AuditStore,
 ): void {
+  // Definition changes are audit material in their own right: an auditor asks
+  // who published the workflow that moved the money, not only who ran it.
+  const trail = (
+    session: Session,
+    action: string,
+    workflowId: string,
+    detail?: Record<string, unknown>,
+  ) =>
+    audit?.record({
+      tenantId: session.tenantId,
+      actor: session.userId,
+      action,
+      entityType: 'workflow',
+      entityId: workflowId,
+      outcome: 'ok',
+      detail,
+    });
   const badRequest = (reply: FastifyReply, message: string) =>
     reply.code(400).send({ error: message });
 
@@ -110,6 +128,7 @@ export function registerWorkflowRoutes(
       type: inferType(parsed.data.nodes, parsed.data.type),
       definition: toDefinition(parsed.data.nodes, parsed.data.edges, parsed.data.cloudRouting),
     });
+    await trail(session, 'workflow.created', workflowId, { name: parsed.data.name });
     return reply.code(201).send({ id: workflowId, workflowId, version: 1, changeset: 0 });
   });
 
@@ -228,6 +247,7 @@ export function registerWorkflowRoutes(
         return reply.code(422).send({ error: 'invalid definition', details: validation.errors });
       }
       await store.putWorkflowVersion({ ...latest, status: 'published' });
+      await trail(session, 'workflow.published', workflowId, { version: latest.version });
       let schedule: string | undefined;
       try {
         schedule = await syncScheduleTrigger(
@@ -256,6 +276,7 @@ export function registerWorkflowRoutes(
       const session = request.session as Session;
       const { workflowId } = request.params as { workflowId: string };
       await store.softDeleteWorkflow(session.tenantId, workflowId);
+      await trail(session, 'workflow.deleted', workflowId);
       // A deleted workflow must not keep firing on its schedule.
       await syncScheduleTrigger(workflowId, undefined).catch(() => undefined);
       return reply.code(204).send();

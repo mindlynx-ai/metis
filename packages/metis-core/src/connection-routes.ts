@@ -30,6 +30,7 @@ import {
   type Session,
 } from '@mindlynx/metis-ports';
 import { listAllConnectors, credentialSchemaFor } from '@mindlynx/metis-catalogue';
+import type { AuditStore } from '@mindlynx/metis-data-gateway';
 import { requireAction } from './auth-gate.js';
 
 const createBody = z.object({
@@ -62,7 +63,25 @@ export function registerConnectionRoutes(
   app: FastifyInstance,
   credentials: ConnectorCredentialStore,
   tester?: ConnectionTester,
+  audit?: AuditStore,
 ): void {
+  // Credentials are the most audited thing in the product. The material never
+  // goes in the entry: the record is who touched which connection, when.
+  const trail = (
+    session: Session,
+    action: string,
+    connectionId: string,
+    detail?: Record<string, unknown>,
+  ) =>
+    audit?.record({
+      tenantId: session.tenantId,
+      actor: session.userId,
+      action,
+      entityType: 'connection',
+      entityId: connectionId,
+      outcome: 'ok',
+      detail,
+    });
   // The tenant's connections (metadata only, never material).
   app.get('/api/connections', async (request, reply) => {
     const session = request.session as Session;
@@ -98,6 +117,10 @@ export function registerConnectionRoutes(
       return reply.code(400).send({ error: 'name, connectorId and material are required' });
     }
     const record = await credentials.createConnection(session.tenantId, parsed.data);
+    await trail(session, 'connection.created', String(record.connectionId), {
+      name: parsed.data.name,
+      connectorId: parsed.data.connectorId,
+    });
     return reply.code(201).send(record);
   });
 
@@ -108,6 +131,8 @@ export function registerConnectionRoutes(
     const parsed = patchBody.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'name or material required' });
     await credentials.updateConnection(session.tenantId, id, parsed.data);
+    // Whether the secret itself was replaced is the part that matters.
+    await trail(session, 'connection.updated', id, { materialReplaced: Boolean(parsed.data.material) });
     return reply.code(204).send();
   });
 
@@ -116,6 +141,7 @@ export function registerConnectionRoutes(
     const session = request.session as Session;
     const { id } = request.params as { id: string };
     await credentials.deleteConnection(session.tenantId, id);
+    await trail(session, 'connection.deleted', id);
     return reply.code(204).send();
   });
 

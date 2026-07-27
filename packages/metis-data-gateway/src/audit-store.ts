@@ -38,6 +38,9 @@ export const AUDIT_TABLE: TableDefinition = {
   name: 'audit_log',
   partitionAttribute: 'PK',
   sortAttribute: 'SK',
+  // "Everything this person did" is the second question every auditor asks,
+  // and it should not be a scan of the tenant's whole history.
+  indexes: [{ name: 'byActor', partitionAttribute: 'gsi1pk', sortAttribute: 'at' }],
 };
 
 export function registerAuditTable(gateway: DataGateway): void {
@@ -74,6 +77,7 @@ export interface AuditQuery {
 }
 
 const pk = (tenantId: string) => `AUDIT#${tenantId}`;
+const actorPk = (tenantId: string, actor: string) => `AUDIT#${tenantId}#ACTOR#${actor}`;
 
 export class AuditStore {
   constructor(private readonly gateway: DataGateway) {}
@@ -91,6 +95,7 @@ export class AuditStore {
       await this.gateway.upsert(AUDIT_TABLE.name, {
         ...record,
         PK: pk(entry.tenantId),
+        gsi1pk: actorPk(entry.tenantId, entry.actor),
         // Time first so a range read is chronological, uuid to break ties
         // between entries written in the same millisecond.
         SK: `${at}#${auditId}`,
@@ -103,10 +108,17 @@ export class AuditStore {
 
   /** Newest first, optionally narrowed by actor, entity or action. */
   async list(tenantId: string, query: AuditQuery = {}): Promise<AuditRecord[]> {
-    const page = await this.gateway.query({
-      table: AUDIT_TABLE.name,
-      partitionValue: pk(tenantId),
-    });
+    // An actor filter reads the actor index instead of the tenant partition.
+    const page = query.actor
+      ? await this.gateway.query({
+          table: AUDIT_TABLE.name,
+          index: 'byActor',
+          partitionValue: actorPk(tenantId, query.actor),
+        })
+      : await this.gateway.query({
+          table: AUDIT_TABLE.name,
+          partitionValue: pk(tenantId),
+        });
     const items = (page.items as unknown as AuditRecord[])
       .filter((item) => !query.actor || item.actor === query.actor)
       .filter((item) => !query.entityId || item.entityId === query.entityId)

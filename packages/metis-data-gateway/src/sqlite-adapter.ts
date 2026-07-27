@@ -105,6 +105,19 @@ export class SqliteAdapter implements DataStore {
     this.db.exec(
       `CREATE TABLE IF NOT EXISTS ${quote(definition.name)} (${columns}, "item" TEXT NOT NULL, ${pk})`,
     );
+    // The table may predate this definition: CREATE IF NOT EXISTS is a no-op
+    // on an existing one, so a newly declared index attribute would have no
+    // column and the index below would fail the boot. Add what is missing.
+    const existing = new Set(
+      (this.db.prepare(`PRAGMA table_info(${quote(definition.name)})`).all() as { name: string }[]).map(
+        (column) => column.name,
+      ),
+    );
+    for (const name of this.promotedAttributes(definition)) {
+      if (!existing.has(name)) {
+        this.db.exec(`ALTER TABLE ${quote(definition.name)} ADD COLUMN ${quote(name)} TEXT`);
+      }
+    }
     for (const index of definition.indexes ?? []) {
       const indexColumns = index.sortAttribute
         ? `${quote(index.partitionAttribute)}, ${quote(index.sortAttribute)}`

@@ -43,6 +43,7 @@ interface AuditRecord {
   action: string;
   entityType: string;
   entityId: string;
+  outcome?: string;
   at: string;
   detail?: Record<string, unknown>;
 }
@@ -126,5 +127,66 @@ suite('audit trail', () => {
     expect(mine.body.items.every((e) => e.actor === 'admin')).toBe(true);
     const nobody = await api<{ items: AuditRecord[] }>('GET', '/api/audit?actor=someone-else');
     expect(nobody.body.items).toHaveLength(0);
+  }, 60000);
+
+  it('AUDIT-04 publishing a workflow is recorded against the workflow', async () => {
+    const trigger = {
+      id: `node-${Date.now()}`,
+      type: 'signal',
+      version: 'v1',
+      data: { label: 'start', config: { signalType: 'manual' } },
+    };
+    const created = await api<{ workflowId: string }>('POST', '/api/workflows', {
+      name: `audit-publish-${Date.now()}`,
+      type: 'workflow',
+      nodes: [trigger],
+      edges: [],
+    });
+    const id = created.body.workflowId;
+    const published = await api('POST', `/api/workflows/${id}/publish`);
+    expect(published.status).toBe(200);
+
+    const entries = await auditFor(id);
+    expect(entries.some((e) => e.action === 'workflow.created')).toBe(true);
+    const publish = entries.find((e) => e.action === 'workflow.published');
+    expect(publish?.actor).toBe('admin');
+    expect(publish?.entityType).toBe('workflow');
+  }, 60000);
+
+  it('AUDIT-05 storing and deleting a credential is recorded, never its material', async () => {
+    const secret = 'xoxb-should-never-be-logged';
+    const conn = await api<{ connectionId: string }>('POST', '/api/connections', {
+      name: 'Audit probe',
+      connectorId: 'slack',
+      connectionType: 'rest',
+      authScheme: 'bearer',
+      material: { token: secret },
+    });
+    expect(conn.status).toBe(201);
+    const connectionId = conn.body.connectionId;
+
+    const created = (await auditFor(connectionId)).find((e) => e.action === 'connection.created');
+    expect(created?.actor).toBe('admin');
+    expect(created?.detail?.connectorId).toBe('slack');
+    // The whole point: the trail says a credential was stored, not what it was.
+    expect(JSON.stringify(created)).not.toContain(secret);
+
+    expect((await api('DELETE', `/api/connections/${connectionId}`)).status).toBe(204);
+    const deleted = (await auditFor(connectionId)).find((e) => e.action === 'connection.deleted');
+    expect(deleted?.actor).toBe('admin');
+  }, 60000);
+
+  it('AUDIT-06 a rejected sign-in is recorded as denied', async () => {
+    const res = await fetch(`${BASE}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ userId: 'admin', secret: 'not-the-password' }),
+    });
+    expect(res.status).toBe(401);
+
+    const denied = await api<{ items: AuditRecord[] }>('GET', '/api/audit?action=auth.login');
+    const rejection = denied.body.items.find((e) => e.outcome === 'denied');
+    expect(rejection).toBeDefined();
+    expect(rejection?.entityType).toBe('user');
   }, 60000);
 });

@@ -27,7 +27,7 @@ import { BASE, client, login, runtimeUp } from '../harness.js';
 import { Externals } from './externals.js';
 import {
   callNode,
-  cancelRun,
+  cancelStragglers,
   edge,
   outcomeOf,
   settled,
@@ -64,13 +64,7 @@ suite('UC02 payment and refund flows', () => {
   });
 
   afterAll(async () => {
-    const res = await api<{ executions?: { executionId: string; status: string }[] }>(
-      'GET',
-      '/api/executions?limit=50',
-    );
-    for (const e of res.body.executions ?? []) {
-      if (e.status === 'running') await cancelRun(api, e.executionId, 'ecommerce suite cleanup');
-    }
+    await cancelStragglers(api);
     await externals.stop();
   });
 
@@ -121,10 +115,9 @@ suite('UC02 payment and refund flows', () => {
     }
   }, 60000);
 
-  it.skip('TC02.2 high-value refund requires approval (needs the approval gate, Phase 5)', () => {
-    // Blocked on cap.approvals: nothing parks a run for a human decision, and
+  // // Blocked on cap.approvals: nothing parks a run for a human decision, and
     // there is no queue where an approver sees the order, amount and reason.
-  });
+  it.todo('TC02.2 high-value refund requires approval (needs the approval gate, Phase 5)');
 
   it('TC02.3 the payment provider stops answering and the retry policy gives up cleanly', async () => {
     externals.reset();

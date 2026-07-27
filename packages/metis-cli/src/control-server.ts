@@ -157,10 +157,15 @@ export async function buildControlServer(options: ControlServerOptions): Promise
     triggers: {
       list: () => runtime.triggers.list() as unknown as Promise<Record<string, unknown>[]>,
       create: async (input) => {
-        const record = await runtime.triggers.create(input as Parameters<typeof runtime.triggers.create>[0]);
-        if (record.kind === 'schedule' && record.cron) {
-          await scheduleService.create(TENANT, record.workflowId, record.cron);
+        // Provision the Temporal Schedule BEFORE storing the record. The
+        // schedule is the thing that actually fires, so if it cannot be
+        // created (one already exists, bad cron, Temporal down) the caller
+        // gets the error and no trigger row is left behind listing as live.
+        const wanted = input as { kind?: string; cron?: string; workflowId?: string };
+        if (wanted.kind === 'schedule' && wanted.cron && wanted.workflowId) {
+          await scheduleService.create(TENANT, wanted.workflowId, wanted.cron);
         }
+        const record = await runtime.triggers.create(input as Parameters<typeof runtime.triggers.create>[0]);
         return record as unknown as Record<string, unknown>;
       },
       remove: async (triggerId) => {

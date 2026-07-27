@@ -158,6 +158,29 @@ export async function detail(api: Api, executionId: string): Promise<RunDetail> 
   return res.body;
 }
 
+export interface ExecutionSummary {
+  executionId: string;
+  workflowId?: string;
+  status?: string;
+}
+
+/** The runs list. The API answers under `items`; `executions` is tolerated so
+ *  a shape change cannot silently turn these reads into empty arrays. */
+export async function listExecutions(api: Api, limit = 50): Promise<ExecutionSummary[]> {
+  const res = await api<{ items?: ExecutionSummary[]; executions?: ExecutionSummary[] }>(
+    'GET',
+    `/api/executions?limit=${limit}`,
+  );
+  return res.body.items ?? res.body.executions ?? [];
+}
+
+/** Cancel anything a failed case left parked, so the next file starts clean. */
+export async function cancelStragglers(api: Api): Promise<void> {
+  for (const e of await listExecutions(api)) {
+    if (e.status === 'running') await cancelRun(api, e.executionId, 'ecommerce suite cleanup');
+  }
+}
+
 /** Poll a run until `done` says so. Throws with the last state on timeout. */
 export async function until(
   api: Api,

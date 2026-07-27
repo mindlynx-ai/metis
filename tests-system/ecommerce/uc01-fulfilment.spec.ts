@@ -28,7 +28,7 @@ import {
   awaitSignal,
   branch,
   callNode,
-  cancelRun,
+  cancelStragglers,
   detail,
   edge,
   nodeWaiting,
@@ -72,13 +72,7 @@ suite('UC01 order fulfilment orchestration', () => {
 
   afterAll(async () => {
     // Cancel anything a failed case left parked, so the next file starts clean.
-    const res = await api<{ executions?: { executionId: string; status: string }[] }>(
-      'GET',
-      '/api/executions?limit=50',
-    );
-    for (const e of res.body.executions ?? []) {
-      if (e.status === 'running') await cancelRun(api, e.executionId, 'ecommerce suite cleanup');
-    }
+    await cancelStragglers(api);
     await externals.stop();
   });
 

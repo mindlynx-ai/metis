@@ -245,6 +245,11 @@ export function createHttpNodeHandler(): NodeHandler {
 
     const method = String(config.method ?? 'GET').toUpperCase();
     const headers = resolveHeaders(config.headers);
+    // The node's policy opted in to idempotency: tell the far side, unless
+    // the author set the header themselves.
+    if (ctx.idempotencyKey && !Object.keys(headers).some((h) => h.toLowerCase() === 'idempotency-key')) {
+      headers['Idempotency-Key'] = ctx.idempotencyKey;
+    }
     const body = unwrapBody(config.body);
     const timeoutMs = Number(config.timeout ?? config.timeoutMs ?? DEFAULT_TIMEOUT_MS);
     const retries = Number(config.retries ?? 0);

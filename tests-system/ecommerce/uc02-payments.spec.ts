@@ -130,7 +130,7 @@ suite('UC02 payment and refund flows', () => {
         timeoutMs: 1200,
         body: { orderId: 'ord-103', amount: 90 },
       }),
-      { retries: 3, backoffSeconds: 1, timeoutSeconds: 10 },
+      { retries: 3, backoffSeconds: 1, timeoutSeconds: 10, idempotencyKey: 'refund' },
     );
     const ledger = callNode(externals, '/ledger/post', { label: 'post to ledger' });
 
@@ -154,6 +154,11 @@ suite('UC02 payment and refund flows', () => {
     // No funds moved and nothing downstream ran.
     expect(externals.succeeded('/psp/refund')).toHaveLength(0);
     expect(startCount(run.logs, ledger.id)).toBe(0);
+    // Every attempt carried one idempotency key, so a provider that processed
+    // a request it answered too slowly cannot refund twice.
+    const keys = new Set(externals.calls('/psp/refund').map((c) => c.idempotencyKey));
+    expect(keys.size).toBe(1);
+    expect([...keys][0]).toBeTruthy();
   }, 90000);
 
   it('TC02.4 a partial refund pays back one item, not the order', async () => {

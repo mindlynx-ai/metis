@@ -135,8 +135,11 @@ export class Externals {
     if (reply.delayMs) await new Promise((r) => setTimeout(r, reply.delayMs));
     const status = reply.status ?? 200;
     const payload = reply.body ?? { ok: status < 300 };
+    // A request the caller hung up on was never answered, so it must not be
+    // memoised: the next attempt has to do the work rather than replay a
+    // reply nobody received.
+    if (res.writableEnded || res.destroyed) return;
     if (memo && status < 300) this.idempotent.set(memo, payload);
-    if (res.writableEnded || res.destroyed) return; // client gave up mid-delay
     call.repliedStatus = status;
     send(res, status, payload);
   }

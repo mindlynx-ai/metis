@@ -33,6 +33,13 @@ export interface NodePolicy {
   backoffSeconds?: number;
   timeoutSeconds?: number;
   onFailure?: 'halt' | 'continue';
+  /**
+   * Opt in to idempotency for this step: the engine sends a key that is
+   * stable across retries of this run and unique to it, so a retried call to
+   * a payment provider or a supplier is recognised as the same request. The
+   * value is the author's label; the run and node are added to it.
+   */
+  idempotencyKey?: string;
 }
 
 export interface WorkflowNode {

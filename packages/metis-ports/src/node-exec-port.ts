@@ -99,6 +99,14 @@ export interface NodeHandlerContext {
   /** Cloud-routing choice for this dispatch (workflow toggle + node override);
    *  read by the capability resolver, invisible to ordinary handlers. */
   routing?: CapabilityRouting;
+  /**
+   * Stable across every retry of this node in this run, and different for
+   * every other run. Set when the node's policy opts in. A handler that talks
+   * to a system which charges money or creates records should pass it on, so
+   * a retried attempt is recognised as the same request rather than a second
+   * one.
+   */
+  idempotencyKey?: string;
 }
 
 export type NodeHandler = (ctx: NodeHandlerContext) => Promise<NodeExecutionResult>;

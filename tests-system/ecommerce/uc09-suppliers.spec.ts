@@ -201,7 +201,7 @@ suite('UC09 supplier and dropship coordination', () => {
     const draft = step('return { poRef: "PO-905" };', 'create PO');
     const send = withPolicy(
       callNode(externals, '/supplier/po', { label: 'send PO', timeoutMs: 800 }),
-      { retries: 3, backoffSeconds: 1, timeoutSeconds: 15 },
+      { retries: 3, backoffSeconds: 1, timeoutSeconds: 15, idempotencyKey: 'po-send' },
     );
 
     const executionId = await startRun(api, wf, [draft, send], [edge(draft.id, send.id)]);
@@ -215,10 +215,12 @@ suite('UC09 supplier and dropship coordination', () => {
       | undefined;
     expect(line?.attempts).toBe(3);
     expect(externals.succeeded('/supplier/po')).toHaveLength(1);
-    // NOTE: the earlier attempts still reached the supplier before timing out.
-    // Nothing stamps an idempotency key on the call yet, so a supplier that
-    // acts on a request it answered slowly would see it twice. Tracked as the
-    // idempotency-key work.
+    // The earlier attempts still reached the supplier before timing out, so
+    // every attempt carries the SAME idempotency key: a supplier that acted on
+    // a request it answered too slowly recognises the retry as the same PO.
+    const keys = new Set(externals.calls('/supplier/po').map((c) => c.idempotencyKey));
     expect(externals.calls('/supplier/po').length).toBeGreaterThanOrEqual(3);
+    expect(keys.size).toBe(1);
+    expect([...keys][0]).toBeTruthy();
   }, 90000);
 });

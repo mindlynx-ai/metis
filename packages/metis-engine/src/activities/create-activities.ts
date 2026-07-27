@@ -95,6 +95,8 @@ async function executeHandlerWithPolicy(
       workflowState: { states: request.states as unknown as NodeStateItem[] },
       targets: request.targets,
       routing: request.routing,
+      // Same on every retry of this order, different for the next (NodePolicy).
+      idempotencyKey: policy.idempotencyKey ? `${request.executionId}:${node.id}:${policy.idempotencyKey}` : undefined,
     });
 
   let exec;

@@ -159,7 +159,12 @@ export class FakeDataStore implements DataStore {
 export function nodeCtx(
   type: string,
   config: Record<string, unknown>,
-  opts: { id?: string; tenantId?: string; inputData?: Record<string, unknown> } = {},
+  opts: {
+    id?: string;
+    tenantId?: string;
+    inputData?: Record<string, unknown>;
+    idempotencyKey?: string;
+  } = {},
 ): NodeHandlerContext {
   return {
     nodeRef: { id: opts.id ?? 'n1', type, config },
@@ -168,6 +173,7 @@ export function nodeCtx(
     workflowId: 'w1',
     workflowState: { states: [] },
     inputData: opts.inputData,
+    idempotencyKey: opts.idempotencyKey,
   };
 }
 

@@ -42,6 +42,7 @@ describe('http/api node', () => {
               method: req.method,
               received: body ? JSON.parse(body) : null,
               header: req.headers['x-probe'],
+              idempotency: req.headers['idempotency-key'],
             }),
           );
           return;
@@ -109,6 +110,43 @@ describe('http/api node', () => {
       }),
     );
     expect((nodeOutput(legacy) as { data: Record<string, unknown> }).data.header).toBe('legacy-format');
+  });
+
+  it('sends the run-stable Idempotency-Key when the policy opted in', async () => {
+    const ctx = nodeCtx(
+      'api',
+      {
+        method: 'POST',
+        url: `${baseUrl}/echo`,
+        allowedHosts: ['127.0.0.1'],
+        body: { amount: 75 },
+      },
+      { idempotencyKey: 'e1:n1:refund' },
+    );
+    const first = await handler(ctx);
+    const second = await handler(ctx);
+    const keyOf = (r: Awaited<ReturnType<typeof handler>>) =>
+      (nodeOutput(r) as { data: Record<string, unknown> }).data.idempotency;
+    // Same key on the retry: the payment provider sees one request, not two.
+    expect(keyOf(first)).toBe('e1:n1:refund');
+    expect(keyOf(second)).toBe('e1:n1:refund');
+  });
+
+  it('leaves an author-set Idempotency-Key alone', async () => {
+    const result = await handler(
+      nodeCtx(
+        'api',
+        {
+          method: 'POST',
+          url: `${baseUrl}/echo`,
+          allowedHosts: ['127.0.0.1'],
+          headers: { 'Idempotency-Key': 'mine' },
+          body: {},
+        },
+        { idempotencyKey: 'e1:n1:refund' },
+      ),
+    );
+    expect((nodeOutput(result) as { data: Record<string, unknown> }).data.idempotency).toBe('mine');
   });
 
   it('unwraps the {type, content} body envelope for json / text / raw', async () => {

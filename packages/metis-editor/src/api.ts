@@ -19,6 +19,8 @@
  * collapsed laptop runtime). Vite proxies /api to the control plane.
  */
 
+import { auditPath, type AuditQuery, type AuditRecord } from './audit-api.js';
+
 // The Helix-exact node/edge shape (helix-core workflowNodeSchema): config
 // lives under data.config, a required version string, nullable sourceHandle.
 export interface NodePolicy {
@@ -320,6 +322,8 @@ export async function request<T>(method: string, path: string, body?: unknown): 
   return (await response.json()) as T;
 }
 
+export type { AuditQuery, AuditRecord };
+
 export const api = {
   async login(userId: string, secret: string): Promise<void> {
     const result = await request<{ token: string }>('POST', '/api/auth/login', {
@@ -329,6 +333,9 @@ export const api = {
     setToken(result.token);
   },
   me: () => request<{ userId: string; role: string }>('GET', '/api/auth/me'),
+  // The audit trail: who did what. Read only, by design.
+  audit: (query: AuditQuery = {}) =>
+    request<{ items: AuditRecord[]; count: number }>('GET', auditPath(query)),
   catalogue: () => request<{ entries: CatalogueEntry[] }>('GET', '/api/node-catalogue'),
   connectors: () => request<{ connectors: ConnectorDef[] }>('GET', '/api/connectors'),
   // Connections are named instances of a connector type.

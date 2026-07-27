@@ -32,6 +32,7 @@ import { ExecutionPage } from './runs/ExecutionPage.js';
 import { OperatePage } from './runs/OperatePage.js';
 import { ConnectorsPage } from './ConnectorsPage.js';
 import { AccountPage } from './AccountPage.js';
+import { AuditPage } from './AuditPage.js';
 import { Shell } from './Shell.js';
 import { chainPreview } from './workflow-chain.js';
 import { categoryOf, nodeIcon } from './builder/node-visual.js';
@@ -212,6 +213,7 @@ export function App() {
         <Route path="/history" element={<Navigate to="/operate" replace />} />
         <Route path="/operate" element={<AppView><OperatePage /></AppView>} />
         <Route path="/connectors" element={<AppView><ConnectorsPage /></AppView>} />
+        <Route path="/activity" element={<AppView><AuditPage /></AppView>} />
         <Route path="/account" element={<AppView><AccountPage /></AppView>} />
       </Routes>
     </BrowserRouter>

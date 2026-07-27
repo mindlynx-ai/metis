@@ -4798,3 +4798,51 @@ a.locked-card:hover .upgrade {
 .audit-row.kept svg {
   color: var(--text-faint);
 }
+
+/* Activity: the audit trail. Reuses the run-list table language; only the
+   action chip, the rejected row and the column rhythm are specific. */
+.audit-table .audit-when {
+  white-space: nowrap;
+  color: var(--text-faint);
+  width: 1%;
+}
+
+.audit-table .audit-actor-cell {
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  width: 1%;
+}
+
+.audit-action {
+  display: inline-block;
+  margin-left: var(--space-2);
+  padding: 1px 6px;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  white-space: nowrap;
+}
+
+.audit-target,
+.audit-entity {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+  word-break: break-all;
+}
+
+.audit-warn {
+  color: var(--danger, #d9534f);
+  vertical-align: -2px;
+  margin-right: var(--space-2);
+}
+
+.audit-table tr.audit-denied td {
+  background: color-mix(in srgb, var(--danger, #d9534f) 8%, transparent);
+}
+
+.audit-actor {
+  max-width: 220px;
+}

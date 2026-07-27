@@ -154,7 +154,12 @@ function substituteNodeParam(
 
   const stringValue =
     typeof paramValue === 'string' ? escapeString(paramValue) : escapeJson(paramValue);
-  let next = configCopy.replaceAll(paramToken, stringValue);
+  // A config value that is EXACTLY one token keeps its source type: an amount
+  // reaches a payment API as 75, not "75", and an object arrives as an object.
+  // Tokens inside a larger string still interpolate textually, which is what
+  // the code node relies on.
+  let next = configCopy.replaceAll(`"${paramToken}"`, JSON.stringify(paramValue));
+  next = next.replaceAll(paramToken, stringValue);
   const propertyReplacement = typeof paramValue === 'string' ? `"${stringValue}"` : stringValue;
   next = next.replaceAll(`"property":"${param}"`, `"property":${propertyReplacement}`);
   return next;

@@ -151,7 +151,8 @@ describe('loop node (child workflow per iteration)', () => {
     for (let i = 0; i < 3; i += 1) {
       const childLogs = await logsOf(`${executionId}-loop-${LOOP}-${i}`);
       const bodyOut = outputOf(childLogs, BODY);
-      expect(bodyOut?.echoed).toEqual({ got: ['a', 'b', 'c'][i], at: String(i) });
+      // `at` is a whole-value token, so the iteration index arrives as a number.
+      expect(bodyOut?.echoed).toEqual({ got: ['a', 'b', 'c'][i], at: i });
     }
 
     // The loop node's summary state feeds the done side.

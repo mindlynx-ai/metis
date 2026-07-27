@@ -69,11 +69,16 @@ describe('replaceConfigStateData', () => {
         text: `count is {{${NODE_A}.data.count}}`,
         whole: `{{${NODE_A}.data.nested}}`,
         label: `{{${NODE_A}.data.label}}`,
+        amount: `{{${NODE_A}.data.count}}`,
       },
       state,
     )) as Record<string, unknown>;
     expect(resolved.text).toBe('count is 7');
-    expect(resolved.whole).toBe('{"deep":true}');
+    // A value that is exactly one token keeps its type: an object stays an
+    // object and a number stays a number, so an amount reaches a payment API
+    // as 75 rather than "75".
+    expect(resolved.whole).toEqual({ deep: true });
+    expect(resolved.amount).toBe(7);
     expect(resolved.label).toBe('ok');
   });
 
@@ -191,7 +196,8 @@ describe('picker reference contract (the two trigger seeding shapes)', () => {
     )) as Record<string, unknown>;
     expect(resolved.canonical).toBe('Hello Ada');
     expect(resolved.legacy).toBe('Hello Ada');
-    expect(resolved.number).toBe('42');
+    // Whole-value token, so the seeded number stays a number.
+    expect(resolved.number).toBe(42);
   });
 
   it('resolves a webhookconfig-shaped seed: request body nests under data.body.<key>', async () => {

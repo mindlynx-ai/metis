@@ -151,7 +151,9 @@ describe('trigger ingress: webhooks and schedules', () => {
     const { executionId } = response.json() as { executionId: string };
     const execution = await waitForCompleted(executionId);
     expect(execution.meta.status).toBe('completed');
-    expect(recordedConfigs).toContainEqual({ got: '4242' });
+    // Whole-value token: the webhook payload's number binds downstream as a
+    // number, so an amount or an id keeps its type on the way to an API.
+    expect(recordedConfigs).toContainEqual({ got: 4242 });
   }, 60_000);
 
   it('rejects a bad signature and unknown webhook ids', async () => {

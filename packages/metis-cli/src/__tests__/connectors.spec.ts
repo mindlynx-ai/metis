@@ -29,7 +29,7 @@ import {
 const SEED_TOTAL = 100 + EXTRA_CONNECTORS.length;
 import {
   seedConnectors,
-  seedConnectorsIfEmpty,
+  syncCatalogueConnectors,
   formatConnectorList,
   DEFAULT_TENANT,
 } from '../connectors.js';
@@ -67,12 +67,17 @@ describe('connector catalogue seeder', () => {
     expect(salesforce?.tier).toBe('premium');
   });
 
-  it('seedConnectorsIfEmpty seeds once then no-ops', async () => {
+  it('syncCatalogueConnectors re-seeds an already-populated registry', async () => {
     const reg = registry();
-    const first = await seedConnectorsIfEmpty(reg, DEFAULT_TENANT);
-    expect(first?.seeded).toBe(SEED_TOTAL);
-    const second = await seedConnectorsIfEmpty(reg, DEFAULT_TENANT);
-    expect(second).toBeUndefined();
+    // The upgrade case: an install that seeded before an operation was declared
+    // must pick it up on the next boot, not keep its first-boot catalogue.
+    await seedConnectors(reg, DEFAULT_TENANT, {
+      catalogue: [{ ...getConnectorCatalogue().connectors[0], operations: [] }],
+    });
+    const resynced = await syncCatalogueConnectors(reg, DEFAULT_TENANT);
+    expect(resynced.seeded).toBe(SEED_TOTAL);
+    const slack = await reg.get(DEFAULT_TENANT, 'slack');
+    expect(slack?.operations?.some((op) => op.name === 'postMessage')).toBe(true);
   });
 
   it('skips a malformed record without aborting the seed', async () => {

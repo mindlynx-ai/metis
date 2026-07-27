@@ -68,13 +68,18 @@ export async function seedConnectors(
   return { seeded, skipped, total: records.length };
 }
 
-/** Seed only when the tenant has no connectors yet (idempotent first-boot hook). */
-export async function seedConnectorsIfEmpty(
+/**
+ * Bring the tenant's registry up to the catalogue this build ships. Runs on
+ * every boot, not just the first: seeding once meant an upgraded install kept
+ * whatever catalogue it happened to start with, so a corrected base URL or a
+ * newly declared operation reached only brand-new installs. `register` is an
+ * upsert and nothing but this seeder writes connector records, so re-running it
+ * is safe and has nothing to clobber.
+ */
+export async function syncCatalogueConnectors(
   registry: ConnectorRegistry,
   tenantId: string = DEFAULT_TENANT,
-): Promise<SeedResult | undefined> {
-  const existing = await registry.list(tenantId);
-  if (existing.length > 0) return undefined;
+): Promise<SeedResult> {
   return seedConnectors(registry, tenantId);
 }
 

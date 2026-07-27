@@ -28,7 +28,7 @@ import { MetisRuntime } from './runtime.js';
 import { buildControlServer } from './control-server.js';
 import {
   seedConnectors,
-  seedConnectorsIfEmpty,
+  syncCatalogueConnectors,
   formatConnectorList,
   DEFAULT_TENANT,
 } from './connectors.js';
@@ -119,8 +119,8 @@ export async function cmdUp(context: CliContext): Promise<number> {
   const config = loadConfig(context.cwd);
   const runtime = new MetisRuntime({ projectDir: context.cwd, config, log: context.stdout });
   await runtime.start();
-  const seeded = await seedConnectorsIfEmpty(runtime.connectors);
-  if (seeded) context.stdout(`Seeded ${seeded.seeded} connectors into the catalogue.`);
+  const seeded = await syncCatalogueConnectors(runtime.connectors);
+  context.stdout(`Catalogue in sync: ${seeded.seeded} connectors.`);
   const app = await buildControlServer({ runtime, editorDir: editorDir(context.cwd) });
   await app.listen({ port: config.ports.editor, host: '0.0.0.0' });
   context.stdout(`Editor and API on http://localhost:${config.ports.editor}`);

@@ -23,7 +23,7 @@
 import { join } from 'node:path';
 import { MetisRuntime } from './runtime.js';
 import { buildControlServer } from './control-server.js';
-import { seedConnectorsIfEmpty } from './connectors.js';
+import { syncCatalogueConnectors } from './connectors.js';
 import { DEFAULT_CONFIG } from './scaffold.js';
 
 const dataDir = process.env.METIS_DATA_DIR ?? '/data';
@@ -46,10 +46,10 @@ const runtime = new MetisRuntime({
 await runtime.start();
 // Seed the connector registry so connector node types can resolve their base
 // URL, auth scheme and operations at run time (the CLI `up` path does the same;
-// the compose entry must too, else every connector node 404s). Idempotent:
-// only seeds when the registry is empty.
-const seeded = await seedConnectorsIfEmpty(runtime.connectors);
-if (seeded) log(`Seeded ${seeded.seeded} connectors into the catalogue.`);
+// the compose entry must too, else every connector node 404s). Every boot, so
+// an upgrade actually ships its corrected and newly declared operations.
+const seeded = await syncCatalogueConnectors(runtime.connectors);
+log(`Catalogue in sync: ${seeded.seeded} connectors.`);
 const app = await buildControlServer({
   runtime,
   editorDir: join(process.cwd(), 'packages', 'metis-editor', 'dist'),

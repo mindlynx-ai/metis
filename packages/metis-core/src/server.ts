@@ -25,7 +25,7 @@ import { randomUUID } from 'node:crypto';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import type { IdentityPort, Session } from '@mindlynx/metis-ports';
-import type { WorkflowStore } from '@mindlynx/metis-data-gateway';
+import type { AuditStore, WorkflowStore } from '@mindlynx/metis-data-gateway';
 import type {
   ConnectionTester,
   ConnectorCredentialStore,
@@ -35,6 +35,7 @@ import type {
 import { getCatalogue, listAllConnectors } from '@mindlynx/metis-catalogue';
 import { EntitlementsShim } from './entitlements.js';
 import { registerWorkflowRoutes } from './workflow-routes.js';
+import { registerAuditRoutes } from './audit-routes.js';
 import { registerExecutionReadRoutes } from './execution-read-routes.js';
 import { registerExecutionLifecycleRoutes } from './execution-lifecycle-routes.js';
 import { registerApiWorkflowRoute } from './api-workflow-ingress.js';
@@ -65,6 +66,8 @@ export interface CoreDependencies {
   executions?: ExecutionPort;
   /** When supplied, the connector connection routes (store credentials) mount. */
   credentials?: ConnectorCredentialStore;
+  /** The audit trail: who did what. Part of the platform, never a paid tier. */
+  audit?: AuditStore;
   /** When supplied, connections can be health-tested (observability). */
   connectionTester?: ConnectionTester;
   /** When supplied, the Data node's visual builder can list a connection's
@@ -197,11 +200,15 @@ export function buildCoreServer(deps: CoreDependencies): FastifyInstance {
       registerTriggerMgmtRoutes(authed, deps.triggers);
     }
 
+    if (deps.audit) {
+      registerAuditRoutes(authed, deps.audit);
+    }
+
     if (deps.store) {
       registerWorkflowRoutes(authed, deps.store, deps.triggers);
       registerExecutionReadRoutes(authed, deps.store);
       if (deps.executions) {
-        registerExecutionLifecycleRoutes(authed, deps.store, deps.executions);
+        registerExecutionLifecycleRoutes(authed, deps.store, deps.executions, deps.audit);
         // A published api-type workflow becomes a callable synchronous endpoint
         // at /api/apiworkflow/<its API Start path>.
         registerApiWorkflowRoute(authed, {

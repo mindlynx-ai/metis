@@ -46,6 +46,8 @@ import {
   createDataStoreFromEnv,
   WorkflowStore,
   registerWorkflowTables,
+  registerAuditTable,
+  AuditStore,
 } from '@mindlynx/metis-data-gateway';
 import {
   registerOpenNodeHandlers,
@@ -187,6 +189,8 @@ export class MetisRuntime {
 
   readonly bus = new LocalEventBus();
   readonly store: WorkflowStore;
+  /** Who did what: platform, always on. */
+  readonly audit: AuditStore;
   readonly gateway: DataGateway;
   readonly connectors: ConnectorRegistry;
   readonly triggers: TriggerService;
@@ -204,10 +208,12 @@ export class MetisRuntime {
     const dbFile = join(options.projectDir, options.config.paths.database);
     this.gateway = new DataGateway(createDataStoreFromEnv(process.env, dbFile));
     registerWorkflowTables(this.gateway);
+    registerAuditTable(this.gateway);
     registerConnectorTable(this.gateway);
     registerTriggerTable(this.gateway);
     registerOutboundWebhookTable(this.gateway);
     this.store = new WorkflowStore(this.gateway, { executionTtlDays: this.options.config.retentionDays });
+    this.audit = new AuditStore(this.gateway);
     this.connectors = new ConnectorRegistry(this.gateway);
     this.triggers = new TriggerService(this.gateway, TENANT);
     this.outbound = new OutboundWebhookService(this.gateway, TENANT, {

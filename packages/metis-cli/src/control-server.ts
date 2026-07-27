@@ -148,6 +148,7 @@ export async function buildControlServer(options: ControlServerOptions): Promise
     store: runtime.store,
     executions,
     credentials: runtime.credentials,
+    audit: runtime.audit,
     connectionTester: new DefaultConnectionTester(),
     dataSources: buildDataSources(),
     schedules: scheduleService,

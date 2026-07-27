@@ -19,6 +19,7 @@ export * from './sqlite-adapter.js';
 export * from './postgres-adapter.js';
 export * from './env.js';
 export * from './workflow-store.js';
+export * from './audit-store.js';
 // Note: the conformance suite is NOT re-exported here. It imports the
 // test runner, so it stays importable only via its own module path
 // (./conformance.js) from spec files.

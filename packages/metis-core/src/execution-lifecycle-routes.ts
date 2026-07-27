@@ -24,7 +24,7 @@ import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import type { ExecutionPort, Session } from '@mindlynx/metis-ports';
-import type { WorkflowStore } from '@mindlynx/metis-data-gateway';
+import type { AuditStore, WorkflowStore } from '@mindlynx/metis-data-gateway';
 import { validateDefinition, type WorkflowDefinition } from '@mindlynx/metis-engine';
 import { requireAction } from './auth-gate.js';
 import { deriveWhereabouts, labelMapOf } from './whereabouts.js';
@@ -78,7 +78,25 @@ export function registerExecutionLifecycleRoutes(
   app: FastifyInstance,
   store: WorkflowStore,
   executions: ExecutionPort,
+  audit?: AuditStore,
 ): void {
+  // Who did what to a run. The run log carries no actor, so without this
+  // "who cancelled the order" has no answer.
+  const trail = (
+    session: Session,
+    action: string,
+    executionId: string,
+    detail?: Record<string, unknown>,
+  ) =>
+    audit?.record({
+      tenantId: session.tenantId,
+      actor: session.userId,
+      action,
+      entityType: 'execution',
+      entityId: executionId,
+      outcome: 'ok',
+      detail,
+    });
   app.post('/api/executions', { preHandler: requireAction('edit') }, async (request, reply) => {
     const session = request.session as Session;
     const parsed = startBody.safeParse(request.body);
@@ -148,9 +166,12 @@ export function registerExecutionLifecycleRoutes(
     { preHandler: requireAction('edit') },
     async (request, reply) => {
       if (!executions.terminate) return reply.code(501).send({ error: 'terminate not supported' });
+      const session = request.session as Session;
       const { id } = request.params as { id: string };
       const parsed = cancelBody.safeParse(request.body ?? {});
-      await executions.terminate(id, parsed.success ? parsed.data.reason : undefined);
+      const reason = parsed.success ? parsed.data.reason : undefined;
+      await executions.terminate(id, reason);
+      await trail(session, 'execution.terminated', id, { reason });
       return reply.code(202).send({ executionId: id, status: 'terminating' });
     },
   );
@@ -313,6 +334,7 @@ export function registerExecutionLifecycleRoutes(
     '/api/executions/:id/signal',
     { preHandler: requireAction('edit') },
     async (request, reply) => {
+      const session = request.session as Session;
       const { id } = request.params as { id: string };
       const parsed = signalBody.safeParse(request.body);
       if (!parsed.success) {
@@ -322,6 +344,7 @@ export function registerExecutionLifecycleRoutes(
         signalType: parsed.data.signalType,
         signalParams: parsed.data.signalParams,
       });
+      await trail(session, 'execution.signalled', id, { signalType: parsed.data.signalType });
       return reply.code(202).send({ ok: true });
     },
   );
@@ -330,9 +353,12 @@ export function registerExecutionLifecycleRoutes(
     '/api/executions/:id/cancel',
     { preHandler: requireAction('edit') },
     async (request, reply) => {
+      const session = request.session as Session;
       const { id } = request.params as { id: string };
       const parsed = cancelBody.safeParse(request.body ?? {});
-      await executions.cancel(id, parsed.success ? parsed.data.reason : undefined);
+      const cancelReason = parsed.success ? parsed.data.reason : undefined;
+      await executions.cancel(id, cancelReason);
+      await trail(session, 'execution.cancelled', id, { reason: cancelReason });
       return reply.code(202).send({ ok: true });
     },
   );

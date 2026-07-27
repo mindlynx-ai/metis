@@ -50,6 +50,13 @@ import {
 
 interface ConnectorNodeConfig {
   connectorId?: string;
+  /**
+   * The stored connection to authenticate with. Without it the connector id
+   * doubles as the connection id, which caps a workspace at one credential
+   * per connector and cannot reach a connection created through the
+   * connections API (those are minted as conn_<uuid>).
+   */
+  connectionId?: string;
   /** Operation mode: the named operation to dispatch. */
   operation?: string;
   /** Operation-mode inputs: path tokens, query values, and body fields. */
@@ -139,12 +146,17 @@ export function createConnectorNodeHandler(
       return { status: 400, message: 'connector path must be relative to the connector base URL' };
     }
     let url: URL;
+    let base: URL;
     try {
-      url = new URL(path, record.baseUrl);
+      base = new URL(record.baseUrl);
+      // Keep the base URL's own path. Slack's base is https://slack.com/api,
+      // and a leading-slash operation template resolved against it would drop
+      // the /api and land on the marketing site.
+      const prefix = base.pathname.endsWith('/') ? base.pathname.slice(0, -1) : base.pathname;
+      url = new URL(`${prefix}/${path.startsWith('/') ? path.slice(1) : path}`, base.origin);
     } catch {
       return { status: 400, message: `invalid connector path "${path}"` };
     }
-    const base = new URL(record.baseUrl);
     if (url.host !== base.host) {
       return { status: 400, message: 'connector path resolves outside the connector host' };
     }
@@ -186,7 +198,9 @@ export function createConnectorNodeHandler(
     if (!record) {
       return { status: 404, message: `connector "${connectorType}" is not registered` };
     }
-    const connectionId = String(config.connectorId ?? '');
+    // A named connection wins; the connector id is the single-connection
+    // fallback that pre-dates the connections API.
+    const connectionId = String(config.connectionId ?? config.connectorId ?? '');
     if (!connectionId) {
       return { status: 400, message: `${connectorType} node requires a connection` };
     }

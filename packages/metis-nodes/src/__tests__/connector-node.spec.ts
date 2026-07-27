@@ -85,6 +85,17 @@ describe('generic connector node', () => {
         { name: 'notReady', method: 'GET', pathTemplate: '/soon', wireStatus: 'unverified' },
       ],
     });
+    // A connector whose base URL carries a path of its own, like Slack's
+    // https://slack.com/api. Operation templates start with a slash.
+    await registry.register('t1', {
+      connectorId: 'chat',
+      name: 'Chat with a base path',
+      baseUrl: `${baseUrl}/api`,
+      authScheme: 'bearer',
+      operations: [
+        { name: 'postMessage', method: 'POST', pathTemplate: '/chat.postMessage', wireStatus: 'verified' },
+      ],
+    });
     // An email connector whose sendEmail operation declares its typed inputs.
     await registry.register('t1', {
       connectorId: 'mailer',
@@ -113,6 +124,7 @@ describe('generic connector node', () => {
         't1/metrics': { name: 'metrics', connectorId: 'metrics', material: { apiKey: 'metrics-key-9' } },
         't1/crmOps': { name: 'crmOps', connectorId: 'crmOps', material: { apiKey: 'ops-token' } },
         't1/mailer': { name: 'mailer', connectorId: 'mailer', material: { apiKey: 'mail-token' } },
+        't1/chat': { name: 'chat', connectorId: 'chat', material: { token: 'chat-token' } },
       },
     );
     return { handler: createConnectorNodeHandler(registry, credentials), registry };
@@ -129,6 +141,17 @@ describe('generic connector node', () => {
     expect(call?.url).toBe('/contacts?limit=2');
     expect(call?.auth).toBe('Bearer crm-secret-token');
     expect(JSON.stringify(result)).not.toContain('crm-secret-token');
+  });
+
+  it('keeps the base URL path, so a slash-rooted operation does not drop it', async () => {
+    const { handler } = await buildHandler();
+    const result = await handler(
+      request({ connectorId: 'chat', operation: 'postMessage', params: { channel: '#ops', text: 'hi' } }),
+    );
+    expect(result.status).toBe(200);
+    // Without this the call lands on /chat.postMessage and Slack answers with
+    // its marketing site rather than the API.
+    expect(seen.at(-1)?.url).toBe('/api/chat.postMessage');
   });
 
   it('supports header-scheme connectors with a named header', async () => {

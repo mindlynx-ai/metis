@@ -50,6 +50,17 @@ describe('connector catalogue (connectors.v1.json)', () => {
     expect(premium.map((c) => c.connectorId)).toContain('salesforce');
   });
 
+  it('Slack declares the fields an author actually fills in', () => {
+    const slack = getConnectorCatalogue().connectors.find((c) => c.connectorId === 'slack');
+    const post = slack?.operations?.find((o) => o.name === 'postMessage');
+    // Without these, dropping a Slack node gives you a bare key/value editor
+    // and no clue that the API wants `channel` and `text`.
+    const required = (post?.parameters ?? []).filter((p) => p.required).map((p) => p.key);
+    expect(required).toEqual(['channel', 'text']);
+    // `ts` is what a later step replies into, so it must be offered downstream.
+    expect((post?.outputs ?? []).map((o) => o.key)).toContain('ts');
+  });
+
   it('carries webhook and poll trigger events on the wired connectors', () => {
     const catalogue = getConnectorCatalogue();
     const github = catalogue.connectors.find((c) => c.connectorId === 'github');

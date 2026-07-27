@@ -404,6 +404,56 @@
           "method": "POST",
           "pathTemplate": "/chat.postMessage",
           "description": "Send a message to a channel",
+          "parameters": [
+            {
+              "key": "channel",
+              "label": "Channel",
+              "type": "string",
+              "required": true,
+              "placeholder": "C0123456789 or #general",
+              "description": "The channel to post in. The bot must be a member: invite it with /invite @your-app. A channel ID survives a rename; a #name does not."
+            },
+            {
+              "key": "text",
+              "label": "Message",
+              "type": "text",
+              "required": true,
+              "placeholder": "Order {{order.id}} is ready to ship",
+              "description": "The message. Mention someone with <@U0123456789> (their Slack member ID) so they get notified."
+            },
+            {
+              "key": "thread_ts",
+              "label": "Reply to thread",
+              "type": "string",
+              "placeholder": "1785187783.759129",
+              "description": "Optional. The ts of an earlier message to reply under, keeping a run's updates in one thread."
+            }
+          ],
+          "outputs": [
+            {
+              "key": "ok",
+              "label": "Accepted",
+              "type": "boolean",
+              "description": "Slack always answers 200; this says whether it actually posted."
+            },
+            {
+              "key": "channel",
+              "label": "Channel ID",
+              "type": "string"
+            },
+            {
+              "key": "ts",
+              "label": "Message timestamp",
+              "type": "string",
+              "description": "The message id. Pass it as thread_ts to reply under this message."
+            },
+            {
+              "key": "error",
+              "label": "Error code",
+              "type": "string",
+              "description": "Set when ok is false: not_in_channel, channel_not_found, missing_scope."
+            }
+          ],
           "wireStatus": "verified"
         },
         {
@@ -411,13 +461,103 @@
           "method": "GET",
           "pathTemplate": "/conversations.list",
           "description": "List channels",
+          "parameters": [
+            {
+              "key": "types",
+              "label": "Channel types",
+              "type": "string",
+              "placeholder": "public_channel,private_channel",
+              "description": "Defaults to public channels only."
+            },
+            {
+              "key": "limit",
+              "label": "Limit",
+              "type": "number",
+              "placeholder": "100"
+            },
+            {
+              "key": "exclude_archived",
+              "label": "Exclude archived",
+              "type": "boolean"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "ok",
+              "label": "Accepted",
+              "type": "boolean"
+            },
+            {
+              "key": "channels",
+              "label": "Channels",
+              "type": "array",
+              "description": "Each carries id, name and is_member."
+            }
+          ],
+          "wireStatus": "verified"
+        },
+        {
+          "name": "listChannelMembers",
+          "method": "GET",
+          "pathTemplate": "/conversations.members",
+          "description": "List the member IDs in a channel",
+          "parameters": [
+            {
+              "key": "channel",
+              "label": "Channel",
+              "type": "string",
+              "required": true,
+              "placeholder": "C0123456789"
+            },
+            {
+              "key": "limit",
+              "label": "Limit",
+              "type": "number",
+              "placeholder": "100"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "ok",
+              "label": "Accepted",
+              "type": "boolean"
+            },
+            {
+              "key": "members",
+              "label": "Member IDs",
+              "type": "array",
+              "description": "Slack user IDs. Mention one in a message as <@U0123456789>."
+            }
+          ],
           "wireStatus": "verified"
         },
         {
           "name": "getUser",
           "method": "GET",
           "pathTemplate": "/users.info",
-          "description": "Get a user by id (user param)",
+          "description": "Get a user by id (needs the users:read scope)",
+          "parameters": [
+            {
+              "key": "user",
+              "label": "Member ID",
+              "type": "string",
+              "required": true,
+              "placeholder": "U0123456789"
+            }
+          ],
+          "outputs": [
+            {
+              "key": "ok",
+              "label": "Accepted",
+              "type": "boolean"
+            },
+            {
+              "key": "user",
+              "label": "User",
+              "type": "object",
+              "description": "Carries name, real_name, tz and profile."
+            }
+          ],
           "wireStatus": "verified"
         }
       ]

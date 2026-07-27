@@ -67,7 +67,9 @@ export function ConnectorPicker({ node, scope = {} }: { node: WorkflowNode; scop
 
   const config = node.data?.config ?? {};
   // The connectorId field on a typed node holds the chosen CONNECTION id.
-  const chosenConnectionId = String(config.connectorId ?? '');
+  // `connectionId` is the clearer name the runtime also honours, so a flow
+  // authored through the API with it must not read here as "no connection".
+  const chosenConnectionId = String(config.connectionId ?? config.connectorId ?? '');
   const provider = scope.provider ?? '';
 
   // The connector TYPE this node binds (fixed by the node's ?provider hint):
@@ -79,6 +81,13 @@ export function ConnectorPicker({ node, scope = {} }: { node: WorkflowNode; scop
     .sort((a, b) => a.name.localeCompare(b.name));
   const isOAuth = oauthSet.has(provider);
   const set = (key: string, value: unknown) => flow.updateConfigField(node.id, key, value);
+  /** Pick a connection, keeping one source of truth: a stale `connectionId`
+   *  left beside a new `connectorId` would win at run time and authenticate as
+   *  whatever was chosen before. */
+  const choose = (connectionId: string | undefined) => {
+    set('connectorId', connectionId);
+    if (config.connectionId !== undefined) set('connectionId', undefined);
+  };
 
   // Reset the health readout whenever the chosen connection changes.
   useEffect(() => setHealth(undefined), [chosenConnectionId]);
@@ -95,7 +104,7 @@ export function ConnectorPicker({ node, scope = {} }: { node: WorkflowNode; scop
         <select
           id="conn-conn"
           value={chosenConnectionId}
-          onChange={(event) => set('connectorId', event.target.value || undefined)}
+          onChange={(event) => choose(event.target.value || undefined)}
         >
           <option value="">
             {matching.length ? 'Choose a connection' : 'No connections yet'}
@@ -147,7 +156,7 @@ export function ConnectorPicker({ node, scope = {} }: { node: WorkflowNode; scop
             connector={providerDef}
             oauth={isOAuth}
             onConnected={(id) => {
-              set('connectorId', id);
+              choose(id);
               setShowConnect(false);
               void refresh();
             }}

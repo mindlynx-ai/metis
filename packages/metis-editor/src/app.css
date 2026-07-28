@@ -688,8 +688,19 @@ body {
   border-color: var(--border-strong);
 }
 
-/* The list itself: honoured where the platform allows it, ignored where the
-   popup is drawn by the OS. Either way it never renders light-on-light. */
+/*
+ * The open list. Setting a background on an option is not enough: the popup is
+ * drawn by the operating system, which follows the SYSTEM appearance, not the
+ * page's. On a Mac set to Light with Metis in dark, that is a grey menu hanging
+ * off a dark panel, and no amount of CSS on the option reaches it.
+ *
+ * `base-select` is the way in: the browser hands over the picker as a real
+ * styleable element while keeping the element a <select>, so the keyboard
+ * behaviour, the form semantics and the accessibility tree are the platform's,
+ * not a listbox we would have to rebuild and keep correct. Where it is not
+ * supported the rules below simply do not apply and the control keeps the
+ * styled closed state above with the system's own list.
+ */
 .field select option,
 .table-field select option,
 .threshold select option,
@@ -697,6 +708,97 @@ body {
 .audit-actor option {
   background: var(--surface-raised);
   color: var(--text-primary);
+}
+
+@supports (appearance: base-select) {
+  .field select,
+  .table-field select,
+  .threshold select,
+  .conn-toolbar select,
+  .audit-actor {
+    appearance: base-select;
+    /* The picker draws its own icon, so the painted chevron would double up. */
+    background-image: none;
+    padding-right: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3);
+    text-align: left;
+  }
+
+  .field select::picker-icon,
+  .table-field select::picker-icon,
+  .threshold select::picker-icon,
+  .conn-toolbar select::picker-icon,
+  .audit-actor::picker-icon {
+    color: var(--text-muted);
+    transition: transform var(--duration-fast) var(--ease-out);
+  }
+  .field select:open::picker-icon,
+  .table-field select:open::picker-icon,
+  .threshold select:open::picker-icon,
+  .conn-toolbar select:open::picker-icon,
+  .audit-actor:open::picker-icon {
+    transform: rotate(180deg);
+  }
+
+  .field select::picker(select),
+  .table-field select::picker(select),
+  .threshold select::picker(select),
+  .conn-toolbar select::picker(select),
+  .audit-actor::picker(select) {
+    appearance: base-select;
+    background: var(--surface-raised);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lift);
+    padding: var(--space-1);
+    margin-top: var(--space-1);
+    max-height: 320px;
+    overflow-y: auto;
+  }
+
+  .field select option,
+  .table-field select option,
+  .threshold select option,
+  .conn-toolbar select option,
+  .audit-actor option {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    padding: 7px 10px;
+    border-radius: var(--radius-sm, 6px);
+    background: transparent;
+    color: var(--text-primary);
+    cursor: pointer;
+  }
+  .field select option:hover,
+  .table-field select option:hover,
+  .threshold select option:hover,
+  .conn-toolbar select option:hover,
+  .audit-actor option:hover {
+    background: var(--surface-sunken);
+  }
+  /* The current value reads as chosen, not merely hovered. */
+  .field select option:checked,
+  .table-field select option:checked,
+  .threshold select option:checked,
+  .conn-toolbar select option:checked,
+  .audit-actor option:checked {
+    background: color-mix(in srgb, var(--brand) 16%, transparent);
+    color: var(--text-primary);
+  }
+  /* The tick the picker offers: ours is the accent, sized to the text. */
+  .field select option::checkmark,
+  .table-field select option::checkmark,
+  .threshold select option::checkmark,
+  .conn-toolbar select option::checkmark,
+  .audit-actor option::checkmark {
+    order: 1;
+    margin-left: auto;
+    color: var(--brand);
+  }
 }
 
 .login-error {

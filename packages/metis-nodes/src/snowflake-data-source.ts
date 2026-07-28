@@ -103,6 +103,22 @@ export function authFor(connection: DataConnection): SnowflakeAuth {
   return { token, type: 'KEYPAIR_JWT' };
 }
 
+/**
+ * One Snowflake refusal is worth explaining, because its wording gives no clue
+ * what to do and the cause is a rule rather than a mistake: a programmatic
+ * access token only works when its user is subject to a network policy. Every
+ * other message is passed through in Snowflake's own words.
+ */
+function remedyFor(reason: string): string {
+  if (!/network policy is required/i.test(reason)) return '';
+  return (
+    '. A programmatic access token only authenticates when its user is subject to a network policy. ' +
+    'Attach one to the user, or set an authentication policy with ' +
+    'PAT_POLICY = (NETWORK_POLICY_EVALUATION = NOT_ENFORCED), or use key-pair auth instead, ' +
+    'which carries no such requirement'
+  );
+}
+
 /** Snowflake reports a column's type in its own vocabulary; keep it, but name
  *  the ones that decide whether a value is parsed back out of its string. */
 const NUMERIC_TYPES = new Set(['fixed', 'real']);
@@ -189,7 +205,7 @@ export class SnowflakeDataSource implements DataSource {
     // A refusal is an error the run can act on, not an empty success.
     if (res.status >= 400) {
       const reason = parsed.message ?? `request failed with ${res.status}`;
-      throw new Error(`snowflake: ${reason}`);
+      throw new Error(`snowflake: ${reason}${remedyFor(reason)}`);
     }
     // 202 means the statement outran the synchronous window: collect it.
     if (res.status === 202 && parsed.statementHandle) {

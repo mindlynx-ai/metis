@@ -22,9 +22,15 @@
  * kind of thing worth pinning.
  */
 import { createHash, createPublicKey, createVerify, generateKeyPairSync } from 'node:crypto';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { jwtAccount, publicKeyFingerprint, snowflakeJwt } from '../snowflake-jwt.js';
-import { authFor, bindingsFor, rowsFromResponse, snowflakeHost } from '../snowflake-data-source.js';
+import {
+  authFor,
+  bindingsFor,
+  rowsFromResponse,
+  snowflakeHost,
+  SnowflakeDataSource,
+} from '../snowflake-data-source.js';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', {
   modulusLength: 2048,
@@ -148,5 +154,37 @@ describe('snowflake authentication chooses by what the connection carries', () =
     const first = authFor({ key: 'cache-me', material });
     const second = authFor({ key: 'cache-me', material });
     expect(second.token).toBe(first.token);
+  });
+});
+
+describe('snowflake refusals explain themselves where the wording does not', () => {
+  it('adds the remedy to the network-policy refusal', async () => {
+    const source = new SnowflakeDataSource();
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(JSON.stringify({ message: 'Fail : Network policy is required.' }), { status: 400 }),
+      );
+    try {
+      await expect(
+        source.runQuery({ key: 'k', material: { account: 'abc', token: 'pat' } }, 'SELECT 1'),
+      ).rejects.toThrow(/network policy.*NOT_ENFORCED|key-pair/is);
+    } finally {
+      fetchSpy.mockRestore();
+    }
+  });
+
+  it('passes every other refusal through in Snowflake own words, unembellished', async () => {
+    const source = new SnowflakeDataSource();
+    const fetchSpy = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ message: 'Object ORDERS does not exist' }), { status: 422 }));
+    try {
+      await expect(
+        source.runQuery({ key: 'k2', material: { account: 'abc', token: 'pat' } }, 'SELECT 1'),
+      ).rejects.toThrow('snowflake: Object ORDERS does not exist');
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 });

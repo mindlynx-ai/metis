@@ -40,11 +40,52 @@ function safeEqual(a: string, b: string): boolean {
   return left.length === right.length && timingSafeEqual(left, right);
 }
 
+/** How long a signed delivery stays acceptable, so a captured one cannot be
+ *  replayed indefinitely. Svix's own tolerance. */
+const SVIX_TOLERANCE_SECONDS = 5 * 60;
+
+/** Either spelling of the Svix headers: the standard-webhooks names and the
+ *  older svix-prefixed ones. Resend sends the svix- set. */
+function svixHeader(headers: HeaderBag, suffix: string): string {
+  return header(headers, `svix-${suffix}`) || header(headers, `webhook-${suffix}`);
+}
+
+/**
+ * Verify a Svix-signed delivery (Resend, and every other standard-webhooks
+ * sender). The scheme differs from a plain HMAC in three ways that all matter:
+ * the signed content is `id.timestamp.body` rather than the body alone, the
+ * secret is base64 behind a `whsec_` prefix rather than raw bytes, and the
+ * header carries a space-separated list of versioned signatures so a secret can
+ * be rotated without dropping deliveries.
+ */
+function verifySvix(secret: string, rawBody: string, headers: HeaderBag, nowMs: number): boolean {
+  const id = svixHeader(headers, 'id');
+  const timestamp = svixHeader(headers, 'timestamp');
+  const signatures = svixHeader(headers, 'signature');
+  if (!id || !timestamp || !signatures) return false;
+
+  // Reject a delivery signed too long ago (or too far ahead), so a captured
+  // body cannot be replayed later.
+  const sentAt = Number(timestamp);
+  if (!Number.isFinite(sentAt)) return false;
+  if (Math.abs(Math.floor(nowMs / 1000) - sentAt) > SVIX_TOLERANCE_SECONDS) return false;
+
+  const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
+  const expected = createHmac('sha256', key).update(`${id}.${timestamp}.${rawBody}`, 'utf8').digest('base64');
+  // Any listed v1 signature may match: during a rotation the sender signs with
+  // both the old and the new secret.
+  return signatures
+    .split(' ')
+    .filter((entry) => entry.startsWith('v1,'))
+    .some((entry) => safeEqual(expected, entry.slice(3)));
+}
+
 /** Verify an inbound webhook body against the trigger's scheme + secret. */
 export function verifyTriggerSignature(
   trigger: Pick<TriggerRecord, 'verification' | 'secret'>,
   rawBody: string,
   headers: HeaderBag,
+  nowMs: number = Date.now(),
 ): boolean {
   const scheme = trigger.verification ?? 'hmac';
   if (scheme === 'none') return true;
@@ -53,6 +94,9 @@ export function verifyTriggerSignature(
   if (scheme === 'github') {
     const digest = createHmac('sha256', secret).update(rawBody, 'utf8').digest('hex');
     return safeEqual(`sha256=${digest}`, header(headers, 'x-hub-signature-256'));
+  }
+  if (scheme === 'svix') {
+    return verifySvix(secret, rawBody, headers, nowMs);
   }
   const digest = createHmac('sha256', secret).update(rawBody, 'utf8').digest('base64');
   return safeEqual(digest, header(headers, 'x-metis-signature'));
@@ -75,8 +119,18 @@ export function normaliseEnvelope(
   receivedAt: string,
 ): WebhookEnvelope {
   const deliveryId =
-    header(headers, 'x-github-delivery') || header(headers, 'x-metis-delivery') || undefined;
-  const event = header(headers, 'x-github-event') || trigger.event;
+    header(headers, 'x-github-delivery') ||
+    header(headers, 'x-metis-delivery') ||
+    svixHeader(headers, 'id') ||
+    undefined;
+  // The event name: a header for GitHub, but Svix senders (Resend) put it in
+  // the body as `type`. Without reading it a workflow could not branch on
+  // email.opened versus email.clicked without digging through the payload.
+  const bodyType = (body as { type?: unknown } | null)?.type;
+  const event =
+    header(headers, 'x-github-event') ||
+    (typeof bodyType === 'string' ? bodyType : '') ||
+    trigger.event;
   return { triggerId: trigger.triggerId, connectorId: trigger.connectorId, event, receivedAt, deliveryId, body };
 }
 

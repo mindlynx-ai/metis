@@ -44,7 +44,7 @@ export function registerTriggerTable(gateway: DataGateway): void {
 
 export type TriggerKind = 'webhook' | 'poll' | 'schedule';
 /** How an inbound webhook body is authenticated. */
-export type TriggerVerification = 'github' | 'hmac' | 'none';
+export type TriggerVerification = 'github' | 'svix' | 'hmac' | 'none';
 
 export interface TriggerRecord {
   triggerId: string;
@@ -130,6 +130,21 @@ export class TriggerService {
     const record = await this.get(triggerId);
     if (!record) return;
     await this.put({ ...record, enabled });
+  }
+
+  /**
+   * Replace a webhook's shared secret, keeping its id and therefore its URL.
+   * Rotation needs this: without it a leaked secret can only be dealt with by
+   * deleting the trigger, which changes the URL and means reconfiguring the
+   * sender. It is also the only order that works when the sender mints the
+   * secret itself (Resend, and any Svix sender): the endpoint must exist at a
+   * known URL before there is a secret to store.
+   */
+  async setSecret(triggerId: string, secret: string): Promise<boolean> {
+    const record = await this.get(triggerId);
+    if (!record) return false;
+    await this.put({ ...record, secret });
+    return true;
   }
 
   private async put(record: TriggerRecord): Promise<void> {

@@ -241,6 +241,12 @@ describe('publish-time schedule sync (a Schedule node IS the trigger declaration
       const index = bound.findIndex((t) => t.triggerId === triggerId);
       if (index >= 0) bound.splice(index, 1);
     },
+    setSecret: async (triggerId: string, secret: string) => {
+      const record = bound.find((t) => t.triggerId === triggerId);
+      if (!record) return false;
+      record.secret = secret;
+      return true;
+    },
   };
 
   beforeAll(async () => {

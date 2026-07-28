@@ -56,8 +56,15 @@ export function buildTriggerInput(
 ): TriggerInput {
   if (!workflowId) throw new Error('a workflowId is required');
   if (kind === 'webhook') {
+    // Default to the scheme the named connector actually signs with, so an
+    // operator does not have to know that Resend speaks Svix.
+    const byConnector: Record<string, TriggerRecord['verification']> = {
+      github: 'github',
+      resend: 'svix',
+    };
     const verification = (flags.verification ??
-      (flags.connector === 'github' ? 'github' : 'hmac')) as TriggerRecord['verification'];
+      byConnector[flags.connector ?? ''] ??
+      'hmac') as TriggerRecord['verification'];
     if (verification !== 'none' && !flags.secret) {
       throw new Error('webhook triggers need --secret (or --verification none)');
     }

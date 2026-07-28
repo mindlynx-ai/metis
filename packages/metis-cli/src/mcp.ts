@@ -392,7 +392,7 @@ export function buildMcpServer(api: MetisApiClient): McpServer {
         workflowId: z.string(),
         kind: z.enum(['webhook', 'schedule', 'poll']),
         cron: z.string().optional().describe('schedule: 5-field cron'),
-        verification: z.enum(['github', 'hmac', 'none']).optional().describe('webhook: signature scheme'),
+        verification: z.enum(['github', 'svix', 'hmac', 'none']).optional().describe('webhook: signature scheme'),
         secret: z.string().optional().describe('webhook: shared secret'),
         connectorId: z.string().optional().describe('poll: the connection id'),
         operation: z.string().optional().describe('poll: the connector operation'),

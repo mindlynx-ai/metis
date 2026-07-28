@@ -176,6 +176,7 @@ export async function buildControlServer(options: ControlServerOptions): Promise
           await scheduleService.remove(TENANT, record.workflowId).catch(() => undefined);
         }
       },
+      setSecret: (triggerId, secret) => runtime.triggers.setSecret(triggerId, secret),
     },
   });
 

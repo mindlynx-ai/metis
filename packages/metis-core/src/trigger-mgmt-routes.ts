@@ -29,7 +29,10 @@ export interface TriggersPort {
   list(): Promise<Record<string, unknown>[]>;
   create(input: Record<string, unknown>): Promise<Record<string, unknown>>;
   remove(triggerId: string): Promise<void>;
+  setSecret(triggerId: string, secret: string): Promise<boolean>;
 }
+
+const rotateSecretBody = z.object({ secret: z.string().min(1) });
 
 const createTriggerBody = z.object({
   workflowId: z.string().min(1),
@@ -37,7 +40,7 @@ const createTriggerBody = z.object({
   // schedule
   cron: z.string().optional(),
   // webhook
-  verification: z.enum(['github', 'hmac', 'none']).optional(),
+  verification: z.enum(['github', 'svix', 'hmac', 'none']).optional(),
   secret: z.string().optional(),
   // poll / connector-bound
   connectorId: z.string().optional(),
@@ -73,6 +76,21 @@ export function registerTriggerMgmtRoutes(app: FastifyInstance, triggers: Trigge
       // Most likely: a schedule on an unpublished workflow. Surface it plainly.
       return reply.code(422).send({ error: error instanceof Error ? error.message : String(error) });
     }
+  });
+
+  // Rotate a webhook's shared secret in place, so the URL survives. Needed to
+  // replace a leaked secret, and the only workable order when the sender mints
+  // the secret itself: the endpoint must exist before there is one to store.
+  app.put('/api/triggers/:triggerId/secret', { preHandler: requireAction('edit') }, async (request, reply) => {
+    const parsed = rotateSecretBody.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: 'a non-empty secret is required' });
+    }
+    const { triggerId } = request.params as { triggerId: string };
+    const rotated = await triggers.setSecret(triggerId, parsed.data.secret);
+    if (!rotated) return reply.code(404).send({ error: 'unknown trigger' });
+    // The secret itself is never echoed back.
+    return reply.send({ triggerId, rotated: true });
   });
 
   app.delete('/api/triggers/:triggerId', { preHandler: requireAction('edit') }, async (request, reply) => {

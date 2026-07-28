@@ -658,6 +658,47 @@ body {
   color: var(--text-primary);
 }
 
+/*
+ * Selects, as a real component. A native select paints its own control chrome
+ * over whatever background we set, so an unstyled one sat beside our inputs
+ * looking like a grey system button. Dropping the appearance hands the surface
+ * back to us; the chevron is then ours to draw, and the right padding keeps the
+ * value clear of it. The open list stays the platform's own, which is correct:
+ * it follows color-scheme, which each theme already declares, and it is the
+ * behaviour keyboard and assistive tech users expect.
+ */
+.field select,
+.table-field select,
+.threshold select,
+.conn-toolbar select,
+.audit-actor {
+  appearance: none;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 34px;
+  cursor: pointer;
+}
+
+.field select:hover,
+.table-field select:hover,
+.threshold select:hover,
+.conn-toolbar select:hover,
+.audit-actor:hover {
+  border-color: var(--border-strong);
+}
+
+/* The list itself: honoured where the platform allows it, ignored where the
+   popup is drawn by the OS. Either way it never renders light-on-light. */
+.field select option,
+.table-field select option,
+.threshold select option,
+.conn-toolbar select option,
+.audit-actor option {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+}
+
 .login-error {
   color: var(--danger-text);
   font-size: var(--text-sm);

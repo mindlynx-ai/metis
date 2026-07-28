@@ -16,12 +16,12 @@
 
 /**
  * Data-resource routes: the live catalogue behind the Data node's visual table
- * builder. A connection's engine (its connector type - postgres today) resolves
- * to a DataSource adapter, and we list its tables / describe a table's columns
- * so the inspector offers real tables instead of a typed name. Material is
- * resolved server-side and never returned. An engine with no open adapter
- * (athena/snowflake, which live in Helix) returns `locked`, not an error, so the
- * inspector degrades to a typed table name.
+ * builder. A connection's engine (its connector type: postgres, mysql or
+ * snowflake) resolves to a DataSource adapter, and we list its tables /
+ * describe a table's columns so the inspector offers real tables instead of a
+ * typed name. Material is resolved server-side and never returned. An engine
+ * with no open adapter (athena, which lives in Helix) returns `locked`, not an
+ * error, so the inspector degrades to a typed table name.
  */
 import type { FastifyInstance } from 'fastify';
 import type {
@@ -59,8 +59,8 @@ export function registerDataResourceRoutes(
     if (!resolved) return reply.code(404).send({ error: 'unknown connection' });
 
     const source = dataSources.get(resolved.engine);
-    // An engine we do not carry in the open build (athena/snowflake): the
-    // inspector shows the upgrade note and falls back to a typed table name.
+    // An engine we do not carry in the open build (athena): the inspector
+    // shows the upgrade note and falls back to a typed table name.
     if (!source) return reply.send({ engine: resolved.engine, locked: true, tables: [] });
 
     try {

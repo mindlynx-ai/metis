@@ -1071,7 +1071,7 @@
       "name": "Snowflake",
       "baseUrl": "https://app.snowflake.com",
       "authScheme": "bearer",
-      "tier": "premium",
+      "tier": "open",
       "category": "data-flow",
       "priority": "P2",
       "provenance": {

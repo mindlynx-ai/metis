@@ -183,7 +183,6 @@
   "snowflake": {
     "baseUrl": "https://app.snowflake.com",
     "authScheme": "bearer",
-    "tier": "premium",
     "site": true
   },
   "mongodb": {

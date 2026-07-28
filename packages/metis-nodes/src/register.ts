@@ -30,6 +30,7 @@ import { createCodeNodeHandler } from './code-node.js';
 import { createPostgresNodeHandler } from './postgres-node.js';
 import { PostgresDataSource } from './postgres-data-source.js';
 import { MysqlDataSource } from './mysql-data-source.js';
+import { SnowflakeDataSource } from './snowflake-data-source.js';
 import { createDataNodeHandler } from './data-node.js';
 import { createSendgridNodeHandler, type SendgridNodeOptions } from './sendgrid-node.js';
 import { createConnectorNodeHandler } from './connector-node.js';
@@ -42,10 +43,14 @@ export interface OpenNodeDependencies {
 }
 
 /** The open-edition data sources for the Data node + the table catalogue route:
- *  postgres and mysql; athena is an adapter in the Helix build. Shared so the
- *  worker (node handler) and core (table listing) dispatch the same way. */
+ *  postgres, mysql and snowflake; athena is an adapter in the Helix build.
+ *  Shared so the worker (node handler) and core (table listing) dispatch the
+ *  same way. */
 export function buildDataSources(): DataSourceRegistry {
-  return new DataSourceRegistry().register(new PostgresDataSource()).register(new MysqlDataSource());
+  return new DataSourceRegistry()
+    .register(new PostgresDataSource())
+    .register(new MysqlDataSource())
+    .register(new SnowflakeDataSource());
 }
 
 export function registerOpenNodeHandlers(

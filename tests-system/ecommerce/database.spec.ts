@@ -30,11 +30,12 @@
  *                  -f compose/docker-compose.sample-db.yml up -d
  * Any engine that cannot be reached is skipped by name, never silently.
  */
+import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { BASE, client, login, node, nodeId, runtimeUp } from '../harness.js';
 import { cancelStragglers, outputOf, settled, startRun, until, type Api } from './shop.js';
 
-/** Credentials for one engine, or undefined when it is not configured. */
+/** Credentials for a host/port engine, or undefined when it is not configured. */
 function material(prefix: string, fallback?: Record<string, string>): Record<string, string> | undefined {
   const host = process.env[`${prefix}_HOST`];
   if (!host) return fallback;
@@ -47,12 +48,40 @@ function material(prefix: string, fallback?: Record<string, string>): Record<str
   };
 }
 
+/**
+ * Snowflake's credentials are a different shape entirely: the SQL API takes a
+ * key-pair JWT, never a password. The private key may be given inline or as a
+ * path, because a PEM in an environment variable is awkward to quote.
+ */
+function snowflakeMaterial(): Record<string, string> | undefined {
+  const account = process.env.METIS_SNOWFLAKE_ACCOUNT;
+  const keyPath = process.env.METIS_SNOWFLAKE_PRIVATE_KEY_PATH;
+  const privateKey = process.env.METIS_SNOWFLAKE_PRIVATE_KEY ?? (keyPath ? readFileSync(keyPath, 'utf8') : '');
+  if (!account || !privateKey) return undefined;
+  return {
+    account,
+    user: process.env.METIS_SNOWFLAKE_USER ?? '',
+    privateKey,
+    passphrase: process.env.METIS_SNOWFLAKE_PASSPHRASE ?? '',
+    warehouse: process.env.METIS_SNOWFLAKE_WAREHOUSE ?? '',
+    database: process.env.METIS_SNOWFLAKE_DATABASE ?? '',
+    schema: process.env.METIS_SNOWFLAKE_SCHEMA ?? 'PUBLIC',
+    role: process.env.METIS_SNOWFLAKE_ROLE ?? '',
+  };
+}
+
 interface EngineFixture {
   /** The engine the data node dispatches on. */
   engine: string;
   /** The connector record a connection is created against. */
   connectorId: string;
   material?: Record<string, string>;
+  /** How the connection is stored: most engines are host/port, Snowflake is a
+   *  key pair, and the adapter reads whichever keys its own material carries. */
+  authScheme?: string;
+  /** Statements that build the shared fixture where it is not seeded by an
+   *  init script (a hosted warehouse has no compose file to seed it). */
+  seed?: string[];
   /** A scratch table name this engine's cases create and drop. */
   scratch: string;
   /** Hand-written SQL stays the author's own dialect, so the cases bind the
@@ -96,12 +125,36 @@ const ENGINES: EngineFixture[] = [
   {
     engine: 'snowflake',
     connectorId: 'snowflake',
-    material: material('METIS_SNOWFLAKE'),
-    scratch: 'METIS_PROBE_SF',
-    placeholder: (index) => `:${index}`,
+    material: snowflakeMaterial(),
+    authScheme: 'keypair',
+    // A hosted warehouse arrives empty, so the shared fixture is built here.
+    seed: [
+      'CREATE OR REPLACE TABLE orders (id int, customer varchar, email varchar, amount number(10,2), status varchar)',
+      `INSERT INTO orders (id, customer, email, amount, status) VALUES
+         (1, 'Ada Lovelace', 'ada@example.com', 129.00, 'paid'),
+         (2, 'Alan Turing', 'alan@example.com', 59.50, 'paid'),
+         (3, 'Grace Hopper', 'grace@example.com', 240.00, 'refunded'),
+         (4, 'Katherine Johnson', 'kj@example.com', 88.25, 'paid'),
+         (5, 'Linus Torvalds', 'linus@example.com', 15.00, 'pending'),
+         (6, 'Margaret Hamilton', 'mh@example.com', 512.75, 'paid')`,
+    ],
+    scratch: 'metis_probe_sf',
+    // The SQL API binds positionally with `?`, whatever the placeholder looks
+    // like in the console.
+    placeholder: () => '?',
+    // The builder quotes identifiers, and a quoted name is case-SENSITIVE in
+    // Snowflake while an unquoted one folds to upper case, so generated SQL
+    // would miss tables that exist. Raw SQL is unaffected.
     builder: false,
   },
 ];
+
+/** A column by name, whatever case the engine returns it in: Snowflake folds
+ *  unquoted identifiers to upper case, the others keep them as written. */
+function pick(row: Record<string, unknown>, column: string): unknown {
+  const key = Object.keys(row).find((candidate) => candidate.toLowerCase() === column.toLowerCase());
+  return key === undefined ? undefined : row[key];
+}
 
 interface DataOutput {
   rows?: Record<string, unknown>[];
@@ -121,8 +174,9 @@ for (const fixture of ENGINES) {
   const configured = up && Boolean(fixture.material);
   const suite = configured ? describe : describe.skip;
   if (up && !fixture.material) {
+    const hint = fixture.engine === 'snowflake' ? 'METIS_SNOWFLAKE_ACCOUNT + a private key' : `METIS_${fixture.engine.toUpperCase()}_HOST`;
     // eslint-disable-next-line no-console
-    console.warn(`[database] ${fixture.engine} not configured; set METIS_${fixture.engine.toUpperCase()}_HOST to run it.`);
+    console.warn(`[database] ${fixture.engine} not configured; set ${hint} to run it.`);
   }
 
   suite(`the data node against ${fixture.engine}`, () => {
@@ -158,7 +212,7 @@ for (const fixture of ENGINES) {
         name: `${fixture.engine} acceptance`,
         connectorId: fixture.connectorId,
         connectionType: 'database',
-        authScheme: 'database',
+        authScheme: fixture.authScheme ?? 'database',
         material: fixture.material,
       });
       if (conn.status !== 201) {
@@ -173,6 +227,10 @@ for (const fixture of ENGINES) {
         edges: [],
       });
       wf = created.body.workflowId;
+
+      for (const statement of fixture.seed ?? []) {
+        await query({ query: statement }, 'seed');
+      }
     });
 
     afterAll(async () => {
@@ -184,10 +242,10 @@ for (const fixture of ENGINES) {
       const out = await query({ query: 'select customer, amount, status from orders order by id' });
       expect(out.rows?.length).toBeGreaterThan(0);
       // The seeded sample data, not an empty success.
-      expect(out.rows?.map((r) => String(r.customer))).toContain('Ada Lovelace');
+      expect(out.rows?.map((r) => String(pick(r, 'customer')))).toContain('Ada Lovelace');
       // `row` is the first record, so a single-result lookup reads cleanly
       // downstream as {{step.data.row.customer}}.
-      expect(out.row?.customer).toBe('Ada Lovelace');
+      expect(pick(out.row ?? {}, 'customer')).toBe('Ada Lovelace');
     }, 60000);
 
     it('DB-02 a parameterised read only returns the matching rows', async () => {
@@ -196,7 +254,7 @@ for (const fixture of ENGINES) {
         params: ['refunded'],
       });
       expect(out.rows?.length).toBeGreaterThan(0);
-      expect(out.rows?.every((r) => r.status === 'refunded')).toBe(true);
+      expect(out.rows?.every((r) => pick(r, 'status') === 'refunded')).toBe(true);
     }, 60000);
 
     it.skipIf(!fixture.builder)('DB-03 the visual table builder reads the same rows as hand-written SQL', async () => {
@@ -218,7 +276,7 @@ for (const fixture of ENGINES) {
       }, 'insert');
 
       const readBack = await query({ query: `select id, note from ${fixture.scratch}` }, 'read back');
-      expect(readBack.row?.note).toBe('written by a workflow');
+      expect(pick(readBack.row ?? {}, 'note')).toBe('written by a workflow');
       await query({ query: `drop table ${fixture.scratch}` }, 'drop');
     }, 90000);
 

@@ -41,6 +41,17 @@ const CONNECTOR_CREDENTIALS: Record<string, CredentialFieldDef[]> = {
     { key: 'publishableKey', label: 'Publishable key', placeholder: 'pk_live_… or pk_test_…', help: 'Safe to expose in a browser; used by client-side flows.' },
     { key: 'webhookSecret', label: 'Webhook signing secret', secret: true, placeholder: 'whsec_…', help: 'Verifies that incoming Stripe webhooks are genuine.' },
   ],
+  snowflake: [
+    { key: 'account', label: 'Account identifier', required: true, primary: true, placeholder: 'abc12345.eu-west-1 or myorg-myaccount', help: 'From the account URL. The region suffix is kept for the host and dropped for the token.' },
+    { key: 'user', label: 'Username', required: true, placeholder: 'METIS_SERVICE' },
+    { key: 'privateKey', label: 'Private key (PEM)', secret: true, required: true, placeholder: 'Paste the whole PEM block, header and footer included', help: 'The SQL API takes a key-pair JWT, never a password. Set the matching public key on the user with ALTER USER ... SET RSA_PUBLIC_KEY.' },
+    { key: 'passphrase', label: 'Private key passphrase', secret: true, help: 'Only if the key is encrypted.' },
+    { key: 'warehouse', label: 'Warehouse', placeholder: 'COMPUTE_WH' },
+    { key: 'database', label: 'Database', placeholder: 'METIS_SAMPLE' },
+    { key: 'schema', label: 'Schema', placeholder: 'PUBLIC' },
+    { key: 'role', label: 'Role', placeholder: 'ACCOUNTADMIN (optional)' },
+    { key: 'accountUrl', label: 'Account URL override', placeholder: 'https://... (only for private link)' },
+  ],
   resend: [
     { key: 'apiKey', label: 'API key', secret: true, required: true, primary: true, placeholder: 're_…' },
   ],

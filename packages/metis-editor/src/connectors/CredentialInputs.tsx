@@ -39,15 +39,31 @@ export function CredentialInputs({
             {field.label}
             {!field.required && <span className="field-opt"> · optional</span>}
           </label>
-          <input
-            id={`${idPrefix}-${field.key}`}
-            type={field.secret ? 'password' : 'text'}
-            autoComplete="off"
-            spellCheck={false}
-            placeholder={keepBlankPlaceholder && field.secret ? 'Unchanged' : field.placeholder}
-            value={values[field.key] ?? ''}
-            onChange={(event) => onChange(field.key, event.target.value)}
-          />
+          {field.multiline ? (
+            // A PEM key is many lines. Pasting one into a single-line input
+            // drops the newlines, and the corrupted key only shows up later as
+            // an unreadable error from the service.
+            <textarea
+              id={`${idPrefix}-${field.key}`}
+              className="cred-multiline"
+              rows={6}
+              autoComplete={field.secret ? 'new-password' : 'off'}
+              spellCheck={false}
+              placeholder={keepBlankPlaceholder && field.secret ? 'Unchanged' : field.placeholder}
+              value={values[field.key] ?? ''}
+              onChange={(event) => onChange(field.key, event.target.value)}
+            />
+          ) : (
+            <input
+              id={`${idPrefix}-${field.key}`}
+              type={field.secret ? 'password' : 'text'}
+              autoComplete={field.secret ? 'new-password' : 'off'}
+              spellCheck={false}
+              placeholder={keepBlankPlaceholder && field.secret ? 'Unchanged' : field.placeholder}
+              value={values[field.key] ?? ''}
+              onChange={(event) => onChange(field.key, event.target.value)}
+            />
+          )}
           {field.help && <p className="field-help">{field.help}</p>}
         </div>
       ))}

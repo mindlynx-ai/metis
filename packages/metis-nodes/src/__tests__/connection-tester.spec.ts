@@ -26,6 +26,7 @@ import {
   httpAuthHeaders,
   resolveHttpProbe,
 } from '../connection-tester.js';
+import { DataSourceRegistry, type DataSource } from '@mindlynx/metis-ports';
 
 const tester = new DefaultConnectionTester();
 
@@ -138,5 +139,80 @@ describe.skipIf(process.env.NET_TEST !== '1')('connection tester: real http (NET
     });
     expect(health.ok).toBe(false);
     expect(['unreachable', 'error']).toContain(health.status);
+  });
+});
+
+describe('testing a data engine goes through its own adapter', () => {
+  const engine = (name: string, behaviour: (...args: never[]) => Promise<unknown>): DataSource =>
+    ({
+      engine: name,
+      runQuery: behaviour as DataSource['runQuery'],
+      listTables: async () => [],
+      describeTable: async () => [],
+    }) as DataSource;
+
+  const input = (connectorId: string, authScheme: string) => ({
+    connectorId,
+    authScheme,
+    baseUrl: 'https://app.snowflake.com',
+    material: { account: 'abc', user: 'u' },
+  });
+
+  it('proves snowflake by querying it, not by fetching its console URL', async () => {
+    // The trap this closes: a bare GET of app.snowflake.com answers 200 for
+    // anyone, so the old path read green with credentials that do not work.
+    let asked = '';
+    const sources = new DataSourceRegistry().register(
+      engine('snowflake', async (_c: unknown, sql: string) => {
+        asked = sql;
+        return { rows: [{ '1': 1 }], rowCount: 1, truncated: false };
+      }) as DataSource,
+    );
+    const health = await new DefaultConnectionTester(sources).testConnection(
+      input('snowflake', 'bearer'),
+    );
+    expect(health.ok).toBe(true);
+    expect(asked).toMatch(/select 1/i);
+  });
+
+  it('reports a refused login as auth_failed, not a generic error', async () => {
+    const sources = new DataSourceRegistry().register(
+      engine('snowflake', async () => {
+        throw new Error('snowflake: JWT token is invalid');
+      }) as DataSource,
+    );
+    const health = await new DefaultConnectionTester(sources).testConnection(
+      input('snowflake', 'bearer'),
+    );
+    expect(health.ok).toBe(false);
+    expect(health.status).toBe('auth_failed');
+  });
+
+  it('sends mysql to the mysql adapter rather than a postgres client', async () => {
+    let engineUsed = '';
+    const sources = new DataSourceRegistry().register(
+      engine('mysql', async () => {
+        engineUsed = 'mysql';
+        return { rows: [], rowCount: 0, truncated: false };
+      }) as DataSource,
+    );
+    const health = await new DefaultConnectionTester(sources).testConnection(
+      input('mysql', 'database'),
+    );
+    expect(engineUsed).toBe('mysql');
+    expect(health.ok).toBe(true);
+  });
+
+  it('still probes an ordinary http connector over http', async () => {
+    // No adapter for this connector, so nothing changes for the other 99.
+    const sources = new DataSourceRegistry();
+    const health = await new DefaultConnectionTester(sources).testConnection({
+      connectorId: 'github',
+      authScheme: 'bearer',
+      material: { token: 't' },
+    });
+    // No base URL to probe, which is the http path's own complaint.
+    expect(health.ok).toBe(false);
+    expect(health.message).toMatch(/base URL/i);
   });
 });

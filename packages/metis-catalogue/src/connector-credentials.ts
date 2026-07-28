@@ -32,6 +32,9 @@ export interface CredentialFieldDef {
   help?: string;
   /** The credential the auth header is built from (bearer token / api key). */
   primary?: boolean;
+  /** Render as a text area. A PEM private key is many lines, and a single-line
+   *  input silently drops the newlines on paste, which corrupts the key. */
+  multiline?: boolean;
 }
 
 /** Bespoke credential schemas for connectors that are not a single key. */
@@ -44,7 +47,7 @@ const CONNECTOR_CREDENTIALS: Record<string, CredentialFieldDef[]> = {
   snowflake: [
     { key: 'account', label: 'Account identifier', required: true, primary: true, placeholder: 'abc12345.eu-west-1 or myorg-myaccount', help: 'From the account URL. The region suffix is kept for the host and dropped for the token.' },
     { key: 'user', label: 'Username', required: true, placeholder: 'METIS_SERVICE' },
-    { key: 'privateKey', label: 'Private key (PEM)', secret: true, required: true, placeholder: 'Paste the whole PEM block, header and footer included', help: 'The SQL API takes a key-pair JWT, never a password. Set the matching public key on the user with ALTER USER ... SET RSA_PUBLIC_KEY.' },
+    { key: 'privateKey', label: 'Private key (PEM)', secret: true, required: true, multiline: true, placeholder: 'Paste the whole PEM block, header and footer included', help: 'The SQL API takes a key-pair JWT, never a password. Set the matching public key on the user with ALTER USER ... SET RSA_PUBLIC_KEY.' },
     { key: 'passphrase', label: 'Private key passphrase', secret: true, help: 'Only if the key is encrypted.' },
     { key: 'warehouse', label: 'Warehouse', placeholder: 'COMPUTE_WH' },
     { key: 'database', label: 'Database', placeholder: 'METIS_SAMPLE' },

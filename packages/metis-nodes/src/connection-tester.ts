@@ -16,11 +16,21 @@
 
 /**
  * The default connection tester (observability): proves a stored connection
- * actually works. `database` runs a short-lived `SELECT 1`; the http schemes
- * do an SSRF-guarded GET of the connector's baseUrl carrying the connection's
- * auth headers. It returns a verdict only, never the material, and separates
+ * actually works. It returns a verdict only, never the material, and separates
  * auth failure (bad key/password) from unreachable (DNS/refused/timeout) so the
  * connections list can say what is wrong.
+ *
+ * A connection whose connector names a registered data engine is probed
+ * THROUGH THAT ENGINE'S OWN ADAPTER with a `SELECT 1`. That matters more than
+ * it sounds: dispatching on the auth scheme alone sent every `database`
+ * connection to a Postgres client, so a working MySQL read red, and sent
+ * Snowflake down the http path where a bare GET of its console URL answered
+ * 200 and read green no matter what the credentials were. A test that cannot
+ * fail is worse than no test.
+ *
+ * The rest keep the old behaviour: `database` with no adapter falls back to the
+ * Postgres client, and the http schemes do an SSRF-guarded probe of the
+ * connector's baseUrl (or its declared healthCheck) carrying the auth headers.
  */
 import pg from 'pg';
 import { authHeadersFromMaterial } from './auth-headers.js';
@@ -30,6 +40,8 @@ import type {
   ConnectionStatus,
   ConnectionTester,
   ConnectionTestInput,
+  DataSource,
+  DataSourceRegistry,
 } from '@mindlynx/metis-ports';
 
 const PROBE_TIMEOUT_MS = 8000;
@@ -45,6 +57,18 @@ export function classifyDbError(error: unknown): ConnectionHealth {
   const code = (error as { code?: string }).code ?? '';
   const message = error instanceof Error ? error.message : String(error);
   if (PG_AUTH_CODES.has(code)) return verdict('auth_failed', message);
+  // MySQL names its refusals, and an HTTP engine (Snowflake) reports them in
+  // the message; both mean "reached it, credentials rejected".
+  if (code.startsWith('ER_ACCESS_DENIED') || code === 'ER_DBACCESS_DENIED_ERROR') {
+    return verdict('auth_failed', message);
+  }
+  // Snowflake says "JWT token is invalid"; other services put it the other way
+  // round, or answer with a bare status. Catch the shapes, not one wording.
+  const refused =
+    /\b(401|403)\b/.test(message) ||
+    /unauthorized|authentication failed|invalid credentials/i.test(message) ||
+    (/\b(jwt|token)\b/i.test(message) && /invalid|expired|malformed/i.test(message));
+  if (refused) return verdict('auth_failed', message);
   if (code === 'ENOTFOUND' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT') {
     return verdict('unreachable', message);
   }
@@ -159,10 +183,35 @@ async function testHttp(input: ConnectionTestInput): Promise<ConnectionHealth> {
   }
 }
 
+/**
+ * Probe an engine through its own adapter. The pool key names the credentials
+ * it was opened with (engine, host or account, database, user) so a probe can
+ * never be answered by a pool belonging to a different login.
+ */
+async function testDataSource(
+  source: DataSource,
+  input: ConnectionTestInput,
+): Promise<ConnectionHealth> {
+  const m = input.material;
+  const key = `probe:${source.engine}:${m.host ?? m.account ?? ''}:${m.database ?? ''}:${m.user ?? ''}`;
+  try {
+    await source.runQuery({ key, material: m }, 'SELECT 1', { maxRows: 1 });
+    return verdict('ok', 'SELECT 1 succeeded');
+  } catch (error) {
+    return classifyDbError(error);
+  }
+}
+
 export class DefaultConnectionTester implements ConnectionTester {
+  constructor(private readonly dataSources?: DataSourceRegistry) {}
+
   async testConnection(input: ConnectionTestInput): Promise<ConnectionHealth> {
     try {
       if (input.authScheme === 'none') return verdict('ok', 'no credentials needed');
+      // A data engine is proven by querying it, whatever auth scheme its
+      // catalogue record happens to declare.
+      const source = this.dataSources?.get(input.connectorId);
+      if (source) return await testDataSource(source, input);
       if (input.authScheme === 'database') return await testDatabase(input.material);
       if (input.authScheme === 'client_credentials') {
         return await testClientCredentials(input.material);

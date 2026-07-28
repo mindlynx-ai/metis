@@ -143,14 +143,18 @@ export async function buildControlServer(options: ControlServerOptions): Promise
     taskQueue: METIS_TASK_QUEUE,
   });
 
+  // One registry, shared: the table browser dispatches through it and the
+  // connection test proves a data engine by querying it through the same
+  // adapter the workflow will use.
+  const dataSources = buildDataSources();
   const app = buildCoreServer({
     identity,
     store: runtime.store,
     executions,
     credentials: runtime.credentials,
     audit: runtime.audit,
-    connectionTester: new DefaultConnectionTester(),
-    dataSources: buildDataSources(),
+    connectionTester: new DefaultConnectionTester(dataSources),
+    dataSources,
     schedules: scheduleService,
     uplift: buildUpliftDeps(runtime),
     // Binding a trigger: store the record, and for a schedule also provision

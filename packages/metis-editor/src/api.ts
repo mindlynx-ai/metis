@@ -159,6 +159,9 @@ export interface CredentialFieldDef {
   required?: boolean;
   placeholder?: string;
   help?: string;
+  /** Render as a text area: a PEM key is many lines and a single-line input
+   *  drops the newlines on paste. */
+  multiline?: boolean;
 }
 
 export interface ConnectorDef {

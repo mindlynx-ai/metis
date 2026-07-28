@@ -26,6 +26,22 @@
  */
 import type { ConnectorCatalogueRecord } from './loader.js';
 
+/**
+ * The engines a workflow can actually query, with the name the palette shows.
+ * This is the list that decides which database nodes exist, so it must track
+ * the adapters registered in buildDataSources(); a test holds the two together,
+ * because the two live in packages that cannot import one another.
+ *
+ * Snowflake is here but NOT in DATABASE_CONNECTORS below: it is part of the
+ * frozen top-100 catalogue, which is length-locked, so its record lives there
+ * while its executability is declared here.
+ */
+export const EXECUTABLE_DATABASE_ENGINES: { engine: string; name: string }[] = [
+  { engine: 'postgres', name: 'PostgreSQL' },
+  { engine: 'mysql', name: 'MySQL' },
+  { engine: 'snowflake', name: 'Snowflake' },
+];
+
 export const DATABASE_CONNECTORS: ConnectorCatalogueRecord[] = [
   {
     connectorId: 'postgres',

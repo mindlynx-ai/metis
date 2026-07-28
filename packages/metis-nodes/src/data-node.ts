@@ -52,6 +52,9 @@ interface DataNodeConfig extends PgBuilderConfig {
 
 const WRITE_OPS = new Set(['insert', 'update', 'delete', 'upsert']);
 
+/** Node types that name their engine. `data` is the generic one and does not. */
+const NAMED_ENGINE_NODES = new Set(['postgres', 'mysql', 'snowflake']);
+
 /** The step output: the rows, plus `row` = the first record so a downstream
  *  step can reference a single result's field cleanly ({{step.data.row.email}}). */
 function withFirstRow(result: QueryResult): QueryResult & { row?: Record<string, unknown> } {
@@ -121,7 +124,11 @@ export function createDataNodeHandler(
     const connectionId = String(ref?.connectionId ?? config.connectorId ?? config.connectionId ?? '');
     if (!connectionId) return { status: 400, message: 'the data step needs a connection' };
 
-    const engine = String(ref?.engine ?? config.engine ?? 'postgres');
+    // A node named after an engine IS that engine, exactly as a connector
+    // node's type names its connector. The generic `data`/`sql` types carry no
+    // engine of their own, so those fall back to the config or to postgres.
+    const typedEngine = NAMED_ENGINE_NODES.has(ctx.nodeRef.type) ? ctx.nodeRef.type : undefined;
+    const engine = String(ref?.engine ?? typedEngine ?? config.engine ?? 'postgres');
     const source = sources.get(engine);
     if (!source) {
       return {

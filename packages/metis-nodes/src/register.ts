@@ -23,7 +23,7 @@
  */
 import type { CredentialPort } from '@mindlynx/metis-ports';
 import { NodeHandlerRegistry } from '@mindlynx/metis-ports';
-import { connectorNodeTypeIds } from '@mindlynx/metis-catalogue';
+import { connectorNodeTypeIds, databaseNodeTypeIds } from '@mindlynx/metis-catalogue';
 import { DataSourceRegistry } from '@mindlynx/metis-ports';
 import { createHttpNodeHandler } from './http-node.js';
 import { createCodeNodeHandler } from './code-node.js';
@@ -70,7 +70,14 @@ export function registerOpenNodeHandlers(
   registry.registerNodeHandler('sql', postgres);
   // The generic Data node: engine-agnostic, dispatches via the DataSource port
   // (postgres in the open edition; athena/snowflake are adapters in Helix).
-  registry.registerNodeHandler('data', createDataNodeHandler(buildDataSources(), deps.credentials));
+  const data = createDataNodeHandler(buildDataSources(), deps.credentials);
+  registry.registerNodeHandler('data', data);
+  // A node per executable engine (mysql, snowflake, ...), so an operator who
+  // connects one finds it in the palette by name instead of having to know
+  // that the way in is a generic Data step. The engine comes from the type.
+  for (const type of databaseNodeTypeIds()) {
+    registry.registerNodeHandler(type, data);
+  }
   registry.registerNodeHandler('sendgrid', createSendgridNodeHandler(deps.credentials, deps.sendgrid));
   if (deps.connectors) {
     // One shared handler under every wired-connector node type; the handler

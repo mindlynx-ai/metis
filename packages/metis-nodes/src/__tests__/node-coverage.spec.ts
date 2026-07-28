@@ -22,8 +22,14 @@
  * engine special-cases (switch/signal/waituntil/logic).
  */
 import { describe, it, expect } from 'vitest';
-import { getCatalogue } from '@mindlynx/metis-catalogue';
+import {
+  EXECUTABLE_DATABASE_ENGINES,
+  databaseNodeTypeIds,
+  databaseNodeTypes,
+  getCatalogue,
+} from '@mindlynx/metis-catalogue';
 import { NodeHandlerRegistry, FakeCredentialPort } from '@mindlynx/metis-ports';
+import { buildDataSources } from '../register.js';
 import { DataGateway, MemoryAdapter } from '@mindlynx/metis-data-gateway';
 import { registerOpenNodeHandlers } from '../register.js';
 import { ConnectorRegistry, registerConnectorTable } from '../connector-registry.js';
@@ -81,5 +87,33 @@ describe('node-type coverage', () => {
     for (const type of ['api', 'http', 'code', 'transform', 'postgres', 'sendgrid', 'github', 'slack']) {
       expect(registry.canExecute(type)).toBe(true);
     }
+  });
+});
+
+describe('every executable database engine is reachable and named', () => {
+  it('the palette names exactly the engines that have adapters', () => {
+    // The two lists live in packages that cannot import one another: the
+    // catalogue decides which nodes exist, the registry decides what can run.
+    // If they drift, the palette either offers an engine that cannot execute
+    // or hides one that can, and neither failure is visible until a run.
+    const declared = EXECUTABLE_DATABASE_ENGINES.map((e) => e.engine).sort();
+    expect(buildDataSources().engines()).toEqual(declared);
+  });
+
+  it('registers a handler for each generated database node type', () => {
+    const registry = registerOpenNodeHandlers(new NodeHandlerRegistry(), {
+      credentials: new FakeCredentialPort(),
+    });
+    for (const type of databaseNodeTypeIds()) {
+      expect(registry.canExecute(type), `no handler for "${type}"`).toBe(true);
+    }
+  });
+
+  it('names an engine node after the engine, so Snowflake is findable as Snowflake', () => {
+    const labels = databaseNodeTypes().map((entry) => (entry.palette as { label: string }).label);
+    expect(labels).toContain('Snowflake');
+    expect(labels).toContain('MySQL');
+    // Postgres keeps its own hand-written node rather than gaining a second.
+    expect(databaseNodeTypeIds()).not.toContain('postgres');
   });
 });

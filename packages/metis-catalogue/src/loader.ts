@@ -24,7 +24,7 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { DATABASE_CONNECTORS } from './database-connectors.js';
+import { DATABASE_CONNECTORS, EXECUTABLE_DATABASE_ENGINES } from './database-connectors.js';
 import { deriveKeywords } from './node-keywords.js';
 import { EXTRA_CONNECTORS } from './extra-connectors.js';
 import {
@@ -91,7 +91,11 @@ export function getCatalogue(options: GetCatalogueOptions = {}): Catalogue {
   const parsed = JSON.parse(readFileSync(path, 'utf8')) as Catalogue;
   // Enrich the built-in nodes with their picker group + search keywords (kept
   // here, not in the JSON data), then append the generated connector nodes.
-  parsed.entries = [...parsed.entries.map(withBaseMeta), ...connectorNodeTypes()];
+  parsed.entries = [
+    ...parsed.entries.map(withBaseMeta),
+    ...connectorNodeTypes(),
+    ...databaseNodeTypes(),
+  ];
   cached = parsed;
   return parsed;
 }
@@ -194,6 +198,83 @@ export function connectorNodeTypes(): CatalogueEntry[] {
 /** The generated connector node type ids (for handler registration). */
 export function connectorNodeTypeIds(): string[] {
   return connectorNodeTypes().map((entry) => entry.type);
+}
+
+/**
+ * Database engines that execute but have no hand-written node type. Postgres
+ * has its own (a visual builder over the postgres handler), so it is excluded;
+ * the rest get a node named after the engine, backed by the generic Data
+ * handler with the engine fixed by the NODE TYPE, exactly as a connector node
+ * takes its connector from its type.
+ *
+ * Without these an operator who connects Snowflake finds nothing called
+ * Snowflake in the palette, and has to know that the way in is a generic Data
+ * step whose engine comes from whichever connection they happen to pick.
+ */
+const ENGINES_WITH_A_DEDICATED_NODE = new Set(['postgres']);
+
+export function databaseNodeTypes(): CatalogueEntry[] {
+  return EXECUTABLE_DATABASE_ENGINES.filter(
+    (connector) => !ENGINES_WITH_A_DEDICATED_NODE.has(connector.engine),
+  ).map((connector) => ({
+    type: connector.engine,
+    category: 'transform',
+    group: 'data-flow',
+    keywords: [connector.engine, connector.name.toLowerCase(), 'database', 'sql', 'query', 'data'],
+    tier: 'open',
+    status: 'v1',
+    execution: 'local',
+    handler_status: 'ready',
+    versions: ['1.0.0'],
+    palette: {
+      label: connector.name,
+      icon: 'database',
+      colour: 'sky-500',
+      description: `Read or write ${connector.name}: a SQL query, or build one visually.`,
+    },
+    configSchema: {
+      type: 'object',
+      required: ['connectorId'],
+      properties: {
+        connectorId: {
+          type: 'string',
+          title: 'Connection',
+          description: `The ${connector.name} connection to run against.`,
+          'x-helix-widget': 'connectorRef',
+          'x-helix-options': `/_resource/connectors?provider=${connector.engine}`,
+        },
+        query: {
+          type: 'string',
+          title: 'Data',
+          description: `A SQL query in ${connector.name}'s own dialect. Its rows become this step's output.`,
+          'x-helix-widget': 'dataBuilder',
+        },
+        output: {
+          type: 'string',
+          title: 'Output',
+          description:
+            'Rows: the result set, inline (capped). Reference: a small handle a later step can open on demand.',
+          enum: ['rows', 'reference'],
+          default: 'rows',
+        },
+      },
+    },
+    outputSchema: {
+      type: 'object',
+      properties: {
+        rows: { type: 'array' },
+        rowCount: { type: 'integer' },
+        totalRows: { type: 'integer' },
+        truncated: { type: 'boolean' },
+        dataset: { type: 'object' },
+      },
+    },
+  }));
+}
+
+/** The generated database node type ids (for handler registration). */
+export function databaseNodeTypeIds(): string[] {
+  return databaseNodeTypes().map((entry) => entry.type);
 }
 
 /** Resolve a node type to its canonical entry, following one alias hop. */

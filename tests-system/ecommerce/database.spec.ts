@@ -80,6 +80,11 @@ interface EngineFixture {
   /** The connector record a connection is created against. */
   connectorId: string;
   material?: Record<string, string>;
+  /** An EXISTING connection to reuse, instead of creating one from material.
+   *  This is the honest way to test a hosted warehouse: it exercises the very
+   *  connection an operator made in the UI, and the suite never needs a second
+   *  copy of the credentials. */
+  connectionId?: string;
   /** How the connection is stored: most engines are host/port, Snowflake is a
    *  key pair, and the adapter reads whichever keys its own material carries. */
   authScheme?: string;
@@ -129,6 +134,7 @@ const ENGINES: EngineFixture[] = [
   {
     engine: 'snowflake',
     connectorId: 'snowflake',
+    connectionId: process.env.METIS_SNOWFLAKE_CONNECTION,
     material: snowflakeMaterial(),
     authScheme: 'keypair',
     // A hosted warehouse arrives empty, so the shared fixture is built here.
@@ -175,12 +181,12 @@ if (!up) {
 }
 
 for (const fixture of ENGINES) {
-  const configured = up && Boolean(fixture.material);
+  const configured = up && (Boolean(fixture.material) || Boolean(fixture.connectionId));
   const suite = configured ? describe : describe.skip;
-  if (up && !fixture.material) {
+  if (up && !configured) {
     const hint =
       fixture.engine === 'snowflake'
-        ? 'METIS_SNOWFLAKE_ACCOUNT plus either METIS_SNOWFLAKE_TOKEN or a private key'
+        ? 'METIS_SNOWFLAKE_CONNECTION (an existing connection id), or METIS_SNOWFLAKE_ACCOUNT plus a token or private key'
         : `METIS_${fixture.engine.toUpperCase()}_HOST`;
     // eslint-disable-next-line no-console
     console.warn(`[database] ${fixture.engine} not configured; set ${hint} to run it.`);
@@ -215,17 +221,21 @@ for (const fixture of ENGINES) {
 
     beforeAll(async () => {
       api = client(await login());
-      const conn = await api<{ connectionId: string }>('POST', '/api/connections', {
-        name: `${fixture.engine} acceptance`,
-        connectorId: fixture.connectorId,
-        connectionType: 'database',
-        authScheme: fixture.authScheme ?? 'database',
-        material: fixture.material,
-      });
-      if (conn.status !== 201) {
-        throw new Error(`could not store the ${fixture.engine} connection: ${JSON.stringify(conn.body)}`);
+      if (fixture.connectionId) {
+        connectionId = fixture.connectionId;
+      } else {
+        const conn = await api<{ connectionId: string }>('POST', '/api/connections', {
+          name: `${fixture.engine} acceptance`,
+          connectorId: fixture.connectorId,
+          connectionType: 'database',
+          authScheme: fixture.authScheme ?? 'database',
+          material: fixture.material,
+        });
+        if (conn.status !== 201) {
+          throw new Error(`could not store the ${fixture.engine} connection: ${JSON.stringify(conn.body)}`);
+        }
+        connectionId = conn.body.connectionId;
       }
-      connectionId = conn.body.connectionId;
 
       const created = await api<{ workflowId: string }>('POST', '/api/workflows', {
         name: `db-${fixture.engine}-${Date.now()}`,
@@ -242,7 +252,11 @@ for (const fixture of ENGINES) {
 
     afterAll(async () => {
       await cancelStragglers(api);
-      if (connectionId) await api('DELETE', `/api/connections/${connectionId}`);
+      // Only tidy away a connection this suite created. A borrowed one belongs
+      // to the operator and must survive the run.
+      if (connectionId && !fixture.connectionId) {
+        await api('DELETE', `/api/connections/${connectionId}`);
+      }
     });
 
     it('DB-01 a workflow reads real rows out of the database', async () => {

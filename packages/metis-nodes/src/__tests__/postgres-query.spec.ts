@@ -19,7 +19,7 @@
  * generated SQL string + params, and the injection/safety guards.
  */
 import { describe, it, expect } from 'vitest';
-import { buildQuery } from '../postgres-query.js';
+import { buildQuery, MYSQL_DIALECT, POSTGRES_DIALECT } from '../postgres-query.js';
 
 describe('postgres query builder', () => {
   it('builds a SELECT with where, order by and limit (values parameterised)', () => {
@@ -89,5 +89,44 @@ describe('postgres query builder', () => {
         where: [{ column: 'id', operator: '; DROP', value: 1 }],
       }),
     ).toThrow(/not in allowlist/);
+  });
+});
+
+describe('dialects', () => {
+  const select = {
+    operation: 'select',
+    tables: [{ name: 'orders', columns: [{ name: 'customer' }] }],
+    where: [{ column: 'status', operator: '=', value: 'paid' }],
+  };
+
+  it('emits MySQL backticks, ? placeholders and no schema prefix', () => {
+    const built = buildQuery(select, MYSQL_DIALECT);
+    expect(built.query).toBe(
+      'SELECT `orders`.`customer` FROM `orders` WHERE `orders`.`status` = ?',
+    );
+    expect(built.params).toEqual(['paid']);
+  });
+
+  it('still emits Postgres quoting, $n and the public schema by default', () => {
+    const built = buildQuery(select);
+    expect(built.query).toBe(
+      'SELECT "orders"."customer" FROM "public"."orders" WHERE "orders"."status" = $1',
+    );
+  });
+
+  it('refuses a builder write on MySQL rather than emitting Postgres syntax', () => {
+    // RETURNING and ON CONFLICT have no MySQL equivalent, so a generated write
+    // would fail at the parser with a message nobody can act on.
+    expect(() =>
+      buildQuery({ operation: 'insert', tables: [{ name: 't', values: { a: 1 } }] }, MYSQL_DIALECT),
+    ).toThrow(/write it as SQL/);
+  });
+
+  it('rejects an injected identifier in either dialect', () => {
+    for (const dialect of [POSTGRES_DIALECT, MYSQL_DIALECT]) {
+      expect(() =>
+        buildQuery({ operation: 'select', tables: [{ name: 'x`; DROP TABLE t;--' }] }, dialect),
+      ).toThrow(/invalid table/);
+    }
   });
 });

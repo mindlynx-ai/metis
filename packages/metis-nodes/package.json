@@ -20,11 +20,12 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
-    "@mindlynx/metis-ports": "0.1.0",
     "@mindlynx/metis-catalogue": "0.1.0",
+    "@mindlynx/metis-data-gateway": "0.1.0",
+    "@mindlynx/metis-ports": "0.1.0",
     "isolated-vm": "^6.1.2",
-    "pg": "^8.20.0",
-    "@mindlynx/metis-data-gateway": "0.1.0"
+    "mysql2": "^3.23.2",
+    "pg": "^8.20.0"
   },
   "devDependencies": {
     "@types/pg": "^8.20.0",

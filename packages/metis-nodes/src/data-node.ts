@@ -30,7 +30,7 @@ import {
   type NodeHandler,
   type QueryResult,
 } from '@mindlynx/metis-ports';
-import { buildQuery, type PgBuilderConfig } from './postgres-query.js';
+import { buildQuery, dialectFor, type PgBuilderConfig } from './postgres-query.js';
 
 interface DataNodeConfig extends PgBuilderConfig {
   /** The chosen connection instance id (material is resolved from this). */
@@ -85,7 +85,7 @@ type SqlPlan = { sql: string; params: unknown[] } | { error: { status: number; m
 
 /** The SQL to run: a reference's own query wins, else the raw query, else the
  *  visual table builder. Returns a 400 plan when none is configured. */
-function resolveSql(ref: DatasetRef | undefined, config: DataNodeConfig): SqlPlan {
+function resolveSql(ref: DatasetRef | undefined, config: DataNodeConfig, engine: string): SqlPlan {
   if (ref) {
     if (!ref.query) return { error: { status: 400, message: 'the dataset reference has no query to run' } };
     return { sql: ref.query, params: [] };
@@ -95,7 +95,9 @@ function resolveSql(ref: DatasetRef | undefined, config: DataNodeConfig): SqlPla
   }
   if (config.operation) {
     try {
-      const built = buildQuery(config);
+      // Metis generates builder SQL, so it must be the target engine's own
+      // dialect: MySQL quotes with backticks and binds with `?`.
+      const built = buildQuery(config, dialectFor(engine));
       return { sql: built.query, params: built.params };
     } catch (error) {
       return { error: { status: 400, message: error instanceof Error ? error.message : String(error) } };
@@ -129,7 +131,7 @@ export function createDataNodeHandler(
       };
     }
 
-    const plan = resolveSql(ref, config);
+    const plan = resolveSql(ref, config, engine);
     if ('error' in plan) return plan.error;
     const { sql, params } = plan;
 

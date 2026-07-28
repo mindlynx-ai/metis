@@ -20,8 +20,9 @@
  * (connectors.v1.json, which requires an http(s) baseUrl and is length-locked)
  * and merged into the served connector list instead. All share the `database`
  * auth scheme, so the one connect form renders host/port/database/user/password
- * for every engine. A typed database node (e.g. postgres) references one by id;
- * mysql and sqlserver are connect-only until their execution nodes land.
+ * for every engine. A typed database node (e.g. postgres) references one by id.
+ * Postgres and MySQL execute; sqlserver is connect-only until its adapter lands,
+ * so a workflow can store its credentials but not yet query it.
  */
 import type { ConnectorCatalogueRecord } from './loader.js';
 

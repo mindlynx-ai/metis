@@ -20,10 +20,43 @@
  * SQL string, so a workflow's postgres node is portable between the engines.
  *
  * Safety: every user VALUE flows through parameters ($1, $2, ...); every
- * IDENTIFIER (database/schema/table/column/alias) is regex-checked and double-
- * quoted so an injected quote can never escape; operators and directions are
+ * IDENTIFIER (database/schema/table/column/alias) is regex-checked and quoted
+ * so an injected quote can never escape; operators and directions are
  * enum-validated. Pure and DB-free, so the generated SQL is unit-testable.
+ *
+ * Dialects: Metis GENERATES this SQL, so it has to be the target engine's own.
+ * A dialect supplies the quote character, the placeholder style and the default
+ * schema. Hand-written SQL is never rewritten - that stays the author's dialect.
  */
+
+/** What differs between engines in generated SQL. */
+export interface SqlDialect {
+  name: string;
+  /** " for Postgres, ` for MySQL. */
+  quoteChar: string;
+  /** $1, $2 ... for Postgres; ? for MySQL. */
+  placeholder: (index: number) => string;
+  /** The schema an unqualified table sits in. MySQL has no layer above the
+   *  database, so a qualified name would be wrong there. */
+  defaultSchema?: string;
+}
+
+export const POSTGRES_DIALECT: SqlDialect = {
+  name: 'postgres',
+  quoteChar: '"',
+  placeholder: (index) => `$${index}`,
+  defaultSchema: 'public',
+};
+
+export const MYSQL_DIALECT: SqlDialect = {
+  name: 'mysql',
+  quoteChar: '`',
+  placeholder: () => '?',
+};
+
+export function dialectFor(engine: string): SqlDialect {
+  return engine === 'mysql' ? MYSQL_DIALECT : POSTGRES_DIALECT;
+}
 
 export interface PgColumn {
   name: string;
@@ -72,81 +105,82 @@ const ALLOWED_OPERATORS = new Set([
   'LIKE', 'ILIKE', 'NOT LIKE', 'NOT ILIKE', 'IS', 'IS NOT',
 ]);
 
-function quoteIdent(name: string, label = 'identifier'): string {
+function quoteIdent(d: SqlDialect, name: string, label = 'identifier'): string {
   if (!IDENT_RE.test(name)) {
-    throw new Error(`postgres: invalid ${label} "${name}" (must match /^[A-Za-z_]\\w*$/)`);
+    throw new Error(`${d.name}: invalid ${label} "${name}" (must match /^[A-Za-z_]\\w*$/)`);
   }
-  return `"${name}"`;
+  return `${d.quoteChar}${name}${d.quoteChar}`;
 }
 
 /** `[db.]schema.table`, each part quoted. */
-function qualified(config: PgBuilderConfig, table: string): string {
-  const db = config.database ? `${quoteIdent(config.database, 'database')}.` : '';
-  const schema = quoteIdent(config.schema ?? 'public', 'schema');
-  return `${db}${schema}.${quoteIdent(table, 'table')}`;
+function qualified(d: SqlDialect, config: PgBuilderConfig, table: string): string {
+  const db = config.database ? `${quoteIdent(d, config.database, 'database')}.` : '';
+  const schemaName = config.schema ?? d.defaultSchema;
+  const schema = schemaName ? `${quoteIdent(d, schemaName, 'schema')}.` : '';
+  return `${db}${schema}${quoteIdent(d, table, 'table')}`;
 }
 
 /** The quoted prefix a where/order clause uses for a table (alias if present). */
-function tablePrefix(table: PgTable): string {
-  return table.alias ? quoteIdent(table.alias, 'alias') : quoteIdent(table.name, 'table');
+function tablePrefix(d: SqlDialect, table: PgTable): string {
+  return table.alias ? quoteIdent(d, table.alias, 'alias') : quoteIdent(d, table.name, 'table');
 }
 
 /** Build the WHERE fragment, appending its params to `params`. */
-function whereClause(clauses: PgWhere[], resolve: (c: PgWhere) => string, params: unknown[], startAt: number): string {
+function whereClause(d: SqlDialect, clauses: PgWhere[], resolve: (c: PgWhere) => string, params: unknown[], startAt: number): string {
   const parts: string[] = [];
   let i = startAt;
   for (const w of clauses) {
     const op = w.operator.toUpperCase();
-    if (!ALLOWED_OPERATORS.has(op)) throw new Error(`postgres: operator "${w.operator}" not in allowlist`);
-    parts.push(`${resolve(w)} ${op} $${i++}`);
+    if (!ALLOWED_OPERATORS.has(op)) throw new Error(`${d.name}: operator "${w.operator}" not in allowlist`);
+    parts.push(`${resolve(w)} ${op} ${d.placeholder(i++)}`);
     params.push(w.value);
   }
   return parts.join(' AND ');
 }
 
 /** The SELECT column list across all tables (empty => `*`). */
-function selectColumns(tables: PgTable[]): string {
+function selectColumns(d: SqlDialect, tables: PgTable[]): string {
   const cols: string[] = [];
   for (const table of tables) {
     for (const col of table.columns ?? []) {
-      const base = `${tablePrefix(table)}.${quoteIdent(col.name, 'column')}`;
-      cols.push(col.alias ? `${base} AS ${quoteIdent(col.alias, 'alias')}` : base);
+      const base = `${tablePrefix(d, table)}.${quoteIdent(d, col.name, 'column')}`;
+      cols.push(col.alias ? `${base} AS ${quoteIdent(d, col.alias, 'alias')}` : base);
     }
   }
   return cols.length > 0 ? cols.join(', ') : '*';
 }
 
 /** The ORDER BY fragment, resolving each clause's table by name. */
-function orderByClause(orderBy: PgOrderBy[], tables: PgTable[], first: PgTable): string {
+function orderByClause(d: SqlDialect, orderBy: PgOrderBy[], tables: PgTable[], first: PgTable): string {
   return orderBy
     .map((o) => {
       const t = tables.find((e) => e.name === o.table) ?? first;
       const dir = o.direction === 'descending' ? 'DESC' : 'ASC';
-      return `${tablePrefix(t)}.${quoteIdent(o.column, 'column')} ${dir}`;
+      return `${tablePrefix(d, t)}.${quoteIdent(d, o.column, 'column')} ${dir}`;
     })
     .join(', ');
 }
 
-function buildSelect(config: PgBuilderConfig): BuiltQuery {
+function buildSelect(d: SqlDialect, config: PgBuilderConfig): BuiltQuery {
   const tables = config.tables ?? [];
-  if (tables.length === 0) throw new Error('postgres: select needs at least one table');
-  if (config.join && config.join.length > 0) throw new Error('postgres: JOIN is not yet supported');
+  if (tables.length === 0) throw new Error(`${d.name}: select needs at least one table`);
+  if (config.join && config.join.length > 0) throw new Error(`${d.name}: JOIN is not yet supported`);
 
   const first = tables[0]!;
   const isDistinct = (config.operation ?? '').toLowerCase() === 'select distinct';
-  let query = `SELECT ${isDistinct ? 'DISTINCT ' : ''}${selectColumns(tables)} FROM ${qualified(config, first.name)}`;
-  if (first.alias) query += ` ${quoteIdent(first.alias, 'alias')}`;
+  let query = `SELECT ${isDistinct ? 'DISTINCT ' : ''}${selectColumns(d, tables)} FROM ${qualified(d, config, first.name)}`;
+  if (first.alias) query += ` ${quoteIdent(d, first.alias, 'alias')}`;
 
   const params: unknown[] = [];
   if (config.where && config.where.length > 0) {
     const resolve = (w: PgWhere) => {
       const t = tables.find((e) => e.name === w.table) ?? first;
-      return `${tablePrefix(t)}.${quoteIdent(w.column, 'column')}`;
+      return `${tablePrefix(d, t)}.${quoteIdent(d, w.column, 'column')}`;
     };
-    query += ` WHERE ${whereClause(config.where, resolve, params, 1)}`;
+    query += ` WHERE ${whereClause(d, config.where, resolve, params, 1)}`;
   }
   if (config.orderBy && config.orderBy.length > 0) {
-    query += ` ORDER BY ${orderByClause(config.orderBy, tables, first)}`;
+    query += ` ORDER BY ${orderByClause(d, config.orderBy, tables, first)}`;
   }
   if (typeof config.limit === 'number' && config.limit > 0) {
     query += ` LIMIT ${Math.floor(config.limit)}`;
@@ -162,12 +196,12 @@ function buildInsert(config: PgBuilderConfig): BuiltQuery {
   const params: unknown[] = [];
   let i = 1;
   for (const [name, value] of Object.entries(table.values ?? {})) {
-    cols.push(quoteIdent(name, 'column'));
+    cols.push(quoteIdent(POSTGRES_DIALECT, name, 'column'));
     placeholders.push(`$${i++}`);
     params.push(value);
   }
   if (cols.length === 0) throw new Error('postgres: insert has no columns with values');
-  const query = `INSERT INTO ${qualified(config, table.name)} (${cols.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`;
+  const query = `INSERT INTO ${qualified(POSTGRES_DIALECT, config, table.name)} (${cols.join(', ')}) VALUES (${placeholders.join(', ')}) RETURNING *`;
   return { query, params };
 }
 
@@ -181,12 +215,12 @@ function buildUpdate(config: PgBuilderConfig): BuiltQuery {
   const setParts: string[] = [];
   let i = 1;
   for (const [name, value] of Object.entries(table.values ?? {})) {
-    setParts.push(`${quoteIdent(name, 'column')} = $${i++}`);
+    setParts.push(`${quoteIdent(POSTGRES_DIALECT, name, 'column')} = $${i++}`);
     params.push(value);
   }
   if (setParts.length === 0) throw new Error('postgres: update has no columns to set');
-  const where = whereClause(config.where, (w) => quoteIdent(w.column, 'column'), params, i);
-  const query = `UPDATE ${qualified(config, table.name)} SET ${setParts.join(', ')} WHERE ${where} RETURNING *`;
+  const where = whereClause(POSTGRES_DIALECT, config.where, (w) => quoteIdent(POSTGRES_DIALECT, w.column, 'column'), params, i);
+  const query = `UPDATE ${qualified(POSTGRES_DIALECT, config, table.name)} SET ${setParts.join(', ')} WHERE ${where} RETURNING *`;
   return { query, params };
 }
 
@@ -197,8 +231,8 @@ function buildDelete(config: PgBuilderConfig): BuiltQuery {
     throw new Error('postgres: delete requires a WHERE clause (refusing unbounded delete)');
   }
   const params: unknown[] = [];
-  const where = whereClause(config.where, (w) => quoteIdent(w.column, 'column'), params, 1);
-  const query = `DELETE FROM ${qualified(config, table.name)} WHERE ${where} RETURNING *`;
+  const where = whereClause(POSTGRES_DIALECT, config.where, (w) => quoteIdent(POSTGRES_DIALECT, w.column, 'column'), params, 1);
+  const query = `DELETE FROM ${qualified(POSTGRES_DIALECT, config, table.name)} WHERE ${where} RETURNING *`;
   return { query, params };
 }
 
@@ -214,31 +248,45 @@ function buildUpsert(config: PgBuilderConfig): BuiltQuery {
   let i = 1;
   for (const col of table.columns ?? []) {
     if (col.value === undefined) continue;
-    cols.push(quoteIdent(col.name, 'column'));
+    cols.push(quoteIdent(POSTGRES_DIALECT, col.name, 'column'));
     placeholders.push(`$${i++}`);
     params.push(col.value);
   }
   if (cols.length === 0) throw new Error('postgres: upsert has no columns with values');
   const conflicts = config.conflictColumns;
-  const conflictCols = conflicts.map((c) => quoteIdent(c, 'column'));
+  const conflictCols = conflicts.map((c) => quoteIdent(POSTGRES_DIALECT, c, 'column'));
   const updateNames =
     config.updateColumns && config.updateColumns.length > 0
       ? config.updateColumns.map((c) => c.name)
       : (table.columns ?? []).map((c) => c.name).filter((n) => !conflicts.includes(n));
   const updates = updateNames.map(
-    (n) => `${quoteIdent(n, 'column')} = EXCLUDED.${quoteIdent(n, 'column')}`,
+    (n) => `${quoteIdent(POSTGRES_DIALECT, n, 'column')} = EXCLUDED.${quoteIdent(POSTGRES_DIALECT, n, 'column')}`,
   );
-  const query = `INSERT INTO ${qualified(config, table.name)} (${cols.join(', ')}) VALUES (${placeholders.join(', ')}) ON CONFLICT (${conflictCols.join(', ')}) DO UPDATE SET ${updates.join(', ')} RETURNING *`;
+  const query = `INSERT INTO ${qualified(POSTGRES_DIALECT, config, table.name)} (${cols.join(', ')}) VALUES (${placeholders.join(', ')}) ON CONFLICT (${conflictCols.join(', ')}) DO UPDATE SET ${updates.join(', ')} RETURNING *`;
   return { query, params };
 }
 
-/** Build a parameterised query from the visual builder config, by operation. */
-export function buildQuery(config: PgBuilderConfig): BuiltQuery {
+/**
+ * Build a parameterised query from the visual builder config, by operation.
+ *
+ * Reads are generated for whichever engine the connection uses. Writes are
+ * Postgres-only for now and say so: INSERT/UPDATE/DELETE lean on `RETURNING *`
+ * and upsert on `ON CONFLICT`, neither of which has a portable equivalent, and
+ * emitting Postgres syntax at MySQL would fail with a confusing parser error
+ * instead of an answerable one. Raw SQL reaches every engine meanwhile.
+ */
+export function buildQuery(config: PgBuilderConfig, dialect: SqlDialect = POSTGRES_DIALECT): BuiltQuery {
   const op = (config.operation ?? 'select').toLowerCase();
+  const isRead = op === 'select' || op === 'select distinct';
+  if (!isRead && dialect.name !== 'postgres') {
+    throw new Error(
+      `${dialect.name}: the visual builder can only read on this engine; write it as SQL in the query box`,
+    );
+  }
   switch (op) {
     case 'select':
     case 'select distinct':
-      return buildSelect(config);
+      return buildSelect(dialect, config);
     case 'insert':
       return buildInsert(config);
     case 'update':
@@ -248,6 +296,6 @@ export function buildQuery(config: PgBuilderConfig): BuiltQuery {
     case 'upsert':
       return buildUpsert(config);
     default:
-      throw new Error(`postgres: unsupported operation "${String(config.operation)}"`);
+      throw new Error(`${dialect.name}: unsupported operation "${String(config.operation)}"`);
   }
 }

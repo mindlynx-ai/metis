@@ -12,14 +12,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-# An OPT-IN sample Postgres for trying the SQL / Postgres nodes. Layer it on:
+# OPT-IN sample databases for trying the Data / SQL nodes. Layer them on:
 #
 #   docker compose -f docker-compose.yml -f docker-compose.sample-db.yml up -d
 #
-# Then add a Postgres connection in Metis (host: postgres, port: 5432,
-# database: metis_sample, user: metis, password: sample) and a SQL step like
-# "select * from orders". Kept out of the hero compose so the offline two-service
-# quickstart (gate 5) stays a pure Temporal + Metis boot.
+# Both carry the SAME orders and customers, so a workflow written against one
+# engine can be pointed at the other and the acceptance suite can run identical
+# cases against each. Add a connection in Metis with:
+#
+#   Postgres  host: postgres  port: 5432  database: metis_sample  user: metis  password: sample
+#   MySQL     host: mysql     port: 3306  database: metis_sample  user: metis  password: sample
+#
+# then a SQL step like "select * from orders". Kept out of the hero compose so
+# the offline two-service quickstart (gate 5) stays a pure Temporal + Metis boot.
 
 services:
   postgres:
@@ -35,5 +40,25 @@ services:
       - ./sample-db.sql:/docker-entrypoint-initdb.d/sample-db.sql:ro
       - sample-db-data:/var/lib/postgresql/data
 
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: metis_sample
+      MYSQL_USER: metis
+      MYSQL_PASSWORD: sample
+      MYSQL_ROOT_PASSWORD: sample-root
+    networks:
+      - metis
+    volumes:
+      - ./sample-db.mysql.sql:/docker-entrypoint-initdb.d/sample-db.sql:ro
+      - sample-db-mysql:/var/lib/mysql
+    healthcheck:
+      test: ['CMD', 'mysqladmin', 'ping', '-h', '127.0.0.1', '-psample-root']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
 volumes:
   sample-db-data:
+  sample-db-mysql:

@@ -302,6 +302,20 @@ body {
   overflow-x: hidden;
 }
 
+/* Every list surface shares one column: the same measure and the same inset,
+   so moving between Workflows, Connectors, Operate and Activity never shifts
+   the page sideways under you. Account keeps its own narrower measure on
+   purpose: it is a settings form, and a form reads better short. */
+.ov-page,
+.home-page,
+.operate-page,
+.conn-page,
+.audit-page {
+  width: 100%;
+  max-width: var(--page-max);
+  margin: 0 auto;
+}
+
 .page-title {
   font-family: var(--font-display);
   font-weight: 560;
@@ -1704,9 +1718,6 @@ body {
   display: flex;
   flex-direction: column;
   gap: var(--space-5);
-  max-width: 1024px;
-  margin: 0 auto;
-  width: 100%;
 }
 
 .operate-counts {
@@ -3142,12 +3153,6 @@ body {
    catalogue picker, and per-connector credential forms with in-modal testing.
    Theme-aware via tokens; motion honours prefers-reduced-motion.
    ============================================================================ */
-.conn-page {
-  max-width: 1120px;
-  margin: 0 auto;
-  padding: var(--space-6) var(--space-5) var(--space-6);
-}
-
 /* The definition band every page opens with (connectors, history, ...). */
 .page-hero {
   display: flex;
@@ -3753,11 +3758,6 @@ body {
 }
 
 /* --- Overview (landing) --- */
-.ov-page {
-  max-width: 1024px;
-  margin: 0 auto;
-  width: 100%;
-}
 .ov-greet {
   color: var(--text-muted);
   font-size: var(--text-sm);
@@ -4022,10 +4022,6 @@ body {
 }
 
 /* --- Home (workflows list) --- */
-.home-page {
-  max-width: 1024px;
-  margin: 0 auto;
-}
 .home-page .workflow-list {
   margin-top: var(--space-5);
 }

@@ -59,6 +59,11 @@
   --duration-base: 180ms;
   --duration-slow: 320ms;
 
+  /* The one column every list surface is measured in. Wider than the 1024 the
+     workflow list used, so a four-column table breathes; bounded, so a wide
+     display does not stretch a row into an unreadable sweep. */
+  --page-max: 1200px;
+
   /* Spacing rhythm (4px grid) */
   --space-1: 4px;
   --space-2: 8px;

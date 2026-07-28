@@ -49,17 +49,21 @@ function material(prefix: string, fallback?: Record<string, string>): Record<str
 }
 
 /**
- * Snowflake's credentials are a different shape entirely: the SQL API takes a
- * key-pair JWT, never a password. The private key may be given inline or as a
- * path, because a PEM in an environment variable is awkward to quote.
+ * Snowflake's credentials are a different shape entirely: the SQL API never
+ * takes a password. Either a programmatic access token or a key pair will do,
+ * so the fixture accepts whichever is configured. The private key may be given
+ * inline or as a path, because a PEM in an environment variable is awkward to
+ * quote.
  */
 function snowflakeMaterial(): Record<string, string> | undefined {
   const account = process.env.METIS_SNOWFLAKE_ACCOUNT;
+  const token = process.env.METIS_SNOWFLAKE_TOKEN ?? '';
   const keyPath = process.env.METIS_SNOWFLAKE_PRIVATE_KEY_PATH;
   const privateKey = process.env.METIS_SNOWFLAKE_PRIVATE_KEY ?? (keyPath ? readFileSync(keyPath, 'utf8') : '');
-  if (!account || !privateKey) return undefined;
+  if (!account || (!privateKey && !token)) return undefined;
   return {
     account,
+    token,
     user: process.env.METIS_SNOWFLAKE_USER ?? '',
     privateKey,
     passphrase: process.env.METIS_SNOWFLAKE_PASSPHRASE ?? '',
@@ -174,7 +178,10 @@ for (const fixture of ENGINES) {
   const configured = up && Boolean(fixture.material);
   const suite = configured ? describe : describe.skip;
   if (up && !fixture.material) {
-    const hint = fixture.engine === 'snowflake' ? 'METIS_SNOWFLAKE_ACCOUNT + a private key' : `METIS_${fixture.engine.toUpperCase()}_HOST`;
+    const hint =
+      fixture.engine === 'snowflake'
+        ? 'METIS_SNOWFLAKE_ACCOUNT plus either METIS_SNOWFLAKE_TOKEN or a private key'
+        : `METIS_${fixture.engine.toUpperCase()}_HOST`;
     // eslint-disable-next-line no-console
     console.warn(`[database] ${fixture.engine} not configured; set ${hint} to run it.`);
   }

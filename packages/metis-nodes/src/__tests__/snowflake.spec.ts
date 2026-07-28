@@ -24,7 +24,7 @@
 import { createHash, createPublicKey, createVerify, generateKeyPairSync } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { jwtAccount, publicKeyFingerprint, snowflakeJwt } from '../snowflake-jwt.js';
-import { bindingsFor, rowsFromResponse, snowflakeHost } from '../snowflake-data-source.js';
+import { authFor, bindingsFor, rowsFromResponse, snowflakeHost } from '../snowflake-data-source.js';
 
 const { privateKey, publicKey } = generateKeyPairSync('rsa', {
   modulusLength: 2048,
@@ -120,5 +120,33 @@ describe('snowflake host', () => {
     expect(snowflakeHost({ account: 'abc', accountUrl: 'https://internal.example.com/' })).toBe(
       'https://internal.example.com',
     );
+  });
+});
+
+describe('snowflake authentication chooses by what the connection carries', () => {
+  it('uses a programmatic access token as-is, signing nothing', () => {
+    const auth = authFor({ key: 'k1', material: { account: 'abc', token: 'the-pat' } });
+    expect(auth).toEqual({ token: 'the-pat', type: 'PROGRAMMATIC_ACCESS_TOKEN' });
+  });
+
+  it('falls back to minting a key-pair JWT when there is no token', () => {
+    const auth = authFor({ key: 'k2', material: { account: 'abc', user: 'u', privateKey } });
+    expect(auth.type).toBe('KEYPAIR_JWT');
+    // A real JWT, not the key echoed back.
+    expect(auth.token.split('.')).toHaveLength(3);
+  });
+
+  it('prefers the token when a connection somehow carries both', () => {
+    // Belt and braces: whichever the operator filled in last, one credential
+    // has to win deterministically rather than by accident.
+    const auth = authFor({ key: 'k3', material: { account: 'abc', user: 'u', privateKey, token: 'pat' } });
+    expect(auth.type).toBe('PROGRAMMATIC_ACCESS_TOKEN');
+  });
+
+  it('caches the minted JWT rather than re-signing every call', () => {
+    const material = { account: 'abc', user: 'u', privateKey };
+    const first = authFor({ key: 'cache-me', material });
+    const second = authFor({ key: 'cache-me', material });
+    expect(second.token).toBe(first.token);
   });
 });

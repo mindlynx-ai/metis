@@ -20,8 +20,10 @@
  * Apache-2.0 build, for a warehouse that already exposes plain JSON over HTTPS.
  *
  * Three things differ from a wire-protocol database and shape this adapter:
- *   - Authentication is a short-lived key-pair JWT, not a password. See
- *     snowflake-jwt.ts; the token is cached until shortly before it expires.
+ *   - Authentication is never a password. It is either a programmatic access
+ *     token (a string the account issues, simplest to set up) or a short-lived
+ *     JWT signed with a key pair (see snowflake-jwt.ts, cached until shortly
+ *     before it expires). A connection supplies whichever it has.
  *   - A result arrives as arrays of strings plus separate column metadata, so
  *     rows are assembled here and numeric columns are converted back.
  *   - A statement that outruns the synchronous window answers 202 with a
@@ -71,10 +73,26 @@ export function snowflakeHost(material: Record<string, string>): string {
   return `https://${account}.snowflakecomputing.com`;
 }
 
-function tokenFor(connection: DataConnection): string {
+/** The bearer token and the type header that names how it was made. */
+export interface SnowflakeAuth {
+  token: string;
+  type: 'PROGRAMMATIC_ACCESS_TOKEN' | 'KEYPAIR_JWT';
+}
+
+/**
+ * A programmatic access token is used as-is: the account issued it, it already
+ * identifies the user and role, and there is nothing to sign or cache. A key
+ * pair mints a JWT instead, held until just before it expires.
+ */
+export function authFor(connection: DataConnection): SnowflakeAuth {
+  const pat = connection.material.token?.trim();
+  if (pat) return { token: pat, type: 'PROGRAMMATIC_ACCESS_TOKEN' };
+
   const cached = tokens.get(connection.key);
   const now = Math.floor(Date.now() / 1000);
-  if (cached && cached.expiresAt - TOKEN_SKEW_SECONDS > now) return cached.token;
+  if (cached && cached.expiresAt - TOKEN_SKEW_SECONDS > now) {
+    return { token: cached.token, type: 'KEYPAIR_JWT' };
+  }
   const token = snowflakeJwt({
     account: connection.material.account ?? '',
     user: connection.material.user ?? '',
@@ -82,7 +100,7 @@ function tokenFor(connection: DataConnection): string {
     passphrase: connection.material.passphrase || undefined,
   });
   tokens.set(connection.key, { token, expiresAt: now + JWT_LIFETIME_SECONDS });
-  return token;
+  return { token, type: 'KEYPAIR_JWT' };
 }
 
 /** Snowflake reports a column's type in its own vocabulary; keep it, but name
@@ -149,11 +167,12 @@ export class SnowflakeDataSource implements DataSource {
     init: { method: string; body?: unknown },
   ): Promise<StatementResponse> {
     const host = snowflakeHost(connection.material);
+    const auth = authFor(connection);
     const res = await fetch(`${host}${path}`, {
       method: init.method,
       headers: {
-        authorization: `Bearer ${tokenFor(connection)}`,
-        'x-snowflake-authorization-token-type': 'KEYPAIR_JWT',
+        authorization: `Bearer ${auth.token}`,
+        'x-snowflake-authorization-token-type': auth.type,
         'content-type': 'application/json',
         accept: 'application/json',
         'user-agent': 'metis',
@@ -187,12 +206,13 @@ export class SnowflakeDataSource implements DataSource {
       await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
       const host = snowflakeHost(connection.material);
       const statementUrl = `${host}/api/v2/statements/${encodeURIComponent(handle)}`;
+      const auth = authFor(connection);
       const res = await fetch(
         statementUrl,
         {
           headers: {
-            authorization: `Bearer ${tokenFor(connection)}`,
-            'x-snowflake-authorization-token-type': 'KEYPAIR_JWT',
+            authorization: `Bearer ${auth.token}`,
+            'x-snowflake-authorization-token-type': auth.type,
             accept: 'application/json',
             'user-agent': 'metis',
           },

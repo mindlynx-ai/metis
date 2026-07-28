@@ -33,7 +33,7 @@
 import { readFileSync } from 'node:fs';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { BASE, client, login, node, nodeId, runtimeUp } from '../harness.js';
-import { cancelStragglers, outputOf, settled, startRun, until, type Api } from './shop.js';
+import { cancelStragglers, edge, outputOf, settled, startRun, until, type Api } from './shop.js';
 
 /** Credentials for a host/port engine, or undefined when it is not configured. */
 function material(prefix: string, fallback?: Record<string, string>): Record<string, string> | undefined {
@@ -308,3 +308,63 @@ for (const fixture of ENGINES) {
     }, 60000);
   });
 }
+
+/**
+ * The chain an operator actually builds: read from a database, then reshape
+ * what came back. Worth its own case because the transform step is only useful
+ * if an earlier step's rows can reach it, and that wiring lives in a config
+ * field (`inputData`) that has to be discoverable, not folklore.
+ */
+const readAndShape = process.env.METIS_MYSQL_CONNECTION;
+const chain = up && readAndShape ? describe : describe.skip;
+
+chain('a database read feeding a transform', () => {
+  let api: Api;
+  let wf: string;
+
+  beforeAll(async () => {
+    api = client(await login());
+    const created = await api<{ workflowId: string }>('POST', '/api/workflows', {
+      name: `read-and-shape-${Date.now()}`,
+      type: 'workflow',
+      nodes: [node(nodeId(), 'code', { code: 'return { seeded: true };' }, 'seed')],
+      edges: [],
+    });
+    wf = created.body.workflowId;
+  });
+
+  afterAll(async () => {
+    await cancelStragglers(api);
+  });
+
+  it('DB-06 rows from a database node reach a transform and are reshaped', async () => {
+    const read = node(
+      nodeId(),
+      'mysql',
+      { connectorId: readAndShape, query: 'select customer, amount, status from orders order by id' },
+      'read orders',
+    );
+    // The wiring under test: an earlier step's rows named as this step's input.
+    const shape = node(
+      nodeId(),
+      'transform',
+      {
+        inputData: `{{${read.id}.data.rows}}`,
+        code: `const rows = input ?? [];
+               const paid = rows.filter((r) => r.status === 'paid');
+               return { orders: rows.length, paidOrders: paid.length,
+                        paidTotal: paid.reduce((sum, r) => sum + Number(r.amount), 0) };`,
+      },
+      'total the paid orders',
+    );
+    const executionId = await startRun(api, wf, [read, shape], [edge(read.id, shape.id)]);
+    const run = await until(api, executionId, settled, 40000);
+
+    expect(run.meta.status).toBe('completed');
+    const shaped = outputOf(run.logs, shape.id) as { orders?: number; paidOrders?: number; paidTotal?: number };
+    // The seeded sample: six orders, four of them paid.
+    expect(shaped.orders).toBe(6);
+    expect(shaped.paidOrders).toBe(4);
+    expect(shaped.paidTotal).toBeCloseTo(789.5, 2);
+  }, 90000);
+});

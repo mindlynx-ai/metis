@@ -783,9 +783,14 @@
           "code"
         ],
         "properties": {
+          "inputData": {
+            "type": "string",
+            "title": "Data in",
+            "description": "The data this step transforms. Reference an earlier step, e.g. {{step.data.rows}} for a database read. It arrives in your code as `input`. Leave empty for a step that needs no input."
+          },
           "code": {
             "type": "string",
-            "description": "JavaScript/TypeScript code. Use ctx.input to access workflow input."
+            "description": "JavaScript that returns this step's output. Whatever you wire into \"Data in\" arrives as the variable `input`; `return` the shape you want to pass on."
           },
           "language": {
             "type": "string",

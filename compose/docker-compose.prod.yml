@@ -56,6 +56,9 @@ services:
       - '443:443'
     environment:
       METIS_DEMO_HOST: ${METIS_DEMO_HOST:?set METIS_DEMO_HOST in .env}
+      # Space-separated extra hostnames to redirect here. See the Caddyfile:
+      # list only names whose DNS already points at this box.
+      METIS_REDIRECT_HOSTS: ${METIS_REDIRECT_HOSTS:-metis-redirect.localhost}
     networks:
       - metis
     volumes:

@@ -102,26 +102,39 @@ describe('mayDecide', () => {
   });
 });
 
-describe('the palette and paid steps', () => {
+describe('the palette and entitled steps', () => {
   const entry = (over: Partial<CatalogueEntry>): CatalogueEntry =>
     ({ type: 'x', category: 'logic', tier: 'open', handler_status: 'ready', ...over }) as CatalogueEntry;
-  const approvalEntry = entry({ type: 'approval', entitlement: 'cap.approvals', execution: 'local' });
+  // Hypothetical on purpose: no shipped entry is entitled AND local today (the
+  // sign-off gate was, until it became part of the product). The rule is what
+  // is under test, so it is exercised on the shape rather than on whichever
+  // node happens to have it this month.
+  const entitledLocal = entry({ type: 'future', entitlement: 'cap.later', execution: 'local' });
   const cloudEntry = entry({ type: 'data', entitlement: 'cap.data', execution: 'both' });
   const openEntry = entry({ type: 'code' });
+  const approvalEntry = entry({ type: 'approval', execution: 'local' });
 
-  it('a paid local step is locked without the entitlement, addable with it', () => {
-    expect(isLockedCapability(approvalEntry, [])).toBe(true);
-    expect(isLockedCapability(approvalEntry, ['cap.approvals'])).toBe(false);
+  it('an entitled local step is locked without the entitlement, addable with it', () => {
+    expect(isLockedCapability(entitledLocal, [])).toBe(true);
+    expect(isLockedCapability(entitledLocal, ['cap.later'])).toBe(false);
   });
 
   it('a cloud step stays addable: it has a local backend either way', () => {
     expect(isLockedCapability(cloudEntry, [])).toBe(false);
   });
 
-  it('the open picker offers the open steps and never the paid one', () => {
-    const open = addableEntries([openEntry, cloudEntry, approvalEntry], []).map((item) => item.type);
-    expect(open).toEqual(['code', 'data']);
-    const paid = addableEntries([openEntry, cloudEntry, approvalEntry], ['cap.approvals']);
-    expect(paid.map((item) => item.type)).toContain('approval');
+  it('the sign-off gate is addable on an instance that owns nothing', () => {
+    // The regression this exists to catch: an entitlement back on the approval
+    // entry would make the palette hide it on every instance in existence,
+    // including one whose runtime can execute it perfectly well.
+    expect(isLockedCapability(approvalEntry, [])).toBe(false);
+    expect(addableEntries([approvalEntry], []).map((item) => item.type)).toEqual(['approval']);
+  });
+
+  it('the picker offers what this build can run, and never what it cannot', () => {
+    const owned = addableEntries([openEntry, cloudEntry, entitledLocal], []).map((item) => item.type);
+    expect(owned).toEqual(['code', 'data']);
+    const entitled = addableEntries([openEntry, cloudEntry, entitledLocal], ['cap.later']);
+    expect(entitled.map((item) => item.type)).toContain('future');
   });
 });

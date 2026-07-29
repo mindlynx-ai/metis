@@ -57,20 +57,28 @@ const CAP_DETAILS: Record<string, { icon: IconName; adds: string[] }> = {
       'Guard-rails and review built in',
     ],
   },
-  'cap.approvals': {
-    icon: 'stamp',
-    adds: [
-      'Sign-off requests in one inbox',
-      'Escalation when nobody answers',
-      'A full record of every decision',
-    ],
-  },
   'cap.model': {
     icon: 'spark',
     adds: [
       'Managed AI models, no keys to mind',
       'The right model picked per task',
       'Spending caps you control',
+    ],
+  },
+  'cap.tenancy': {
+    icon: 'grid',
+    adds: [
+      'Many organisations, one instance',
+      'Data sealed off between them',
+      'Per-organisation limits and billing',
+    ],
+  },
+  'cap.identity': {
+    icon: 'flag',
+    adds: [
+      'A real user directory, not two env vars',
+      'Invite people instead of redeploying',
+      'Single sign-on with your provider',
     ],
   },
 };

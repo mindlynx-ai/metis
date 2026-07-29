@@ -44,6 +44,10 @@ const PLANS_URL = 'https://docs.metisflow.io/pricing/';
  * this product has not earned yet, so everything purchasable sits in the same
  * subscription and capabilities join it as they ship. Changing the price is
  * editing PRO_PRICE and the pricing page, nothing else.
+ *
+ * What it buys is work that runs somewhere else. Everything that runs on your
+ * own machine - every node type, the sign-off gate, the audit log - is in the
+ * download, and no plan is required to use any of it.
  */
 export const PRO_PRICE = { amount: 900, currency: 'GBP', interval: 'month' } as const;
 
@@ -56,22 +60,15 @@ export const PRO_PRICE = { amount: 900, currency: 'GBP', interval: 'month' } as 
  */
 export const STATIC_OFFERS: OfferEntry[] = [
   {
-    id: 'cap.approvals',
-    title: 'Approvals',
-    description: 'Human sign-off gates inside a run.',
-    // The first capability that actually exists to sell, so the first one
-    // priced. The others stay coming-soon until their code does too.
-    state: 'available',
-    ctaUrl: PLANS_URL,
-    price: PRO_PRICE,
-    message: 'pauses a run for a human decision.',
-  },
-  {
     id: 'cap.data',
     title: 'Big data',
     description: 'Query millions of rows and run heavy transforms in the cloud.',
-    state: 'coming-soon',
+    // The one capability that genuinely cannot run on your own machine: the
+    // query executes on a warehouse someone else operates. That is what makes
+    // it the honest thing to charge for, and why it is the first one priced.
+    state: 'available',
     ctaUrl: PLANS_URL,
+    price: PRO_PRICE,
     // The palette's uplift pitch tail; mirrors the live manifest so the
     // strip reads the same offline.
     message: 'handles millions of rows.',
@@ -96,6 +93,26 @@ export const STATIC_OFFERS: OfferEntry[] = [
     description: 'Managed AI models with spending caps.',
     state: 'coming-soon',
     ctaUrl: PLANS_URL,
+  },
+  // The enterprise axis. A download runs one tenant and the handful of users
+  // its environment seeds, which is the right shape for the people who run it
+  // themselves; an organisation that needs many of both is buying something
+  // this build does not pretend to be.
+  {
+    id: 'cap.tenancy',
+    title: 'Multi-tenancy',
+    description: 'One instance serving many separate organisations, each sealed off.',
+    state: 'coming-soon',
+    ctaUrl: PLANS_URL,
+    scope: 'plan',
+  },
+  {
+    id: 'cap.identity',
+    title: 'Teams and sign-on',
+    description: 'A real user directory, invites and single sign-on.',
+    state: 'coming-soon',
+    ctaUrl: PLANS_URL,
+    scope: 'plan',
   },
 ];
 

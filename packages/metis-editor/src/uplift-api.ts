@@ -38,6 +38,9 @@ export interface OfferEntry {
   ctaUrl: string;
   message?: string;
   price?: OfferPrice;
+  /** 'step' shows in the builder palette; 'plan' is about the shape of the
+   *  instance and belongs only on the account page. Absent means 'step'. */
+  scope?: 'step' | 'plan';
 }
 
 /**

@@ -3,7 +3,7 @@
 > Park the run until a person signs off, then take the approved or rejected branch.
 
 ## What it is
-A human sign-off gate inside a run: the run parks, someone reviews it, and the Approved or Rejected branch runs. Available in Helix.
+A human sign-off gate inside a run: the run parks, someone reviews it, and the Approved or Rejected branch runs.
 
 ## How it works
 When the step is reached the approval is raised with the values you chose to show, and the run parks durably (no compute is used while it waits, and it survives restarts). The reviewer decides in Reviews; their identity comes from their session, never from the request, so the run's log answers 'who approved this'. The decision, the reason and the time are recorded on the run.

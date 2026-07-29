@@ -88,8 +88,11 @@ test('the picker groups apps by category and searches by keyword', async ({ page
   await expect(lib.getByRole('heading', { name: 'Triggers' })).toBeVisible();
   await expect(lib.locator('summary', { hasText: 'Communication' })).toBeVisible();
 
-  // Storefront: paid tiers render as locked cards, never addable buttons.
-  await expect(lib.locator('.locked-card')).toHaveCount(4);
+  // Storefront: cloud-only capabilities render as locked cards, never addable
+  // buttons. Three: Memory, Agents, Models. Big data has a local backend so it
+  // is an ordinary card with an uplift strip, and the plan-level capabilities
+  // are not steps at all.
+  await expect(lib.locator('.locked-card')).toHaveCount(3);
   await expect(lib.locator('.locked-card button')).toHaveCount(0);
   await expect(lib.getByText('cortex.memory.read')).toHaveCount(0);
 

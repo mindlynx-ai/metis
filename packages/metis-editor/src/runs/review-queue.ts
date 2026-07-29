@@ -20,9 +20,10 @@
  * parks for a person puts the request there too, so the queue needs no
  * endpoint of its own and no second store to fall out of step with the runs.
  *
- * The shape of that request is duplicated here on purpose: the paid pack
- * that writes it must never be importable from the open editor, so this
- * side reads it defensively and shows only what it recognises.
+ * The shape of that request is duplicated here on purpose. The package that
+ * writes it runs on the server, so a browser bundle has no business importing
+ * it, and the request arrives over HTTP from a build that may not be this one.
+ * This side therefore reads it defensively and shows only what it recognises.
  */
 import type { TemporalExecution, WaitingOn } from '../api.js';
 

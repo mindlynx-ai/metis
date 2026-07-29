@@ -509,9 +509,30 @@ describe('the static offers manifest is a storefront, not a placeholder', () => 
     }
   });
 
-  it('sells approvals, the one paid capability that actually exists', () => {
-    const approvals = STATIC_OFFERS.find((offer) => offer.id === 'cap.approvals');
-    expect(approvals?.state).toBe('available');
-    expect(approvals?.price).toEqual({ amount: 900, currency: 'GBP', interval: 'month' });
+  it('sells the one capability that cannot run on your own machine', () => {
+    const data = STATIC_OFFERS.find((offer) => offer.id === 'cap.data');
+    expect(data?.state).toBe('available');
+    expect(data?.price).toEqual({ amount: 900, currency: 'GBP', interval: 'month' });
+  });
+
+  it('sells nothing that runs locally', () => {
+    // The line the storefront exists to hold: you pay for work that happens
+    // somewhere else. A sign-off gate, an audit log and every node type run on
+    // the machine in front of you, so none of them may reappear here.
+    const local = ['cap.approvals', 'cap.audit', 'cap.workflows', 'cap.schedules'];
+    for (const id of local) {
+      expect(STATIC_OFFERS.find((offer) => offer.id === id)).toBeUndefined();
+    }
+  });
+
+  it('keeps plan capabilities out of the step palette', () => {
+    // A locked "Multi-tenancy" card in a picker of things to drop on a canvas
+    // reads as nonsense; the palette filters on this, so the manifest has to
+    // say which is which.
+    const byId = new Map(STATIC_OFFERS.map((offer) => [offer.id, offer]));
+    expect(byId.get('cap.tenancy')?.scope).toBe('plan');
+    expect(byId.get('cap.identity')?.scope).toBe('plan');
+    // A step capability may leave it absent; that is the default.
+    expect(byId.get('cap.data')?.scope ?? 'step').toBe('step');
   });
 });

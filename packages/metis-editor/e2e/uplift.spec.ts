@@ -108,7 +108,14 @@ test('locked cards are offers-overlaid links with the Cloud only pill', async ({
   await page.getByRole('button', { name: 'Add step' }).click();
   const lib = page.locator('.library');
   const locked = lib.locator('a.locked-card');
-  await expect(locked).toHaveCount(4);
+  // Memory, Agents, Models. Big data is absent because the Data step exists
+  // locally (it gets the uplift strip on its own card), and the plan-level
+  // capabilities are absent because "Multi-tenancy, locked" in a picker of
+  // steps to drop on a canvas reads as nonsense.
+  await expect(locked).toHaveCount(3);
+  const group = lib.locator('.locked-group');
+  await expect(group).not.toContainText('Multi-tenancy');
+  await expect(group).not.toContainText('Big data');
   await expect(locked.first()).toContainText('Memory');
   await expect(locked.first().locator('.cloud-pill')).toHaveText('Cloud only');
   await expect(locked.first()).toContainText('Available in Helix');
@@ -408,11 +415,15 @@ test('the account page: disconnected hero + the capability grid from offers', as
   await expect(page.getByRole('button', { name: 'New here? Create an account' })).toBeVisible();
 
   const cards = page.locator('.capcard');
-  await expect(cards).toHaveCount(5);
+  await expect(cards).toHaveCount(6);
   const bigData = page.locator('.capcard', { hasText: 'Big data' });
   await expect(bigData.locator('.chip')).toHaveText('Available');
   await expect(bigData).toContainText('Millions of rows, not thousands');
-  await expect(page.locator('.chip', { hasText: 'Coming soon' })).toHaveCount(4);
+  await expect(page.locator('.chip', { hasText: 'Coming soon' })).toHaveCount(5);
+  // The plan-level capabilities live here and nowhere else: the palette is a
+  // list of steps and neither of these is one.
+  await expect(page.locator('.capcard', { hasText: 'Multi-tenancy' })).toHaveCount(1);
+  await expect(page.locator('.capcard', { hasText: 'Teams and sign-on' })).toHaveCount(1);
   await noBlockingViolations(page);
 });
 
@@ -421,7 +432,7 @@ for (const theme of THEMES) {
     await login(page);
     await setTheme(page, theme);
     await page.goto('http://127.0.0.1:4180/account');
-    await expect(page.locator('.capcard')).toHaveCount(5);
+    await expect(page.locator('.capcard')).toHaveCount(6);
     await settle(page);
     if (mac) await expect(page).toHaveScreenshot(`account-disconnected-${theme}.png`);
   });
@@ -433,7 +444,7 @@ test('account fidelity at 390px', async ({ browser }) => {
   await login(page);
   await setTheme(page, 'dark');
   await page.goto('http://127.0.0.1:4180/account');
-  await expect(page.locator('.capcard')).toHaveCount(5);
+  await expect(page.locator('.capcard')).toHaveCount(6);
   await settle(page);
   if (mac) await expect(page).toHaveScreenshot('account-390.png', { fullPage: true });
   await context.close();
@@ -477,15 +488,20 @@ test('stub down: the static manifest still renders and the hero reads offline', 
     await login(page);
     await page.goto('http://127.0.0.1:4180/account');
     await expect(page.locator('.offline-note')).toContainText("You're offline.");
-    // The bundled manifest keeps the grid rendering - everything coming soon.
-    await expect(page.locator('.capcard')).toHaveCount(5);
+    // The bundled manifest keeps the grid rendering: six capabilities, of
+    // which Big data is the one that can be bought.
+    await expect(page.locator('.capcard')).toHaveCount(6);
     await expect(page.locator('.chip', { hasText: 'Coming soon' })).toHaveCount(5);
+    await expect(page.locator('.chip', { hasText: 'Available' })).toHaveCount(1);
+    // The account page is where a plan-level capability belongs, so unlike the
+    // palette it does show them.
+    await expect(page.locator('.capcard', { hasText: 'Multi-tenancy' })).toHaveCount(1);
 
     // The palette still shows the uplift affordance and the locked links.
     await page.goto('http://127.0.0.1:4180/workflows/uplift-offline/edit');
     await page.getByRole('button', { name: 'Add step' }).click();
     const lib = page.locator('.library');
-    await expect(lib.locator('a.locked-card')).toHaveCount(4);
+    await expect(lib.locator('a.locked-card')).toHaveCount(3);
     await lib.getByLabel('Find a step').fill('data');
     await expect(lib.locator('.lib-uplift .up-glyph')).toBeVisible();
   } finally {

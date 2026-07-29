@@ -53,18 +53,30 @@ export const STUB_OFFERS: OfferEntry[] = [
     ctaUrl: 'https://helix.example/plans',
   },
   {
-    id: 'cap.approvals',
-    title: 'Approvals',
-    description: 'Human sign-off gates inside a run.',
-    state: 'coming-soon',
-    ctaUrl: 'https://helix.example/plans',
-  },
-  {
     id: 'cap.model',
     title: 'Models',
     description: 'Managed AI models with spending caps.',
     state: 'coming-soon',
     ctaUrl: 'https://helix.example/plans',
+  },
+  // Plan-level: no step to add, so the palette skips these and only the
+  // account page shows them. Mirrors STATIC_OFFERS so the two views of the
+  // same storefront cannot drift.
+  {
+    id: 'cap.tenancy',
+    title: 'Multi-tenancy',
+    description: 'One instance serving many separate organisations, each sealed off.',
+    state: 'coming-soon',
+    ctaUrl: 'https://helix.example/plans',
+    scope: 'plan',
+  },
+  {
+    id: 'cap.identity',
+    title: 'Teams and sign-on',
+    description: 'A real user directory, invites and single sign-on.',
+    state: 'coming-soon',
+    ctaUrl: 'https://helix.example/plans',
+    scope: 'plan',
   },
 ];
 

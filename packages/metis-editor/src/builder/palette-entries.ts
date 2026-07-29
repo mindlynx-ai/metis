@@ -17,16 +17,20 @@
 /**
  * Which catalogue entries the picker may actually add.
  *
- * The catalogue is one file across editions, so it also describes steps this
- * build cannot run: a paid step that runs LOCALLY (an approval, not a cloud
- * job) ships its entry here but its handler only in the paid pack. Offering
- * it as an ordinary step would let someone build a workflow that answers
- * "not in this edition" at run time, which is the silent failure the
- * upgrade path exists to avoid. It shows as a locked card instead.
+ * The catalogue is one file across editions, so it can describe a step this
+ * build cannot run: one whose entitlement is paid AND whose work is local, so
+ * there is no local backend to fall back to. Offering that as an ordinary step
+ * would let someone build a workflow that answers "not in this edition" at run
+ * time, which is the silent failure the upgrade path exists to avoid, so it
+ * shows as a locked card instead.
+ *
+ * No shipped entry is in that state today - the sign-off gate was, until it
+ * became part of the product - but the rule stays, because the day one is
+ * added is the day it matters.
  */
 import type { CatalogueEntry } from '../api.js';
 
-/** True when the entry's handler cannot be in this build: paid, and local
+/** True when the entry's handler cannot be in this build: entitled, and local
  *  (a 'both' entry always has a local backend, so it stays addable). */
 export function isLockedCapability(entry: CatalogueEntry, capabilities: string[]): boolean {
   if (!entry.entitlement) return false;

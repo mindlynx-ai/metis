@@ -34,12 +34,17 @@ import { nodeIcon } from './node-visual.js';
 import { addableEntries } from './palette-entries.js';
 import { suggestedStepTypes, suggestedTitle } from './suggested-steps.js';
 
-/** Storefront metadata only: names and pitches, never implementations. */
+/** Storefront metadata only: names and pitches, never implementations. The
+ *  offline stand-in for the locked cards, so it must match what the live
+ *  manifest yields here: step capabilities with no local backend. No
+ *  plan-level ones ("Multi-tenancy, locked" in a step picker reads as
+ *  nonsense), and no Big data, because the Data step exists locally and gets
+ *  the uplift strip on its own card rather than a locked one. Approvals left
+ *  this list when the sign-off gate became part of the product. */
 export const LOCKED_TIERS: { name: string; pitch: string }[] = [
-  { name: 'Big data', pitch: 'Query millions of rows (Athena, Snowflake).' },
-  { name: 'Memory', pitch: 'Give workflows long-term recall with Cortex.' },
+  { name: 'Memory', pitch: 'Give workflows long-term recall.' },
   { name: 'Agents', pitch: 'Delegate steps to autonomous skills.' },
-  { name: 'Approvals', pitch: 'Human sign-off gates inside a run.' },
+  { name: 'Models', pitch: 'Managed AI models with spending caps.' },
 ];
 
 // The picker groups: core building blocks first (always open), then the app
@@ -191,7 +196,12 @@ export function Palette({
     // A capability the account already has is not an upsell: its steps are in
     // the list above, so a locked card for it would be selling what is owned.
     return uplift.offers.filter(
-      (offer) => !inline.has(offer.id) && !uplift.capabilities.includes(offer.id),
+      (offer) =>
+        // A plan capability has no step to add, so it belongs on the account
+        // page, not in a picker of things to drop on a canvas.
+        (offer.scope ?? 'step') === 'step' &&
+        !inline.has(offer.id) &&
+        !uplift.capabilities.includes(offer.id),
     );
   }, [ready, uplift.offers, uplift.capabilities]);
 

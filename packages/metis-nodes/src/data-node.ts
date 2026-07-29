@@ -86,13 +86,67 @@ function asDatasetRef(value: unknown): DatasetRef | undefined {
 
 type SqlPlan = { sql: string; params: unknown[] } | { error: { status: number; message: string } };
 
-/** The SQL to run: a reference's own query wins, else the raw query, else the
- *  visual table builder. Returns a 400 plan when none is configured. */
-function resolveSql(ref: DatasetRef | undefined, config: DataNodeConfig, engine: string): SqlPlan {
-  if (ref) {
-    if (!ref.query) return { error: { status: 400, message: 'the dataset reference has no query to run' } };
-    return { sql: ref.query, params: [] };
+/** What a step handed a handle addresses the upstream rows by. */
+const SOURCE_ALIAS = 'source';
+
+/** True when the step asks for anything narrower than the whole handle. */
+function narrows(config: DataNodeConfig): boolean {
+  return Boolean(
+    (config.where && config.where.length > 0) ||
+      (config.orderBy && config.orderBy.length > 0) ||
+      (typeof config.limit === 'number' && config.limit > 0) ||
+      ((config.tables ?? [])[0]?.columns ?? []).length > 0,
+  );
+}
+
+/**
+ * Reading a dataset handle, optionally narrowed. Search and filter push DOWN
+ * into the upstream query rather than pulling every row back to compare here:
+ * the point of a handle is that the rows never had to travel.
+ */
+function resolveFromHandle(ref: DatasetRef, config: DataNodeConfig, engine: string): SqlPlan {
+  if (!ref.query) return { error: { status: 400, message: 'the dataset reference has no query to run' } };
+  // Checked before anything else, because both paths below would swallow it:
+  // defaulting the operation to select turns a delete into a read, and a write
+  // with no filter looks like "narrows nothing" and just opens the handle.
+  if (WRITE_OPS.has((config.operation ?? '').toLowerCase())) {
+    return {
+      error: { status: 400, message: 'a dataset reference can only be read from, not written through' },
+    };
   }
+  // Hand-written SQL alongside a handle is ambiguous: there is no way to tell
+  // whether it replaces the upstream query or runs over it. It used to be
+  // dropped without a word, so a step that looked filtered returned everything.
+  if (config.query && config.query.trim() !== '') {
+    return {
+      error: {
+        status: 400,
+        message:
+          'this step reads a dataset reference, so its own query cannot also run. ' +
+          `Filter the reference with the builder (it is available as "${SOURCE_ALIAS}"), ` +
+          'or drop the reference to run the query on its own.',
+      },
+    };
+  }
+  if (!narrows(config)) return { sql: ref.query, params: [] };
+  try {
+    const built = buildQuery({ ...config, operation: config.operation ?? 'select' }, dialectFor(engine), {
+      sql: ref.query,
+      alias: SOURCE_ALIAS,
+    });
+    return { sql: built.query, params: built.params };
+  } catch (error) {
+    return { error: { status: 400, message: error instanceof Error ? error.message : String(error) } };
+  }
+}
+
+/**
+ * The SQL to run: a handle's query (narrowed by this step's filter if it has
+ * one), else the raw query, else the visual table builder. Returns a 400 plan
+ * when the configuration cannot mean one thing.
+ */
+function resolveSql(ref: DatasetRef | undefined, config: DataNodeConfig, engine: string): SqlPlan {
+  if (ref) return resolveFromHandle(ref, config, engine);
   if (config.query && config.query.trim() !== '') {
     return { sql: config.query, params: (config.params ?? []) as unknown[] };
   }

@@ -126,3 +126,52 @@ describe('the generic data node', () => {
     expect(seen.sql).toBeUndefined();
   });
 });
+
+describe('filtering a dataset handle pushes down instead of pulling back', () => {
+  const REF = { kind: 'dataset', connectionId: 'conn1', engine: 'postgres', query: 'select * from orders' };
+  const run = async (config: Record<string, unknown>) => {
+    const { handler, seen } = build();
+    const result = await handler(nodeCtx('data', { connectorId: 'conn1', sourceRef: REF, ...config }));
+    return { result, seen };
+  };
+
+  it('opens the handle unchanged when the step narrows nothing', async () => {
+    const { result, seen } = await run({});
+    expect(result.status).toBe(200);
+    expect(seen.sql).toBe('select * from orders');
+  });
+
+  it('wraps the handle as a derived table to filter it', async () => {
+    const { seen } = await run({ where: [{ column: 'amount', operator: '>', value: 100 }] });
+    expect(seen.sql).toBe('SELECT * FROM (select * from orders) AS "source" WHERE "source"."amount" > $1');
+    // Bound, never interpolated: pushing a filter down is not worth opening an
+    // injection hole on the way.
+    expect(seen.params).toEqual([100]);
+  });
+
+  it('pushes a cap and an order down too', async () => {
+    const { seen } = await run({ limit: 10, orderBy: [{ column: 'created_at', direction: 'descending' }] });
+    expect(seen.sql).toBe(
+      'SELECT * FROM (select * from orders) AS "source" ORDER BY "source"."created_at" DESC LIMIT 10',
+    );
+  });
+
+  it('narrows the columns rather than selecting them all', async () => {
+    const { seen } = await run({ tables: [{ name: 'ignored', columns: [{ name: 'id' }, { name: 'amount' }] }] });
+    expect(seen.sql).toBe('SELECT "source"."id", "source"."amount" FROM (select * from orders) AS "source"');
+  });
+
+  it('refuses hand-written SQL alongside a handle instead of dropping it', async () => {
+    // The silent case this replaces: the step looked filtered and returned
+    // every row the upstream query produced.
+    const { result, seen } = await run({ query: 'select * from orders where amount > 100' });
+    expect(result.status).toBe(400);
+    expect(result.message).toMatch(/cannot also run/i);
+    expect(seen.sql).toBeUndefined();
+  });
+
+  it('refuses to write through a handle', async () => {
+    const { result } = await run({ operation: 'delete', where: [{ column: 'id', operator: '=', value: 1 }] });
+    expect(result.status).toBe(400);
+  });
+});

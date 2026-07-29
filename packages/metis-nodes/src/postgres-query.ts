@@ -117,6 +117,18 @@ export interface PgBuilderConfig {
   updateColumns?: { name: string }[];
 }
 
+/**
+ * A relation made of an earlier step's rows rather than a table in a schema:
+ * the dataset handle a `reference` step produced, wrapped so a later step can
+ * filter, order and cap it without materialising the whole thing first.
+ */
+export interface DerivedSource {
+  /** The upstream query, already composed. Becomes a derived table. */
+  sql: string;
+  /** What the WHERE and ORDER BY clauses address it by. */
+  alias: string;
+}
+
 export interface BuiltQuery {
   query: string;
   params: unknown[];
@@ -185,10 +197,40 @@ function orderByClause(d: SqlDialect, orderBy: PgOrderBy[], tables: PgTable[], f
     .join(', ');
 }
 
-function buildSelect(d: SqlDialect, config: PgBuilderConfig): BuiltQuery {
+/**
+ * What the SELECT reads from. A derived source stands in for the table: the
+ * rows are whatever an earlier step's query produced, so there is exactly one
+ * relation, it is named by its alias rather than looked up in a schema, and
+ * the columns still come from the config so "just these, filtered" narrows.
+ */
+function selectSource(
+  d: SqlDialect,
+  config: PgBuilderConfig,
+  from: DerivedSource | undefined,
+): { tables: PgTable[]; columnSource: PgTable[]; target: string; trailingAlias: string } {
+  if (from) {
+    const tables = [{ name: from.alias }];
+    return {
+      tables,
+      columnSource: [{ name: from.alias, columns: (config.tables ?? [])[0]?.columns }],
+      target: `(${from.sql}) AS ${quoteIdent(d, from.alias, 'alias')}`,
+      trailingAlias: '',
+    };
+  }
   const tables = config.tables ?? [];
   if (tables.length === 0) throw new Error(`${d.name}: select needs at least one table`);
+  const first = tables[0]!;
+  return {
+    tables,
+    columnSource: tables,
+    target: qualified(d, config, first.name),
+    trailingAlias: first.alias ? ` ${quoteIdent(d, first.alias, 'alias')}` : '',
+  };
+}
+
+function buildSelect(d: SqlDialect, config: PgBuilderConfig, from?: DerivedSource): BuiltQuery {
   if (config.join && config.join.length > 0) throw new Error(`${d.name}: JOIN is not yet supported`);
+  const { tables, columnSource, target, trailingAlias } = selectSource(d, config, from);
 
   const first = tables[0]!;
   const isDistinct = (config.operation ?? '').toLowerCase() === 'select distinct';
@@ -196,8 +238,7 @@ function buildSelect(d: SqlDialect, config: PgBuilderConfig): BuiltQuery {
   // A SQL Server cap has to be decided before the column list is written, not
   // appended after it, so it is resolved here rather than at the end.
   const top = cap !== undefined && d.limitStyle === 'top' ? `TOP (${cap}) ` : '';
-  let query = `SELECT ${isDistinct ? 'DISTINCT ' : ''}${top}${selectColumns(d, tables)} FROM ${qualified(d, config, first.name)}`;
-  if (first.alias) query += ` ${quoteIdent(d, first.alias, 'alias')}`;
+  let query = `SELECT ${isDistinct ? 'DISTINCT ' : ''}${top}${selectColumns(d, columnSource)} FROM ${target}${trailingAlias}`;
 
   const params: unknown[] = [];
   if (config.where && config.where.length > 0) {
@@ -304,9 +345,16 @@ function buildUpsert(config: PgBuilderConfig): BuiltQuery {
  * Postgres syntax at another engine would fail with a confusing parser error
  * instead of an answerable one. Raw SQL reaches every engine meanwhile.
  */
-export function buildQuery(config: PgBuilderConfig, dialect: SqlDialect = POSTGRES_DIALECT): BuiltQuery {
+export function buildQuery(
+  config: PgBuilderConfig,
+  dialect: SqlDialect = POSTGRES_DIALECT,
+  from?: DerivedSource,
+): BuiltQuery {
   const op = (config.operation ?? 'select').toLowerCase();
   const isRead = op === 'select' || op === 'select distinct';
+  // Writing through a handle would mean writing to whatever an earlier query
+  // happened to select, which is not a table anyone named.
+  if (from && !isRead) throw new Error(`${dialect.name}: a dataset reference can only be read from`);
   if (!isRead && dialect.name !== 'postgres') {
     throw new Error(
       `${dialect.name}: the visual builder can only read on this engine; write it as SQL in the query box`,
@@ -315,7 +363,7 @@ export function buildQuery(config: PgBuilderConfig, dialect: SqlDialect = POSTGR
   switch (op) {
     case 'select':
     case 'select distinct':
-      return buildSelect(dialect, config);
+      return buildSelect(dialect, config, from);
     case 'insert':
       return buildInsert(config);
     case 'update':

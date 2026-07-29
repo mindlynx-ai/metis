@@ -227,3 +227,34 @@ describe('the handler', () => {
     await expect(createApprovalNodeHandler()(ctx)).rejects.toThrow(/needs a title/i);
   });
 });
+
+describe('the summary survives the other obvious way to write it', () => {
+  it('reads the documented object shape', () => {
+    const config = readApprovalConfig({ title: 'Refund 4182', summary: { Amount: 'GBP 250' } });
+    expect(buildApprovalRequest(config).fields).toEqual([{ label: 'Amount', value: 'GBP 250' }]);
+  });
+
+  it('reads an array of label/value pairs rather than keying it by index', () => {
+    // An array passes a bare typeof object check, so this used to reach the
+    // reviewer as `0` and a blob of JSON, in the panel they were meant to be
+    // reading an amount out of.
+    const config = readApprovalConfig({
+      title: 'Refund 4182',
+      summary: [
+        { label: 'Customer', value: 'Ada Lovelace' },
+        { label: 'Amount', value: 'GBP 250.00' },
+      ],
+    });
+    expect(buildApprovalRequest(config).fields).toEqual([
+      { label: 'Customer', value: 'Ada Lovelace' },
+      { label: 'Amount', value: 'GBP 250.00' },
+    ]);
+  });
+
+  it('shows nothing rather than nonsense when the shape is neither', () => {
+    for (const summary of ['just a string', 42, ['no labels here'], null]) {
+      const config = readApprovalConfig({ title: 'Refund 4182', summary });
+      expect(buildApprovalRequest(config).fields).toEqual([]);
+    }
+  });
+});

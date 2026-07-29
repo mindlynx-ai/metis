@@ -97,6 +97,28 @@ function asText(value: unknown): string {
 }
 
 /**
+ * The label/value pairs shown to whoever decides.
+ *
+ * A plain object is the documented shape, but an array of {label, value} is
+ * the other obvious way to write it, and an array passes a bare `typeof
+ * object` check. Object.entries then keyed it by INDEX, so the approver was
+ * shown `0` and a blob of JSON at the exact moment they were meant to be
+ * reading an amount. Accept both spellings and ignore anything else, because
+ * a gate that garbles the facts is worse than one showing none.
+ */
+function readSummary(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null) return {};
+  if (!Array.isArray(value)) return value as Record<string, unknown>;
+  const pairs: Record<string, unknown> = {};
+  for (const entry of value) {
+    if (typeof entry !== 'object' || entry === null) continue;
+    const { label, value: cell } = entry as { label?: unknown; value?: unknown };
+    if (typeof label === 'string' && label !== '') pairs[label] = cell;
+  }
+  return pairs;
+}
+
+/**
  * Read a node's config. A malformed approval throws rather than parking:
  * a gate nobody can read is worse than a step that stops the run at once.
  */
@@ -112,10 +134,9 @@ export function readApprovalConfig(raw: Record<string, unknown>): ApprovalConfig
     throw new Error(`onExpiry must be reject, escalate or fail, not "${onExpiry}"`);
   }
   const hours = Number(raw.slaHours);
-  const summary = raw.summary;
   return {
     title,
-    summary: typeof summary === 'object' && summary !== null ? (summary as Record<string, unknown>) : {},
+    summary: readSummary(raw.summary),
     approverRole: role,
     slaMs: (Number.isFinite(hours) && hours > 0 ? hours : DEFAULT_SLA_HOURS) * HOUR_MS,
     onExpiry,

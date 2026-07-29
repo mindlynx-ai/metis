@@ -341,7 +341,10 @@ await store.appendExecutionLog({
 });
 
 // The running run is PARKED on a signal (human-in-the-loop): the board's
-// whereabouts enrichment derives "waiting - signal: approval" from these rows.
+// whereabouts enrichment derives "waiting - signal: approval" from these rows,
+// and the request riding the same row is what the Reviews queue reads. That
+// blob is written by the paid approvals pack, which the open editor must
+// never import, so it is spelled out here exactly as it arrives on the wire.
 await store.putWorkflowVersion({
   tenantId: 't1',
   workflowId: 'wf-runs-demo',
@@ -373,6 +376,16 @@ await store.appendExecutionLog({
   nodeType: 'signal',
   event: 'workflow.node.waiting',
   signalType: 'approval',
+  details: {
+    kind: 'approval',
+    title: 'Refund order 4182 for GBP 250',
+    approverRole: 'admin',
+    fields: [
+      { label: 'Customer', value: 'Ada Lovelace' },
+      { label: 'Amount', value: 'GBP 250.00' },
+      { label: 'Reason', value: 'Damaged on arrival' },
+    ],
+  },
   at: '2026-07-03T12:20:01.000Z',
 });
 

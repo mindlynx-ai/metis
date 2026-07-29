@@ -3324,6 +3324,75 @@ body {
   color: var(--text-primary);
 }
 
+/* ----- Confirming a decision -----
+   Replaces a window.prompt. The values the decision turns on come WITH the
+   question, because the point of the gate is that somebody looked. */
+.decision {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.decision-what {
+  margin: 0;
+  font-size: var(--text-md);
+  font-weight: 560;
+  color: var(--text-primary);
+}
+.decision-where {
+  margin: 0;
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.decision-flow {
+  color: var(--text-primary);
+}
+/* Sits on its own tinted shelf: these are the facts, not the chrome. */
+.decision-facts {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken, var(--brand-wash));
+}
+.decision-flag {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+  background: color-mix(in srgb, var(--warning-text) 14%, transparent);
+  color: var(--warning-text);
+}
+.decision-reason {
+  font-size: var(--text-sm);
+  font-weight: 540;
+  color: var(--text-primary);
+}
+.decision-input {
+  width: 100%;
+  resize: vertical;
+  font: inherit;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  background: var(--surface-input, transparent);
+  color: var(--text-primary);
+}
+.decision-input:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 1px;
+  border-color: transparent;
+}
+.decision-note {
+  margin: 0;
+  font-size: var(--text-xs);
+  color: var(--text-faint);
+}
+/* No .decision-actions and no .btn-danger here: both already exist further
+   down as .confirm-actions and .btn-danger, used by the confirm dialog. This
+   file had them all along and a truncated grep hid them, so the first version
+   of this block shipped a second .btn-danger that quietly lost to the original
+   and left the button styled by neither rule on purpose. */
+
 /* ============================================================================
    Connectors surface (premium redesign): branded connection cards, a searchable
    catalogue picker, and per-connector credential forms with in-modal testing.

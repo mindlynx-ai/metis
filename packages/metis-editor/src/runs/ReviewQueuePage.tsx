@@ -19,8 +19,10 @@
  * The decision goes back on the run's own signal, so this page adds no
  * endpoint and no state of its own; refresh it and the truth is the runs.
  *
- * Both buttons ask for a note first. That prompt is the guard: approving is
- * one click from paying an invoice, and a misclick must not be able to do it.
+ * Both buttons open a confirmation carrying the values the decision turns on,
+ * because approving is one click from paying an invoice and a misclick must
+ * not be able to do it. It used to be a window.prompt, which was both the
+ * wrong clothes and, worse, showed nothing but a title.
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
@@ -30,6 +32,7 @@ import { ensureUplift, useUplift } from '../uplift-store.js';
 import { Icon } from '../ui/Icon.js';
 import { timeAgo, timeUntil } from './format.js';
 import { mayDecide, reviewQueue, type ReviewItem } from './review-queue.js';
+import { DecisionModal } from './DecisionModal.js';
 
 const POLL_MS = 15000;
 /** The capability this page exists to serve; its pitch comes from the offer. */
@@ -63,6 +66,10 @@ export function ReviewQueuePage() {
   const [role, setRole] = useState<string>();
   const [busy, setBusy] = useState<string>();
   const [error, setError] = useState<string>();
+  // The decision being confirmed, if any. Held here rather than in the row so
+  // a poll refreshing the list cannot pull the dialog out from under someone
+  // mid-sentence.
+  const [pending, setPending] = useState<{ item: ReviewItem; decision: 'approved' | 'rejected' }>();
   const offers = useUplift((state) => state.offers);
   const capabilities = useUplift((state) => state.capabilities);
   useEffect(ensureUplift, []);
@@ -92,18 +99,14 @@ export function ReviewQueuePage() {
     return () => clearInterval(timer);
   }, [load]);
 
-  const decide = async (item: ReviewItem, decision: 'approved' | 'rejected') => {
-    const note = window.prompt(
-      decision === 'approved' ? `Approve "${item.title}"? Add a note (optional).` : `Reject "${item.title}"? Say why.`,
-      '',
-    );
-    if (note === null) return;
+  const decide = async (item: ReviewItem, decision: 'approved' | 'rejected', reason: string) => {
     setBusy(item.signalType);
     try {
       // The approver is NOT sent from here: the server stamps the session on
       // the signal, so the run's audit line cannot be dressed up by a client.
-      await api.signalExecution(item.executionId, item.signalType, { decision, reason: note });
+      await api.signalExecution(item.executionId, item.signalType, { decision, reason });
       toast.success(decision === 'approved' ? 'Approved' : 'Rejected');
+      setPending(undefined);
       await load();
     } catch {
       toast.error('That decision did not go through');
@@ -192,7 +195,7 @@ export function ReviewQueuePage() {
                           className="btn btn-sm btn-primary"
                           disabled={!allowed || busy === item.signalType}
                           title={allowed ? 'Approve and continue the run' : `Needs the ${item.approverRole} role`}
-                          onClick={() => void decide(item, 'approved')}
+                          onClick={() => setPending({ item, decision: 'approved' })}
                         >
                           Approve
                         </button>
@@ -201,7 +204,7 @@ export function ReviewQueuePage() {
                           className="btn btn-sm kv-remove"
                           disabled={!allowed || busy === item.signalType}
                           title={allowed ? 'Reject: the run takes its rejected branch' : `Needs the ${item.approverRole} role`}
-                          onClick={() => void decide(item, 'rejected')}
+                          onClick={() => setPending({ item, decision: 'rejected' })}
                         >
                           Reject
                         </button>
@@ -213,6 +216,16 @@ export function ReviewQueuePage() {
             </table>
           </div>
         </section>
+      )}
+
+      {pending && (
+        <DecisionModal
+          item={pending.item}
+          decision={pending.decision}
+          busy={busy === pending.item.signalType}
+          onCancel={() => setPending(undefined)}
+          onConfirm={(reason) => void decide(pending.item, pending.decision, reason)}
+        />
       )}
     </main>
   );

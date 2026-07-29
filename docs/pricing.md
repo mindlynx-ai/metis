@@ -16,12 +16,21 @@ This is not a trial of something else. It is the product.
 
 **£9 per month, per instance.**
 
+!!! note "Pro is not self-serve yet"
+
+    The price is set and the first capability is built, but there is no
+    checkout and no hosted paid runtime to run it on. Nobody can be charged
+    today, and nobody should expect Approvals to execute on an Open build: it
+    appears in the palette as a locked step and refuses with an upgrade
+    message. If you want it, open an issue and say so, and that will decide
+    how soon the runtime follows.
+
 Everything in Open, plus the capabilities that need a hosted service behind
 them. Today that means:
 
-| Capability | What it does |
-|---|---|
-| Approvals | Pauses a run for a human decision, with a timeout branch for escalation and a record of who decided what, when and why |
+| Capability | What it does | State |
+|---|---|---|
+| Approvals | Pauses a run for a human decision, with a timeout branch for escalation and a record of who decided what, when and why | Built, awaiting a paid runtime |
 
 More capabilities join Pro as they ship. They are listed in the app under
 **Account**, each marked available or coming soon, so what you are paying for
@@ -35,6 +44,14 @@ Named here so the roadmap is legible, not to imply a date:
 - **Memory**: give workflows long-term recall
 - **Agents**: delegate steps to autonomous skills
 - **Models**: managed AI models with spending caps
+
+## What "available" means in the app
+
+The **Account** page marks a capability `available` when it can be *bought*,
+which is not the same as your instance being *entitled* to it. Entitlement is
+resolved from your account, so an unpaid instance sees the price and the link,
+never the capability. Nothing on this page or in that manifest can switch a
+paid feature on.
 
 ## What happens if you stop paying
 

@@ -96,6 +96,13 @@ export const CLOUD_DATA_ENGINE = 'athena';
  * The residual is deliberate and it is named here: a legacy step that is never
  * reopened keeps the old silent behaviour until it is saved again, which the
  * picker fixes the moment its connection is touched.
+ *
+ * "Any connection this step names is foreign" is true TODAY BY CONSTRUCTION,
+ * not by luck: the data node's picker hint is `?provider=postgres`, so the only
+ * connections it offers are postgres ones and there is no warehouse connection
+ * to choose. That is why the message says to clear the connection rather than
+ * to pick a different one. The rule can loosen the day that hint offers the
+ * warehouse provider, and not before.
  */
 function foreignConnectionRefusal(nodeRef: NodeRef): NodeExecutionResult | undefined {
   const config = nodeRef.config ?? {};
@@ -110,7 +117,9 @@ function foreignConnectionRefusal(nodeRef: NodeRef): NodeExecutionResult | undef
       `this step is set to run in the cloud, but it reads the connection "${connectionId}", ` +
       'which the cloud cannot reach: a step running in the cloud queries the cloud data ' +
       'warehouse instead, so it would hand on the wrong rows without ever failing. ' +
-      'Point the step at the cloud data source, or set "Where it runs" back to on this computer.',
+      'Clear the connection (a step running in the cloud reads your cloud warehouse, ' +
+      'so it needs none), or set "Where it runs" back to on this computer and it reads ' +
+      'the connection you picked.',
     nodeData: { code: 'cloud-connection' },
   };
 }

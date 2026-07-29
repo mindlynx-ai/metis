@@ -149,9 +149,11 @@ describe('a cloud bind never silently swaps the data source', () => {
     const result = await resolverFor(stub).execute(contextFor({ ...CONSENTED, nodeMode: 'cloud' }, config));
     expect(result.status).toBe(400);
     // The message names the connection and both ways out, so it is actionable
-    // from the run log alone.
+    // from the run log alone. Both have to be things the editor can actually
+    // do: there is no warehouse connection to pick, so the advice is to clear
+    // the one that is there, or to run the step here instead.
     expect(result.message).toContain('conn_pg');
-    expect(result.message).toContain('cloud data source');
+    expect(result.message).toContain('Clear the connection');
     expect(result.message).toContain('Where it runs');
     expect(result.nodeData).toMatchObject({ code: 'cloud-connection' });
     expect(stub.requests['/v1/capabilities/data/invoke']).toBeUndefined();

@@ -21,13 +21,19 @@
  * entitlement, the workflow's consent and an explicit choice, everything
  * runs locally. When cloud is chosen but unreachable (or the plan lapsed),
  * a 'both' node degrades to its local backend and says so via `binding`.
+ *
+ * Its second rule is NO OTHER DATA SOURCE: the cloud reads its own warehouse,
+ * so a step that names any other connection is refused rather than bound, and
+ * the user is told which connection and what to do about it.
  */
+import { asDatasetRef } from '../data-source-port.js';
 import {
   isCompleted,
   stateEnvelope,
   type NodeExecPort,
   type NodeExecutionResult,
   type NodeHandlerContext,
+  type NodeRef,
 } from '../node-exec-port.js';
 import {
   ContractMismatchError,
@@ -62,6 +68,46 @@ export interface CapabilityResolverOptions {
   maxPollMs?: number;
 }
 
+/**
+ * The one engine the cloud data plane runs. The gateway is handed a query and
+ * runs it on the account's own cloud warehouse; the invoke payload carries no
+ * connection, so the cloud can only ever read this engine.
+ */
+export const CLOUD_DATA_ENGINE = 'athena';
+
+/**
+ * The refusal a cloud-bound step earns by naming a connection the cloud cannot
+ * reach, else undefined.
+ *
+ * The bind used to be decided from the capability and consent alone, so a step
+ * aimed at the user's own database and switched to "In the cloud" had its SQL
+ * run against the cloud warehouse instead: different rows, no error, no log.
+ * Refusing is deliberately chosen over carrying the engine through the invoke
+ * payload so the gateway could dispatch per engine - it is a fraction of the
+ * size and it cannot mis-execute, and the gateway has exactly one engine today.
+ *
+ * Untouched: a step naming NO connection (the cloud supplies the warehouse) and
+ * one that declares the cloud engine. A step that says nothing about its engine
+ * IS refused: a local dispatch reads silence as postgres, so silence is never
+ * evidence of the warehouse.
+ */
+function foreignConnectionRefusal(nodeRef: NodeRef): NodeExecutionResult | undefined {
+  const config = nodeRef.config ?? {};
+  const ref = asDatasetRef(config.sourceRef);
+  const connectionId = String(ref?.connectionId ?? config.connectorId ?? config.connectionId ?? '');
+  if (connectionId === '') return undefined;
+  if (String(ref?.engine ?? config.engine ?? '') === CLOUD_DATA_ENGINE) return undefined;
+  return {
+    status: 400,
+    message:
+      `this step is set to run in the cloud, but it reads the connection "${connectionId}", ` +
+      'which the cloud cannot reach: a step running in the cloud queries the cloud data ' +
+      'warehouse instead, so it would hand on the wrong rows without ever failing. ' +
+      'Point the step at the cloud data source, or set "Where it runs" back to on this computer.',
+    nodeData: { code: 'cloud-connection' },
+  };
+}
+
 /** The park signal a 'park'-mode cloud dispatch returns via nodeAction. */
 export const CLOUD_PARK_ACTION = { type: 'cloud', action: 'park' } as const;
 
@@ -86,6 +132,11 @@ export class CapabilityResolver implements NodeExecPort {
     if (!(await this.bindsCloud(entry, ctx.routing, ctx.nodeRef.config))) {
       return this.options.local.execute(ctx);
     }
+    // Cloud is chosen: the step's own connection has to be one the cloud can
+    // read, or nothing runs at all. Never a quiet fall back to local either -
+    // the run would then read the right rows while the choice was ignored.
+    const refusal = foreignConnectionRefusal(ctx.nodeRef);
+    if (refusal) return refusal;
     try {
       return await this.runCloud(entry as Required<CapabilityEntry>, ctx);
     } catch (error) {

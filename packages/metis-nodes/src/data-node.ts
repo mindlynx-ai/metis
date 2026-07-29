@@ -23,6 +23,7 @@
  * capped by the adapter so a big result can't overflow the workflow payload.
  */
 import {
+  asDatasetRef,
   stateEnvelope,
   type CredentialPort,
   type DatasetRef,
@@ -59,29 +60,6 @@ const NAMED_ENGINE_NODES = new Set(['postgres', 'mysql', 'snowflake', 'sqlserver
  *  step can reference a single result's field cleanly ({{step.data.row.email}}). */
 function withFirstRow(result: QueryResult): QueryResult & { row?: Record<string, unknown> } {
   return result.rows.length > 0 ? { ...result, row: result.rows[0] } : result;
-}
-
-/** Coerce a config value into a DatasetRef, whether it came through as an object
- *  or, because it was templated into a text field, as that object's JSON string. */
-function asDatasetRef(value: unknown): DatasetRef | undefined {
-  let candidate = value;
-  if (typeof candidate === 'string') {
-    const trimmed = candidate.trim();
-    if (!trimmed.startsWith('{')) return undefined;
-    try {
-      candidate = JSON.parse(trimmed);
-    } catch {
-      return undefined;
-    }
-  }
-  if (
-    candidate &&
-    typeof candidate === 'object' &&
-    (candidate as { kind?: unknown }).kind === 'dataset'
-  ) {
-    return candidate as DatasetRef;
-  }
-  return undefined;
 }
 
 type SqlPlan = { sql: string; params: unknown[] } | { error: { status: number; message: string } };

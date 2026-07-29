@@ -78,6 +78,32 @@ export interface DatasetRef {
   schema?: DataColumn[];
 }
 
+/** Coerce a config value into a DatasetRef, whether it came through as an object
+ *  or, because it was templated into a text field, as that object's JSON string.
+ *  Lives here rather than in the Data node because the cloud-bind guard reads the
+ *  same field: if the two disagreed about what a handle is, a step could bind to
+ *  the cloud carrying a connection the guard never saw. */
+export function asDatasetRef(value: unknown): DatasetRef | undefined {
+  let candidate = value;
+  if (typeof candidate === 'string') {
+    const trimmed = candidate.trim();
+    if (!trimmed.startsWith('{')) return undefined;
+    try {
+      candidate = JSON.parse(trimmed);
+    } catch {
+      return undefined;
+    }
+  }
+  if (
+    candidate &&
+    typeof candidate === 'object' &&
+    (candidate as { kind?: unknown }).kind === 'dataset'
+  ) {
+    return candidate as DatasetRef;
+  }
+  return undefined;
+}
+
 /** One engine's implementation. Adapters cache their own pools/clients. */
 export interface DataSource {
   readonly engine: string;

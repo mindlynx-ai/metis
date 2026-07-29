@@ -17,10 +17,11 @@
 /**
  * Table-driven resolution tests (UPL-REQ-06): entitlement x workflow
  * toggle x consent x node override x threshold x gateway health, with the
- * no-silent-cloud rule asserted from every angle, plus the degraded bind.
+ * no-silent-cloud rule asserted from every angle, the degraded bind, and the
+ * refusal that keeps a cloud bind off any data source but the cloud's own.
  */
 import { afterAll, describe, expect, it } from 'vitest';
-import { CapabilityResolver } from '../adapters/capability-resolver.js';
+import { CapabilityResolver, CLOUD_DATA_ENGINE } from '../adapters/capability-resolver.js';
 import { startHelixStub, type HelixStub } from '../adapters/helix-stub.js';
 import { CapabilityGatewayClient, type CapabilityRouting } from '../uplift.js';
 import type { NodeExecPort, NodeHandlerContext } from '../node-exec-port.js';
@@ -127,6 +128,55 @@ describe('resolution order (never cloud silently)', () => {
   it('kill switch: no gateway configured means local, whatever is chosen', async () => {
     const resolver = resolverFor(undefined);
     const result = await resolver.execute(contextFor({ ...CONSENTED, nodeMode: 'cloud' }));
+    expect(result.message).toBe('ran locally');
+    expect(result.binding).toBeUndefined();
+  });
+});
+
+describe('a cloud bind never silently swaps the data source', () => {
+  const PG = { connectorId: 'conn_pg', query: 'select * from orders' };
+  const CLOUD = { connectorId: 'conn_warehouse', engine: CLOUD_DATA_ENGINE, query: 'select 1' };
+
+  it.each([
+    ['a connection chosen on the step', PG],
+    ['a connection the step never mentions its engine for', { connectionId: 'conn_pg', query: 'x' }],
+    [
+      'a dataset handle from an earlier step, templated in as JSON text',
+      { sourceRef: JSON.stringify({ kind: 'dataset', connectionId: 'conn_pg', engine: 'postgres', query: 'select 1' }) },
+    ],
+  ])('refuses the cloud bind for %s, and dispatches nothing', async (_name, config) => {
+    const stub = await stubbed();
+    const result = await resolverFor(stub).execute(contextFor({ ...CONSENTED, nodeMode: 'cloud' }, config));
+    expect(result.status).toBe(400);
+    // The message names the connection and both ways out, so it is actionable
+    // from the run log alone.
+    expect(result.message).toContain('conn_pg');
+    expect(result.message).toContain('cloud data source');
+    expect(result.message).toContain('Where it runs');
+    expect(result.nodeData).toMatchObject({ code: 'cloud-connection' });
+    expect(stub.requests['/v1/capabilities/data/invoke']).toBeUndefined();
+  });
+
+  it('allows the cloud bind when the step names the cloud warehouse', async () => {
+    const stub = await stubbed();
+    const result = await resolverFor(stub).execute(contextFor({ ...CONSENTED, nodeMode: 'cloud' }, CLOUD));
+    expect(result.status).toBe(200);
+    expect(result.binding).toBe('cloud');
+  });
+
+  it('allows the cloud bind when the step names no connection at all', async () => {
+    const stub = await stubbed();
+    const result = await resolverFor(stub).execute(
+      contextFor({ ...CONSENTED, nodeMode: 'cloud' }, { query: 'select 1' }),
+    );
+    expect(result.status).toBe(200);
+    expect(result.binding).toBe('cloud');
+  });
+
+  it('leaves a LOCAL bind with its own connection completely alone', async () => {
+    const stub = await stubbed();
+    const result = await resolverFor(stub).execute(contextFor({ ...CONSENTED, nodeMode: 'local' }, PG));
+    expect(result.status).toBe(200);
     expect(result.message).toBe('ran locally');
     expect(result.binding).toBeUndefined();
   });

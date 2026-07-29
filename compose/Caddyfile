@@ -6,7 +6,9 @@
 	reverse_proxy metis:3000
 }
 
-# www -> apex (Caddy gets a cert for www too; harmless on sslip.io demo hosts).
-www.{$METIS_DEMO_HOST} {
-	redir https://{$METIS_DEMO_HOST}{uri} permanent
-}
+# A www -> apex redirect used to live here. It was not harmless: Caddy tries to
+# obtain a certificate for every site block, and www.<host> has no DNS record on
+# a real domain (app.metisflow.io is already a subdomain, and sslip.io hosts have
+# no www either). Every attempt failed the ACME challenge with NXDOMAIN, retried
+# for the full 30-day window, and eventually fell back to the staging CA. If a
+# deployment genuinely serves www, add the block back with the DNS record first.

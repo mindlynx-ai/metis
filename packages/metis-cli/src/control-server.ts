@@ -123,6 +123,13 @@ const CONTENT_TYPES: Record<string, string> = {
   '.json': 'application/json',
   '.woff2': 'font/woff2',
   '.svg': 'image/svg+xml',
+  // robots.txt served as application/octet-stream is a file a crawler may
+  // decline to read, which would waste the point of shipping one.
+  '.txt': 'text/plain; charset=utf-8',
+  '.xml': 'application/xml',
+  '.webmanifest': 'application/manifest+json',
+  '.png': 'image/png',
+  '.ico': 'image/x-icon',
 };
 
 export interface ControlServerOptions {

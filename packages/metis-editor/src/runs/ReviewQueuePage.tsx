@@ -199,9 +199,14 @@ export function ReviewQueuePage() {
                         >
                           Approve
                         </button>
+                        {/* Plain, like every other row action on Operate. It
+                            wore kv-remove, a 28px icon button, which squashed
+                            the word out of its own chrome. The destructive
+                            weight belongs on the dialog's confirm, not on the
+                            button that only opens it. */}
                         <button
                           type="button"
-                          className="btn btn-sm kv-remove"
+                          className="btn btn-sm"
                           disabled={!allowed || busy === item.signalType}
                           title={allowed ? 'Reject: the run takes its rejected branch' : `Needs the ${item.approverRole} role`}
                           onClick={() => setPending({ item, decision: 'rejected' })}

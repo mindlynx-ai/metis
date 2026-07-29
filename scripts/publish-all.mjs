@@ -46,6 +46,8 @@ const ORDER = [
   'metis-data-gateway',
   'metis-catalogue',
   'metis-engine',
+  // Before metis-nodes, which registers its handler among the open ones.
+  'metis-approvals',
   'metis-nodes',
   'metis-orchestrator',
   'metis-core',
@@ -71,4 +73,6 @@ for (const pkg of ORDER) {
   console.log(`\n== @mindlynx/${pkg} ==`);
   npm(['publish', '--access', 'public', ...(publish ? [] : ['--dry-run'])], { cwd: dir, stdio: 'inherit' });
 }
-console.log(`\n${publish ? 'published' : 'dry run complete'}: 9 packages at ${version}`);
+console.log(
+  `\n${publish ? 'published' : 'dry run complete'}: ${ORDER.length} packages at ${version}`,
+);

@@ -23,14 +23,18 @@ import {
 
 /**
  * Module-name patterns that must never be imported by an open
- * package: memory, analytics, command layer, agent runtime, governance.
+ * package: memory, analytics, command layer, agent runtime.
+ *
+ * `approval` was on this list while the sign-off gate was the paid
+ * capability. It is open now: a run that waits for a person is something a
+ * workflow engine has to have, not something to sell back to the person who
+ * needs it. What is paid is work that genuinely runs somewhere else.
  */
 const BANNED_MODULE_PATTERNS = [
   { name: 'cortex', pattern: /cortex/i },
   { name: 'tachyon', pattern: /tachyon/i },
   { name: 'ucl', pattern: /(^|[/-])ucl($|[/-])/i },
   { name: 'skills-runtime', pattern: /skills?[/-](sdk|runtime)/i },
-  { name: 'approval', pattern: /approval/i },
   { name: 'agents', pattern: /(^|[/-])agents?($|[/-])/i },
 ];
 

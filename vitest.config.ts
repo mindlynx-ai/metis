@@ -25,6 +25,7 @@ export default defineConfig({
       '@mindlynx/metis-ports': pkg('metis-ports'),
       '@mindlynx/metis-data-gateway': pkg('metis-data-gateway'),
       '@mindlynx/metis-engine': pkg('metis-engine'),
+      '@mindlynx/metis-approvals': pkg('metis-approvals'),
       '@mindlynx/metis-nodes': pkg('metis-nodes'),
       '@mindlynx/metis-catalogue': pkg('metis-catalogue'),
       '@mindlynx/metis-orchestrator': pkg('metis-orchestrator'),

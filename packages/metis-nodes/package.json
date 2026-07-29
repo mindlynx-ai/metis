@@ -20,6 +20,7 @@
     "build": "tsc -p tsconfig.build.json"
   },
   "dependencies": {
+    "@mindlynx/metis-approvals": "0.1.0",
     "@mindlynx/metis-catalogue": "0.1.0",
     "@mindlynx/metis-data-gateway": "0.1.0",
     "@mindlynx/metis-ports": "0.1.0",

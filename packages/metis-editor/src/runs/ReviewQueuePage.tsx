@@ -28,34 +28,26 @@ import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
 import { api, type TemporalExecution } from '../api.js';
 import { toast } from '../toast-store.js';
-import { ensureUplift, useUplift } from '../uplift-store.js';
 import { Icon } from '../ui/Icon.js';
 import { timeAgo, timeUntil } from './format.js';
 import { mayDecide, reviewQueue, type ReviewItem } from './review-queue.js';
 import { DecisionModal } from './DecisionModal.js';
 
 const POLL_MS = 15000;
-/** The capability this page exists to serve; its pitch comes from the offer. */
-const CAPABILITY = 'cap.approvals';
 
-/** The empty state: nothing to review, or nothing that CAN be reviewed here. */
-function EmptyQueue({ owned, pitch }: { owned: boolean; pitch?: string }) {
+/** The empty state. It used to pitch an upgrade when the sign-off gate was the
+ *  paid capability; the gate is part of the product now, so an empty queue
+ *  means exactly one thing: nothing is waiting. */
+function EmptyQueue() {
   return (
     <div className="conn-empty">
       <div className="conn-empty-mark" aria-hidden="true">
         <Icon name="stamp" size={28} />
       </div>
-      <h2>{owned ? 'Nothing to review' : 'Approvals are part of Helix'}</h2>
+      <h2>Nothing to review</h2>
       <p>
-        {owned
-          ? 'When a run reaches an approval step it parks here with everything you need to decide.'
-          : (pitch ?? 'Add a human sign-off gate inside a run.')}
+        When a run reaches an approval step it parks here with everything you need to decide.
       </p>
-      {!owned && (
-        <Link className="btn btn-primary" to="/account">
-          See what Helix adds
-        </Link>
-      )}
     </div>
   );
 }
@@ -70,9 +62,6 @@ export function ReviewQueuePage() {
   // a poll refreshing the list cannot pull the dialog out from under someone
   // mid-sentence.
   const [pending, setPending] = useState<{ item: ReviewItem; decision: 'approved' | 'rejected' }>();
-  const offers = useUplift((state) => state.offers);
-  const capabilities = useUplift((state) => state.capabilities);
-  useEffect(ensureUplift, []);
 
   const load = useCallback(async () => {
     try {
@@ -116,8 +105,6 @@ export function ReviewQueuePage() {
   };
 
   const now = Date.now();
-  const owned = capabilities.includes(CAPABILITY);
-  const offer = offers.find((candidate) => candidate.id === CAPABILITY);
 
   return (
     <main className="shell-main review-page" aria-label="Reviews">
@@ -140,7 +127,7 @@ export function ReviewQueuePage() {
         </p>
       )}
 
-      {loaded && items.length === 0 && <EmptyQueue owned={owned} pitch={offer?.description} />}
+      {loaded && items.length === 0 && <EmptyQueue />}
 
       {items.length > 0 && (
         <section aria-label="Waiting for a decision">

@@ -13,7 +13,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "metis": {
-    "edition": "helix"
+    "edition": "open"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

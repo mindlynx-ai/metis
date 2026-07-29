@@ -416,7 +416,6 @@
       "type": "approval",
       "category": "logic",
       "execution": "local",
-      "entitlement": "cap.approvals",
       "versions": [
         "1.0.0"
       ],

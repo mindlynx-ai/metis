@@ -91,27 +91,41 @@ describe('node-type coverage', () => {
     expect(uncovered).toEqual([]);
   });
 
-  it('a paid step is unregistered here, so it answers with the upgrade path', async () => {
+  it('the sign-off gate runs here: it is the product, not an upsell', () => {
+    // It was the paid capability once, reachable only by loading a pack. A run
+    // that waits for a person is something a workflow engine has to have, so
+    // the handler ships with the open build and this is the guard against it
+    // quietly going back behind a paywall. The coverage test above enforces
+    // the same thing from the other side, via the catalogue.
+    expect(buildRegistry().canExecute('approval')).toBe(true);
+  });
+
+  it('an unregistered type answers with the upgrade path, never a crash', async () => {
+    // Driven by a type this build genuinely does not carry rather than by a
+    // catalogue filter: the paid-local set is empty today, and a test that
+    // loops over nothing passes without proving anything.
     const registry = buildRegistry();
-    const paid = getCatalogue().entries.filter(isPaidLocal);
-    // The paid capabilities this build sells; if one ever registers here by
-    // accident it would ship for free, which this catches.
-    expect(paid.map((entry) => entry.type)).toContain('approval');
-    for (const entry of paid) {
-      expect(registry.canExecute(entry.type)).toBe(false);
-      const result = await registry.execute({
-        nodeRef: { id: 'n1', type: entry.type, config: {} },
-        tenantId: 't1',
-        executionId: 'e1',
-        workflowId: 'w1',
-        workflowState: { states: [] },
-      });
-      // Structured, and it says what to do about it: never a crash, never a
-      // silent completion that lets the run carry on as though it had run.
-      expect(result.status).toBe(501);
-      expect(result.message).toMatch(/not available in this edition/i);
-      expect(result.message).toMatch(/upgrade/i);
-    }
+    expect(registry.canExecute('cap.something.later')).toBe(false);
+    const result = await registry.execute({
+      nodeRef: { id: 'n1', type: 'cap.something.later', config: {} },
+      tenantId: 't1',
+      executionId: 'e1',
+      workflowId: 'w1',
+      workflowState: { states: [] },
+    });
+    // Structured, and it says what to do about it: never a crash, never a
+    // silent completion that lets the run carry on as though it had run.
+    expect(result.status).toBe(501);
+    expect(result.message).toMatch(/not available in this edition/i);
+    expect(result.message).toMatch(/upgrade/i);
+  });
+
+  it('nothing in the catalogue is a paid local step any more', () => {
+    // The one exception the coverage test carves out. `data` is entitled but
+    // `execution: 'both'`, so it always has a local backend; if a future entry
+    // is entitled AND local-only, the coverage test starts skipping it and
+    // this says so out loud rather than letting the gap open silently.
+    expect(getCatalogue().entries.filter(isPaidLocal).map((entry) => entry.type)).toEqual([]);
   });
 
   it('the registered handlers include the core nodes and the wired connector nodes', () => {

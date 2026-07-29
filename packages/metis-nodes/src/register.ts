@@ -24,6 +24,7 @@
 import type { CredentialPort } from '@mindlynx/metis-ports';
 import { NodeHandlerRegistry } from '@mindlynx/metis-ports';
 import { connectorNodeTypeIds, databaseNodeTypeIds } from '@mindlynx/metis-catalogue';
+import { registerApprovalNodes } from '@mindlynx/metis-approvals';
 import { DataSourceRegistry } from '@mindlynx/metis-ports';
 import { createHttpNodeHandler } from './http-node.js';
 import { createCodeNodeHandler } from './code-node.js';
@@ -81,6 +82,11 @@ export function registerOpenNodeHandlers(
   for (const type of databaseNodeTypeIds()) {
     registry.registerNodeHandler(type, data);
   }
+  // The sign-off gate. It parks the run on the same Temporal condition a signal
+  // node has always used, so it needs no dependency of its own and nothing
+  // hosted: a run that waits for a person is something a workflow engine has to
+  // have, not something to sell back to the person who needs it.
+  registerApprovalNodes(registry);
   registry.registerNodeHandler('sendgrid', createSendgridNodeHandler(deps.credentials, deps.sendgrid));
   // One node for every S3-compatible store: the endpoint and the path-style
   // flag live on the connection, so MinIO, R2 and B2 need no code of their own.

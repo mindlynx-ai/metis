@@ -5,6 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Metis</title>
+    <!--
+      The app renders into an empty root, so without these a crawler, a link
+      preview or a reputation scanner sees a page with no words on it at all:
+      a sign-in box and nothing else. On a young domain that reads as a
+      credential-harvesting shell, which is roughly what happened.
+    -->
+    <meta
+      name="description"
+      content="Metis is an open source workflow engine, durable by Temporal and licensed Apache-2.0. This is the sign-in for a Metis instance."
+    />
+    <meta name="application-name" content="Metis" />
+    <meta property="og:site_name" content="Metis" />
+    <meta property="og:title" content="Metis" />
+    <meta
+      property="og:description"
+      content="The open workflow engine, durable by Temporal, Apache-2.0. Source at github.com/mindlynx-ai/metis."
+    />
+    <meta property="og:type" content="website" />
     <script>
       // Dark-first identity: first-time visitors get dark; a stored choice wins.
       const stored = localStorage.getItem('metis-theme');

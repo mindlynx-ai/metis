@@ -3,6 +3,19 @@
 # run-status WebSocket, which Caddy upgrades transparently) to the Metis app.
 {$METIS_DEMO_HOST} {
 	encode zstd gzip
+	header {
+		# Ordinary hardening, and the absence of it is itself a signal: a young
+		# domain serving a sign-in page with no security headers scores badly
+		# with reputation scanners, on top of being worse for the people using it.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# No Content-Security-Policy yet. The editor is a bundled SPA with an
+		# inline theme script in index.html, so a policy tight enough to be worth
+		# having needs a nonce or a hash and a browser pass to prove nothing
+		# breaks. Shipping a permissive one to look compliant would be theatre.
+	}
 	reverse_proxy metis:3000
 }
 

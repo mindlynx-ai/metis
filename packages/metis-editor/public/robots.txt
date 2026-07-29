@@ -1,0 +1,13 @@
+# Metis is an application, not a corpus. Everything behind the login is
+# private per instance, and the public story lives on the docs site, so there
+# is nothing here worth indexing and plenty worth not indexing.
+#
+# This file exists mainly so a crawler gets a real text/plain answer. It used
+# to fall through to index.html with a 200, which is what a server that has no
+# 404 at all looks like from the outside.
+User-agent: *
+Disallow: /
+
+# The documentation and the source are the things to read.
+# https://docs.metisflow.io/
+# https://github.com/mindlynx-ai/metis

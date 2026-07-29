@@ -88,6 +88,34 @@ export async function registerWebhookRoute(
   });
 }
 
+/**
+ * What a static request resolves to: a file, or nothing.
+ *
+ * A path with an extension is asking for a FILE, so a missing one is a 404.
+ * Serving index.html instead made every URL on the origin answer 200 with
+ * identical HTML: /robots.txt came back as text/html, and so did any path at
+ * all, including ones nobody could have meant. To a reputation scanner an
+ * origin with no 404 anywhere looks like a doorway or cloaking page, and it
+ * hides genuinely broken asset links from us too.
+ *
+ * Extension-less paths still fall through to the shell, because those are the
+ * client-side routes the editor owns.
+ *
+ * Pure, with the existence check injected, so the rule can be tested without a
+ * server or a filesystem.
+ */
+export function resolveStaticTarget(
+  editorDir: string,
+  url: string,
+  exists: (path: string) => boolean,
+): { file: string; notFound?: false } | { notFound: true; file?: undefined } {
+  const shell = join(editorDir, 'index.html');
+  if (!url) return { file: shell };
+  const candidate = join(editorDir, url);
+  if (!extname(candidate)) return { file: shell };
+  return exists(candidate) ? { file: candidate } : { notFound: true };
+}
+
 const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
@@ -195,12 +223,13 @@ export async function buildControlServer(options: ControlServerOptions): Promise
     const editorDir = options.editorDir;
     app.get('/*', async (request, reply) => {
       const url = (request.params as { '*': string })['*'];
-      const candidate = url ? join(editorDir, url) : join(editorDir, 'index.html');
-      const filePath =
-        existsSync(candidate) && extname(candidate) ? candidate : join(editorDir, 'index.html');
-      const body = await readFile(filePath);
+      const target = resolveStaticTarget(editorDir, url, existsSync);
+      if (target.notFound) {
+        return reply.code(404).header('content-type', 'text/plain; charset=utf-8').send('Not found');
+      }
+      const body = await readFile(target.file);
       return reply
-        .header('content-type', CONTENT_TYPES[extname(filePath)] ?? 'application/octet-stream')
+        .header('content-type', CONTENT_TYPES[extname(target.file)] ?? 'application/octet-stream')
         .send(body);
     });
   }

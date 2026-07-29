@@ -203,6 +203,24 @@ describe('testing a data engine goes through its own adapter', () => {
     expect(health.ok).toBe(true);
   });
 
+  it('says a database engine with no adapter is connect-only rather than guessing', async () => {
+    // sqlserver has a catalogue record but no adapter. The old fallback ran a
+    // Postgres client against it, so the verdict described a protocol the
+    // server does not speak: red against a real SQL Server, green against a
+    // Postgres box. Neither told the operator anything true.
+    const sources = new DataSourceRegistry();
+    const health = await new DefaultConnectionTester(sources).testConnection({
+      connectorId: 'sqlserver',
+      authScheme: 'database',
+      baseUrl: 'sqlserver://',
+      material: { host: 'db.internal', port: '1433', database: 'sales', user: 'u', password: 'p' },
+    });
+    expect(health.ok).toBe(false);
+    expect(health.status).toBe('error');
+    expect(health.message).toMatch(/sqlserver/);
+    expect(health.message).toMatch(/connect-only/i);
+  });
+
   it('still probes an ordinary http connector over http', async () => {
     // No adapter for this connector, so nothing changes for the other 99.
     const sources = new DataSourceRegistry();

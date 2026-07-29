@@ -28,11 +28,16 @@
  * 200 and read green no matter what the credentials were. A test that cannot
  * fail is worse than no test.
  *
- * The rest keep the old behaviour: `database` with no adapter falls back to the
- * Postgres client, and the http schemes do an SSRF-guarded probe of the
- * connector's baseUrl (or its declared healthCheck) carrying the auth headers.
+ * A `database` connector with NO adapter is a different case again. It used to
+ * fall back to the Postgres client, which answered about a protocol the server
+ * does not speak: a SQL Server connection pointed at SQL Server read red, and
+ * one pointed at a Postgres box read green. Both verdicts were noise. It now
+ * says plainly that the engine is connect-only, so the credentials can be
+ * stored without the UI implying they were checked.
+ *
+ * The http schemes do an SSRF-guarded probe of the connector's baseUrl (or its
+ * declared healthCheck) carrying the auth headers.
  */
-import pg from 'pg';
 import { authHeadersFromMaterial } from './auth-headers.js';
 import { checkUrlForSsrf } from './http-node.js';
 import type {
@@ -73,30 +78,6 @@ export function classifyDbError(error: unknown): ConnectionHealth {
     return verdict('unreachable', message);
   }
   return verdict('error', message);
-}
-
-async function testDatabase(material: Record<string, string>): Promise<ConnectionHealth> {
-  const client = new pg.Client(
-    material.connectionString
-      ? { connectionString: material.connectionString, connectionTimeoutMillis: PROBE_TIMEOUT_MS }
-      : {
-          host: material.host,
-          port: material.port ? Number(material.port) : undefined,
-          database: material.database,
-          user: material.user,
-          password: material.password,
-          connectionTimeoutMillis: PROBE_TIMEOUT_MS,
-        },
-  );
-  try {
-    await client.connect();
-    await client.query('SELECT 1');
-    return verdict('ok', 'SELECT 1 succeeded');
-  } catch (error) {
-    return classifyDbError(error);
-  } finally {
-    await client.end().catch(() => undefined);
-  }
 }
 
 export function httpAuthHeaders(input: ConnectionTestInput): Record<string, string> {
@@ -212,7 +193,15 @@ export class DefaultConnectionTester implements ConnectionTester {
       // catalogue record happens to declare.
       const source = this.dataSources?.get(input.connectorId);
       if (source) return await testDataSource(source, input);
-      if (input.authScheme === 'database') return await testDatabase(input.material);
+      // Reached only by a database connector with no registered adapter: there
+      // is no client that speaks its wire protocol, so any probe here would be
+      // guessing. Refuse to guess.
+      if (input.authScheme === 'database') {
+        return verdict(
+          'error',
+          `${input.connectorId} is connect-only for now: its credentials can be stored, but there is no adapter to test or query it with yet.`,
+        );
+      }
       if (input.authScheme === 'client_credentials') {
         return await testClientCredentials(input.material);
       }

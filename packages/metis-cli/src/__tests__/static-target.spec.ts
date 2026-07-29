@@ -62,3 +62,22 @@ describe('resolveStaticTarget', () => {
     });
   });
 });
+
+describe('an unmatched API path is a missing endpoint, not a client route', () => {
+  it('404s /api/* instead of answering with the shell', () => {
+    // This is what made a dead endpoint read as a live one: GET /api/account on
+    // an instance with no cloud configured came back 200 text/html, so a client
+    // that does not check the content type sees success. The same absent route
+    // answered a correct 404 to POST, which made the two disagree.
+    for (const url of ['api/account', 'api/definitely-not-a-route', 'api/v2/orders', 'api']) {
+      expect(resolveStaticTarget(DIR, url, exists)).toEqual({ notFound: true });
+      expect(resolveStaticTarget(DIR, `/${url}`, exists)).toEqual({ notFound: true });
+    }
+  });
+
+  it('does not swallow a client route that merely starts with the letters api', () => {
+    for (const route of ['apiary', 'api-docs', 'apis']) {
+      expect(resolveStaticTarget(DIR, route, exists)).toEqual({ file: shell });
+    }
+  });
+});

@@ -110,6 +110,16 @@ export function resolveStaticTarget(
   exists: (path: string) => boolean,
 ): { file: string; notFound?: false } | { notFound: true; file?: undefined } {
   const shell = join(editorDir, 'index.html');
+  // An unmatched /api path is a missing endpoint, never a client route. Falling
+  // through to the shell answered 200 text/html to a caller expecting JSON,
+  // which reads as success: a client that does not check the content type sees
+  // a live endpoint where there is none, and an operator debugging a 404 is
+  // shown a page instead. GET was the only method affected, so the same absent
+  // route answered 404 to POST and 200 to GET.
+  // The wildcard route hands this the path with no leading slash, but accept
+  // both spellings so a caller that passes the raw URL is not silently missed.
+  const path = url.startsWith('/') ? url.slice(1) : url;
+  if (path === 'api' || path.startsWith('api/')) return { notFound: true };
   if (!url) return { file: shell };
   const candidate = join(editorDir, url);
   if (!extname(candidate)) return { file: shell };

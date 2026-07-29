@@ -23,7 +23,7 @@
  * thing entirely and is never mentioned on this page.
  */
 import { useEffect, useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router';
+import { Navigate, useLocation, useSearchParams } from 'react-router';
 import { toast } from './toast-store.js';
 import { formatOfferPrice, upliftApi, type OfferEntry } from './uplift-api.js';
 import { ensureUplift, useUplift } from './uplift-store.js';
@@ -136,6 +136,14 @@ function CapabilityCard({
 export function AccountPage() {
   const uplift = useUplift();
   useEffect(ensureUplift, []);
+  // No cloud configured means there is nothing to connect to: the connect
+  // button posts to a route that never mounted, 404s, and toasts "that didn't
+  // work". The sidebar already hides Account in this state, so the page was
+  // only reachable by typing the URL, and all it could do there was fail.
+  //
+  // Guarded on `loaded` because the store starts out 'disabled' on purpose, so
+  // that no cloud affordance flashes before the server answers. Redirecting on
+  // that initial value would bounce a perfectly well configured instance.
   const [connected, setConnected] = useState<boolean>();
   const [email, setEmail] = useState<string>();
   const [connecting, setConnecting] = useState(false);
@@ -204,6 +212,9 @@ export function AccountPage() {
       toast.error('Could not disconnect. Try again.');
     }
   };
+
+  // After every hook, so the redirect cannot change the hook order.
+  if (uplift.loaded && uplift.cloud === 'disabled') return <Navigate to="/" replace />;
 
   let hero: HeroState = 'disconnected';
   if (connecting) hero = 'connecting';

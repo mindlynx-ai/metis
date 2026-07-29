@@ -23,7 +23,12 @@ COPY packages ./packages
 COPY scripts ./scripts
 RUN npm ci
 COPY . .
-RUN npm run build
+# Which edition to bake in. `open` is the default and strips the paid packages
+# out of the image entirely, so an open image cannot be talked into running
+# them by configuration: the code is not there. Build with
+# `--build-arg METIS_EDITION=helix` for an image that carries them.
+ARG METIS_EDITION=open
+RUN METIS_EDITION=$METIS_EDITION npm run build
 
 FROM node:22-bookworm-slim AS runtime
 WORKDIR /app

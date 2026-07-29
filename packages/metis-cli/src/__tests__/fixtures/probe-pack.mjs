@@ -13,13 +13,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-export * from './approval-decision.js';
-export * from './approval-node.js';
 
 /**
- * The node-pack contract (see metis-cli/src/packs.ts). A runtime loads this
- * package by name from METIS_PACKS and calls exactly this, which is why the
- * name is generic: the loader must know nothing about approvals, or the
- * module-boundary gate would have something paid to see in the open build.
+ * A minimal node pack, so the loader contract is exercised end to end without
+ * this open package naming a paid one (which the module-boundary gate would
+ * rightly reject).
  */
-export { registerApprovalNodes as registerPack } from './approval-node.js';
+export function registerPack(registry) {
+  registry.registerNodeHandler('pack-probe', async () => ({ outcome: 'completed' }));
+}

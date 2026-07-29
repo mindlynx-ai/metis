@@ -80,6 +80,7 @@ import {
 } from './temporal/download.js';
 import { TemporalDevServer, defaultDevServerPaths } from './temporal/dev-server.js';
 import { seedUsers } from './seed-users.js';
+import { loadPacks } from './packs.js';
 import type { MetisConfig } from './scaffold.js';
 
 export interface RuntimeOptions {
@@ -243,6 +244,12 @@ export class MetisRuntime {
 
   /** Start the dev server (downloading it if needed) and the worker. */
   async start(downloadDeps?: Partial<EnsureDeps>): Promise<void> {
+    // Before the worker exists, because the worker dispatches through this
+    // registry: a pack registered afterwards would be invisible to every
+    // activity already in flight. Both start paths pass through here, and
+    // loadPacks throws rather than booting a paid instance without its nodes.
+    const packs = await loadPacks(this.nodes, process.env.METIS_PACKS);
+    if (packs.length > 0) this.options.log(`Node packs loaded: ${packs.join(', ')}.`);
     if (this.options.externalTemporalAddress) {
       await this.startWorker(`Worker running against Temporal at ${this.address}.`);
       return;

@@ -40,6 +40,11 @@ services:
       METIS_HELIX_IDENTITY_URL: ${METIS_HELIX_IDENTITY_URL:-}
       METIS_HELIX_CLIENT_ID: ${METIS_HELIX_CLIENT_ID:-metis-editor}
       METIS_HELIX_REDIRECT_BASE: ${METIS_HELIX_REDIRECT_BASE:-}
+      # Paid node packs to load at boot, comma separated. Only meaningful on an
+      # image built with METIS_EDITION=helix, because an open image does not
+      # contain them; naming one there is a boot failure by design, rather than
+      # a runtime that quietly refuses the capability it was sold.
+      METIS_PACKS: ${METIS_PACKS:-}
 
   caddy:
     image: caddy:2.8-alpine

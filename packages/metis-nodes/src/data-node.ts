@@ -37,7 +37,8 @@ interface DataNodeConfig extends PgBuilderConfig {
   /** The chosen connection instance id (material is resolved from this). */
   connectorId?: string;
   connectionId?: string;
-  /** The connection's engine; the inspector sets it, defaulting to postgres. */
+  /** The connection's engine, recorded by the picker when the connection is
+   *  chosen. A flow saved before that carries none, hence the postgres fallback. */
   engine?: string;
   /** Raw-query mode: a SQL string (+ optional $1/$2 params). */
   query?: string;

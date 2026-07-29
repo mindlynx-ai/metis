@@ -20,7 +20,9 @@
  * pick a connector type (that is fixed by the node type; picking node types is
  * the palette's job). This lists the tenant's connections for the node's
  * provider and lets you pick one or create a new named one inline, writing the
- * chosen connection's id into the node's `connectorId` config field.
+ * chosen connection's id into the node's `connectorId` config field - plus, for
+ * a data source, which engine that connection is, since nothing downstream can
+ * work it out from the id alone.
  */
 import { useEffect, useState } from 'react';
 import {
@@ -81,11 +83,31 @@ export function ConnectorPicker({ node, scope = {} }: { node: WorkflowNode; scop
     .sort((a, b) => a.name.localeCompare(b.name));
   const isOAuth = oauthSet.has(provider);
   const set = (key: string, value: unknown) => flow.updateConfigField(node.id, key, value);
+
+  /**
+   * A database connection IS its engine, and the picker is the only place that
+   * knows which one was chosen. The Data step's `engine` field was documented
+   * as the inspector's to write, and nothing ever wrote it: the runtime fell
+   * back to guessing postgres, and a step bound to the cloud could not be told
+   * apart from one aimed at the cloud's own warehouse. Recorded for data
+   * sources only, because nothing else reads it.
+   *
+   * Both facts are consulted so the write cannot be lost to a load order: the
+   * connector catalogue answers for a connection made through the modal, the
+   * chosen record for one picked from the list (the same fetch that filled it).
+   */
+  const isDataSource = (connectionId: string): boolean =>
+    providerDef?.authScheme === 'database' ||
+    connections.find((c) => c.connectionId === connectionId)?.connectionType === 'database';
+
   /** Pick a connection, keeping one source of truth: a stale `connectionId`
    *  left beside a new `connectorId` would win at run time and authenticate as
    *  whatever was chosen before. */
   const choose = (connectionId: string | undefined) => {
     set('connectorId', connectionId);
+    if (provider && isDataSource(connectionId ?? '')) {
+      set('engine', connectionId ? provider : undefined);
+    }
     if (config.connectionId !== undefined) set('connectionId', undefined);
   };
 

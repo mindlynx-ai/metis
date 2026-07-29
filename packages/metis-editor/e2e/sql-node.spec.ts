@@ -76,6 +76,56 @@ test('the Data node builds a query visually (no SQL) and it persists', async ({ 
   await expect(inspector.locator('.kv-row .kv-key').first()).toHaveValue('status');
 });
 
+/**
+ * The engine has to be RECORDED, not guessed. Picking a connection is the only
+ * moment anything knows which system it is, and the saved step is what the
+ * cloud-bind guard later reads: without the engine beside the connection id,
+ * a step aimed at this database cannot be told apart from one aimed at the
+ * cloud warehouse, and its SQL runs against the wrong data with a 200.
+ *
+ * Asserted on the save payload the app actually sends, because a hand-built
+ * config can declare an engine that no real node carries.
+ */
+test('picking a database connection saves the engine beside the connection id', async ({ page }) => {
+  await login(page);
+
+  // A real connection, made the way a user makes one.
+  await page.goto('http://127.0.0.1:4180/connectors');
+  await page.locator('.conn-connect-btn').click();
+  const modal = page.locator('.modal');
+  await modal.getByRole('tab', { name: 'Database' }).click();
+  await modal.locator('#add-name').fill('Own Postgres');
+  await modal.locator('#add-engine').selectOption('postgres');
+  await modal.locator('#add-host').fill('127.0.0.1');
+  await modal.locator('#add-port').fill('1');
+  await modal.locator('#add-database').fill('metis');
+  await modal.locator('#add-user').fill('metis');
+  await modal.locator('#add-password').fill('metis');
+  await modal.getByRole('button', { name: 'Connect', exact: true }).click();
+  await expect(page.locator('.conn-card', { hasText: 'Own Postgres' })).toHaveCount(1);
+
+  await page.goto('http://127.0.0.1:4180/workflows/data-engine/edit');
+  await addStep(page, /^Data/);
+  await page.locator('.metis-node').first().click();
+
+  const picker = page.locator('.inspector .connector-picker #conn-conn');
+  await picker.selectOption({ label: 'Own Postgres' });
+  const connectionId = await picker.inputValue();
+  expect(connectionId).not.toBe('');
+
+  const saved = page.waitForRequest(
+    (request) => request.url().includes('/api/workflows') && ['POST', 'PATCH'].includes(request.method()),
+  );
+  await page.getByRole('button', { name: 'Save draft' }).click();
+  const body = JSON.parse((await saved).postData() ?? '{}') as {
+    nodes?: { type: string; data?: { config?: Record<string, unknown> } }[];
+  };
+
+  const config = (body.nodes ?? []).find((node) => node.type === 'data')?.data?.config ?? {};
+  expect(config.connectorId).toBe(connectionId);
+  expect(config.engine).toBe('postgres');
+});
+
 test('the one Data node is found by "sql", "data" or "query" (postgres/sql demoted)', async ({
   page,
 }) => {

@@ -134,12 +134,12 @@ describe('resolution order (never cloud silently)', () => {
 });
 
 describe('a cloud bind never silently swaps the data source', () => {
-  const PG = { connectorId: 'conn_pg', query: 'select * from orders' };
+  const PG = { connectorId: 'conn_pg', engine: 'postgres', query: 'select * from orders' };
   const CLOUD = { connectorId: 'conn_warehouse', engine: CLOUD_DATA_ENGINE, query: 'select 1' };
 
   it.each([
     ['a connection chosen on the step', PG],
-    ['a connection the step never mentions its engine for', { connectionId: 'conn_pg', query: 'x' }],
+    ['a connection carried under the runtime alias', { connectionId: 'conn_pg', engine: 'postgres', query: 'x' }],
     [
       'a dataset handle from an earlier step, templated in as JSON text',
       { sourceRef: JSON.stringify({ kind: 'dataset', connectionId: 'conn_pg', engine: 'postgres', query: 'select 1' }) },
@@ -160,6 +160,15 @@ describe('a cloud bind never silently swaps the data source', () => {
   it('allows the cloud bind when the step names the cloud warehouse', async () => {
     const stub = await stubbed();
     const result = await resolverFor(stub).execute(contextFor({ ...CONSENTED, nodeMode: 'cloud' }, CLOUD));
+    expect(result.status).toBe(200);
+    expect(result.binding).toBe('cloud');
+  });
+
+  it('allows the cloud bind when the engine was never recorded (a workflow saved before this)', async () => {
+    const stub = await stubbed();
+    const result = await resolverFor(stub).execute(
+      contextFor({ ...CONSENTED, nodeMode: 'cloud' }, { connectorId: 'conn_legacy', query: 'select 1' }),
+    );
     expect(result.status).toBe(200);
     expect(result.binding).toBe('cloud');
   });

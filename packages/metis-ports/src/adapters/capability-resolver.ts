@@ -86,17 +86,24 @@ export const CLOUD_DATA_ENGINE = 'athena';
  * payload so the gateway could dispatch per engine - it is a fraction of the
  * size and it cannot mis-execute, and the gateway has exactly one engine today.
  *
- * Untouched: a step naming NO connection (the cloud supplies the warehouse) and
- * one that declares the cloud engine. A step that says nothing about its engine
- * IS refused: a local dispatch reads silence as postgres, so silence is never
- * evidence of the warehouse.
+ * Only a POSITIVELY foreign connection is refused. Untouched: a step naming no
+ * connection (the cloud supplies the warehouse), one that names the cloud
+ * engine, and one whose engine is not recorded at all. Silence means "authored
+ * before the picker started recording the engine", not "foreign": refusing it
+ * would break workflows that already exist, and breaking a saved definition to
+ * close a latent path is not a trade this guard gets to make.
+ *
+ * The residual is deliberate and it is named here: a legacy step that is never
+ * reopened keeps the old silent behaviour until it is saved again, which the
+ * picker fixes the moment its connection is touched.
  */
 function foreignConnectionRefusal(nodeRef: NodeRef): NodeExecutionResult | undefined {
   const config = nodeRef.config ?? {};
   const ref = asDatasetRef(config.sourceRef);
   const connectionId = String(ref?.connectionId ?? config.connectorId ?? config.connectionId ?? '');
   if (connectionId === '') return undefined;
-  if (String(ref?.engine ?? config.engine ?? '') === CLOUD_DATA_ENGINE) return undefined;
+  const engine = String(ref?.engine ?? config.engine ?? '');
+  if (engine === '' || engine === CLOUD_DATA_ENGINE) return undefined;
   return {
     status: 400,
     message:

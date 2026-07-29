@@ -69,11 +69,19 @@ export class ScheduleService {
           type: 'startWorkflow',
           workflowType: 'helixWorkflow',
           taskQueue: this.taskQueue,
+          // An action is written once and replayed at every tick, so nothing
+          // in it can be per-fire. This id is the BASE only: Temporal appends
+          // the nominal fire time (exec_sch_t1_wf-2026-07-29T08:55:00Z), which
+          // is what makes each fire a run of its own, and helixWorkflow records
+          // under that ambient id. Keeping the schedule id as the base is what
+          // lets an operator read the schedule that produced a run off its id.
           workflowId: `exec_${scheduleId}`,
           args: [
             {
               tenantId,
               workflowId,
+              // Superseded per fire by the ambient workflow id; here so the
+              // payload is a complete HelixWorkflowInput.
               executionId: `exec_${scheduleId}`,
               definition,
               input: { scheduled: true, cron },

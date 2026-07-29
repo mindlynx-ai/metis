@@ -39,6 +39,24 @@ export function isDone(node: RuntimeNode): boolean {
   );
 }
 
+/**
+ * Which node an inbound signal belongs to. A signal node answers to its
+ * configured name; any other node answers only while a park its handler
+ * asked for is open, so a stray signal cannot resume a node that is not
+ * waiting for one.
+ */
+export function signalTarget(nodes: RuntimeNode[], wanted: string): RuntimeNode | undefined {
+  return nodes.find((candidate) => {
+    if (candidate.signalReceived === true) return false;
+    if (candidate.nodeStatus !== 'Pending' && candidate.nodeStatus !== 'InProgress') return false;
+    const listening =
+      candidate.type.toLowerCase() === 'signal'
+        ? String(candidate.config?.signalType ?? '')
+        : (candidate.awaitingSignalType ?? '');
+    return listening !== '' && listening.toLowerCase() === wanted;
+  });
+}
+
 export function getAvailableNodes(nodes: RuntimeNode[], edges: WorkflowEdge[]): RuntimeNode[] {
   return nodes.filter(
     (node) =>

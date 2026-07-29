@@ -10,6 +10,7 @@ Generated from the node catalogue - do not edit by hand
 - [Signal](signal.md) - Pause the workflow until an external signal arrives.
 - [Switch](switch.md) - Evaluate conditions and route to a selected branch.
 - [Logic](logic.md) - Branch on a predicate tree (AND/OR/NOT with leaf conditions).
+- [Approval](approval.md) - Park the run until a person signs off, then take the approved or rejected branch.
 - [Wait Until](waituntil.md) - Pause execution for a configurable duration.
 - [No Operation](noop.md) - Does nothing: a junction or label to keep a flow readable. Passes the walk straight through.
 - [Stop and Error](stopanderror.md) - Halt the workflow on purpose and fail the run with your message. A guard for states that should never continue.
@@ -21,3 +22,4 @@ Generated from the node catalogue - do not edit by hand
 - [Data](data.md) - Read or write any data source: a SQL query or a visual table builder.
 - [HTTP API](api.md) - Call an external HTTP API. Supports retry, configurable timeout, and headers array format.
 - [SendGrid](sendgrid.md) - Send transactional email via a SendGrid connector. Supports basic to/from/subject/text/html; templates, cc/bcc and open-tracking are not yet supported.
+- [Object Store](s3.md) - Move files in and out of S3 or any S3-compatible store: put, get, list, or hand out a temporary link.

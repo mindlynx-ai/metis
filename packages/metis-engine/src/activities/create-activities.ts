@@ -18,6 +18,7 @@ import {
   cloudParkJobId,
   isCompleted,
   isUnimplemented,
+  signalPark,
   type CapabilityGatewayClient,
   type CredentialPort,
   type EventSink,
@@ -57,6 +58,12 @@ function classifyStatus(status: number): ExecuteNodeResult['outcome'] {
 /** Policy attempts are bounded so a typo cannot spin a node for hours. */
 const MAX_ATTEMPTS = 10;
 
+/** One dispatch's outcome, before the log line and the event are written. */
+type DispatchResult = Pick<
+  ExecuteNodeResult,
+  'outcome' | 'output' | 'error' | 'attempts' | 'jobId' | 'park'
+> & { binding?: 'local' | 'cloud' | 'local-degraded' };
+
 /**
  * Dispatch a handler node through the port under its policy: a bounded
  * retry loop with optional backoff, each attempt raced against the
@@ -66,14 +73,7 @@ async function executeHandlerWithPolicy(
   nodes: NodeExecPort,
   request: ExecuteNodeRequest,
   resolvedConfig: Record<string, unknown>,
-): Promise<{
-  outcome: ExecuteNodeResult['outcome'];
-  output?: unknown;
-  error?: ExecuteNodeResult['error'];
-  attempts: number;
-  binding?: 'local' | 'cloud' | 'local-degraded';
-  jobId?: string;
-}> {
+): Promise<DispatchResult> {
   const { node } = request;
   const policy = node.policy ?? {};
   const maxAttempts = 1 + Math.min(Math.max(0, Math.trunc(policy.retries ?? 0)), MAX_ATTEMPTS - 1);
@@ -116,6 +116,11 @@ async function executeHandlerWithPolicy(
   if (parkedJobId) {
     return { outcome: 'parked', jobId: parkedJobId, attempts, binding: exec.binding };
   }
+  // The other park: the handler wants an answer from outside the run. The
+  // wait belongs to the workflow, not to this activity, whose budget is
+  // minutes while a sign-off is measured in days.
+  const park = signalPark(exec);
+  if (park) return { outcome: 'parked', park, attempts, binding: exec.binding };
   const outcome = classifyStatus(exec.status);
   return {
     outcome,
@@ -268,14 +273,7 @@ export function createActivities(ports: EnginePorts): EngineActivities {
       const resolved = await resolveSecretTokens(substituted, tenantId, ports.credentials);
       const nodeType = node.type.toLowerCase();
 
-      let result: {
-        outcome: ExecuteNodeResult['outcome'];
-        output?: unknown;
-        error?: ExecuteNodeResult['error'];
-        attempts?: number;
-        binding?: 'local' | 'cloud' | 'local-degraded';
-        jobId?: string;
-      };
+      let result: DispatchResult;
       if (nodeType === 'signal') {
         // Inline control primitive: the park happened in the workflow;
         // this records the resume and surfaces the signal params as the
@@ -326,7 +324,7 @@ export function createActivities(ports: EnginePorts): EngineActivities {
       // Parked: the job was accepted; the workflow marks the wait and the
       // final line lands when pollCloudJob reaches the terminal state.
       if (result.outcome === 'parked') {
-        return { outcome: 'parked', jobId: result.jobId };
+        return { outcome: 'parked', jobId: result.jobId, park: result.park };
       }
 
       const eventByOutcome: Record<string, WorkflowEventName> = {
@@ -453,6 +451,7 @@ export function createActivities(ports: EnginePorts): EngineActivities {
       emit('workflow.node.waiting', request, request.nodeId, {
         signalType: request.signalType,
         until: request.until,
+        details: request.details,
       });
       await ports.store.appendExecutionLog({
         tenantId: request.tenantId,
@@ -465,6 +464,7 @@ export function createActivities(ports: EnginePorts): EngineActivities {
         event: 'workflow.node.waiting',
         signalType: request.signalType,
         until: request.until,
+        details: request.details,
         at: new Date().toISOString(),
       });
     },

@@ -21,6 +21,14 @@
  */
 import { request } from './api.js';
 
+/** What a purchasable capability costs. Absent until it can be bought. */
+export interface OfferPrice {
+  /** Minor units (pence), so money never rounds through a float. */
+  amount: number;
+  currency: string;
+  interval: 'month' | 'year';
+}
+
 /** One capability from the offers manifest (the public storefront). */
 export interface OfferEntry {
   id: string;
@@ -29,6 +37,20 @@ export interface OfferEntry {
   state: 'coming-soon' | 'beta' | 'available';
   ctaUrl: string;
   message?: string;
+  price?: OfferPrice;
+}
+
+/**
+ * Mirrors formatOfferPrice in metis-ports. The editor cannot import from the
+ * ports package (it is a browser bundle and the boundary gate enforces that),
+ * so the one thing that must not drift between them is pinned by a test.
+ */
+export function formatOfferPrice(price: OfferPrice): string {
+  const symbols: Record<string, string> = { GBP: '£', USD: '$', EUR: '€' };
+  const symbol = symbols[price.currency] ?? `${price.currency} `;
+  const major = price.amount / 100;
+  const shown = Number.isInteger(major) ? String(major) : major.toFixed(2);
+  return `${symbol}${shown}/${price.interval}`;
 }
 
 /** The extended entitlements view: shim + the account's cloud standing. */

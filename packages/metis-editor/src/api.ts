@@ -92,9 +92,13 @@ export interface TemporalExecution {
   definitionChangeset?: number;
   /** Whereabouts for running executions: parked or actively at a step. */
   runState?: 'waiting' | 'running';
-  waitingOn?: { signalType?: string; until?: string };
+  waitingOn?: WaitingOn;
   atNode?: string;
 }
+
+/** What a parked run waits for. `details` is whatever the step that parked
+ *  put there: for an approval, the request a reviewer decides on. */
+export type WaitingOn = { signalType?: string; until?: string; details?: Record<string, unknown> };
 
 /**
  * The subset of JSON Schema the inspector reads, plus the Helix widget
@@ -269,7 +273,7 @@ export interface ExecutionInsight {
     lastFailure?: string;
   }[];
   children: { executionId: string; runId?: string; status?: string; startTime?: string }[];
-  whereabouts?: { runState: 'waiting' | 'running'; waitingOn?: { signalType?: string; until?: string }; atNode?: string };
+  whereabouts?: { runState: 'waiting' | 'running'; waitingOn?: WaitingOn; atNode?: string };
 }
 
 export interface ExecutionSummary {

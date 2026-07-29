@@ -53,7 +53,7 @@ interface DataNodeConfig extends PgBuilderConfig {
 const WRITE_OPS = new Set(['insert', 'update', 'delete', 'upsert']);
 
 /** Node types that name their engine. `data` is the generic one and does not. */
-const NAMED_ENGINE_NODES = new Set(['postgres', 'mysql', 'snowflake']);
+const NAMED_ENGINE_NODES = new Set(['postgres', 'mysql', 'snowflake', 'sqlserver']);
 
 /** The step output: the rows, plus `row` = the first record so a downstream
  *  step can reference a single result's field cleanly ({{step.data.row.email}}). */

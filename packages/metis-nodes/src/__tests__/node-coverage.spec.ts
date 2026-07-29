@@ -16,10 +16,15 @@
 
 /**
  * The completeness proof: every node type in the catalogue has a real
- * execution path, so no declared node ever resolves to "unimplemented".
- * A type is covered if it is (a) a registered handler, (b) a config-only
- * trigger (seeds state, never executed), or (c) an inline-control node the
- * engine special-cases (switch/signal/waituntil/logic).
+ * execution path, so no declared node ever resolves to "unimplemented" by
+ * accident. A type is covered if it is (a) a registered handler, (b) a
+ * config-only trigger (seeds state, never executed), or (c) an inline-control
+ * node the engine special-cases (switch/signal/waituntil/logic).
+ *
+ * The one deliberate exception is a PAID local step (an approval): the
+ * catalogue is one file across editions, so its entry ships here while its
+ * handler ships only in the paid pack. That is the upgrade path, and the
+ * second test holds it to being exactly that and never a quiet gap.
  */
 import { describe, it, expect } from 'vitest';
 import {
@@ -63,6 +68,11 @@ function buildRegistry(): NodeHandlerRegistry {
   return registry;
 }
 
+/** A paid step with no cloud backend: its handler is in the paid pack, so
+ *  this build cannot run it (a 'both' entry always has a local backend). */
+const isPaidLocal = (entry: { entitlement?: string; execution?: string }): boolean =>
+  Boolean(entry.entitlement) && entry.execution !== 'both';
+
 describe('node-type coverage', () => {
   it('every catalogue node type has an execution path (none unimplemented)', () => {
     const registry = buildRegistry();
@@ -71,7 +81,7 @@ describe('node-type coverage', () => {
 
     const uncovered = catalogue.entries
       // `connector` is not-a-node (a credential concept, never executed).
-      .filter((entry) => entry.handler_status !== 'not-a-node')
+      .filter((entry) => entry.handler_status !== 'not-a-node' && !isPaidLocal(entry))
       .map((entry) => entry.type)
       .filter(
         (type) =>
@@ -79,6 +89,29 @@ describe('node-type coverage', () => {
       );
 
     expect(uncovered).toEqual([]);
+  });
+
+  it('a paid step is unregistered here, so it answers with the upgrade path', async () => {
+    const registry = buildRegistry();
+    const paid = getCatalogue().entries.filter(isPaidLocal);
+    // The paid capabilities this build sells; if one ever registers here by
+    // accident it would ship for free, which this catches.
+    expect(paid.map((entry) => entry.type)).toContain('approval');
+    for (const entry of paid) {
+      expect(registry.canExecute(entry.type)).toBe(false);
+      const result = await registry.execute({
+        nodeRef: { id: 'n1', type: entry.type, config: {} },
+        tenantId: 't1',
+        executionId: 'e1',
+        workflowId: 'w1',
+        workflowState: { states: [] },
+      });
+      // Structured, and it says what to do about it: never a crash, never a
+      // silent completion that lets the run carry on as though it had run.
+      expect(result.status).toBe(501);
+      expect(result.message).toMatch(/not available in this edition/i);
+      expect(result.message).toMatch(/upgrade/i);
+    }
   });
 
   it('the registered handlers include the core nodes and the wired connector nodes', () => {

@@ -309,6 +309,7 @@ body {
 .ov-page,
 .home-page,
 .operate-page,
+.review-page,
 .conn-page,
 .audit-page {
   width: 100%;
@@ -3289,6 +3290,38 @@ body {
 .run-error {
   color: var(--danger-text);
   font-size: var(--text-sm);
+}
+
+/* ----- Reviews: the runs table, carrying what a person needs to decide ----- */
+.review-page > * + * {
+  margin-top: var(--space-5);
+}
+
+.review-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-primary);
+  font-weight: 560;
+}
+
+/* The values the decision turns on: label above value, wrapping in a row so
+   two or six of them read the same. */
+.review-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-5);
+  margin-top: var(--space-2);
+}
+.review-fields dt {
+  font-size: var(--text-xs);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+.review-fields dd {
+  font-size: var(--text-sm);
+  color: var(--text-primary);
 }
 
 /* ============================================================================

@@ -30,6 +30,7 @@ import { RunsPage } from './runs/RunsPage.js';
 import { ExecutionPage } from './runs/ExecutionPage.js';
 
 import { OperatePage } from './runs/OperatePage.js';
+import { ReviewQueuePage } from './runs/ReviewQueuePage.js';
 import { ConnectorsPage } from './ConnectorsPage.js';
 import { AccountPage } from './AccountPage.js';
 import { AuditPage } from './AuditPage.js';
@@ -212,6 +213,7 @@ export function App() {
         {/* History merged into Operate; old links keep working. */}
         <Route path="/history" element={<Navigate to="/operate" replace />} />
         <Route path="/operate" element={<AppView><OperatePage /></AppView>} />
+        <Route path="/reviews" element={<AppView><ReviewQueuePage /></AppView>} />
         <Route path="/connectors" element={<AppView><ConnectorsPage /></AppView>} />
         <Route path="/activity" element={<AppView><AuditPage /></AppView>} />
         <Route path="/account" element={<AppView><AccountPage /></AppView>} />

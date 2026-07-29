@@ -475,3 +475,43 @@ describe('the consent receipt (UPL-REQ-13)', () => {
     await app.close();
   });
 });
+
+/**
+ * The storefront a public instance serves when it has no gateway. These are
+ * the claims a stranger reads before deciding to pay, so they are pinned:
+ * a dead link or a capability priced before it exists is a broken promise,
+ * not a cosmetic slip.
+ */
+describe('the static offers manifest is a storefront, not a placeholder', () => {
+  it('sends every capability to a real published page', () => {
+    for (const offer of STATIC_OFFERS) {
+      // example.com placeholders shipped here once. On a public box that is a
+      // dead link on the only page that asks for money.
+      expect(offer.ctaUrl).not.toMatch(/example\./);
+      expect(offer.ctaUrl).toMatch(/^https:\/\//);
+    }
+  });
+
+  it('prices exactly what can be bought, and nothing that cannot', () => {
+    for (const offer of STATIC_OFFERS) {
+      if (offer.state === 'available') expect(offer.price).toBeDefined();
+      // A price on a coming-soon capability reads as an invoice for vapour.
+      else expect(offer.price).toBeUndefined();
+    }
+    expect(STATIC_OFFERS.some((offer) => offer.state === 'available')).toBe(true);
+  });
+
+  it('holds the price in minor units so money never rounds through a float', () => {
+    for (const offer of STATIC_OFFERS) {
+      if (!offer.price) continue;
+      expect(Number.isInteger(offer.price.amount)).toBe(true);
+      expect(offer.price.currency).toMatch(/^[A-Z]{3}$/);
+    }
+  });
+
+  it('sells approvals, the one paid capability that actually exists', () => {
+    const approvals = STATIC_OFFERS.find((offer) => offer.id === 'cap.approvals');
+    expect(approvals?.state).toBe('available');
+    expect(approvals?.price).toEqual({ amount: 900, currency: 'GBP', interval: 'month' });
+  });
+});

@@ -36,6 +36,7 @@ describe('Metis worker: hello-world helixWorkflow', () => {
   let store: WorkflowStore;
   let events: CapturingEventSink;
   let worker: Worker;
+  let workerRun: Promise<void>;
 
   beforeAll(async () => {
     env = await TestWorkflowEnvironment.createTimeSkipping();
@@ -64,9 +65,14 @@ describe('Metis worker: hello-world helixWorkflow', () => {
         credentials: new FakeCredentialPort(),
       }),
     });
+    // Kept running for the whole file: runUntil shuts the worker down when its
+    // promise settles, leaving nothing for a second case to run on.
+    workerRun = worker.run();
   }, 180_000);
 
   afterAll(async () => {
+    worker?.shutdown();
+    await workerRun;
     await env?.teardown();
   });
 
@@ -80,13 +86,11 @@ describe('Metis worker: hello-world helixWorkflow', () => {
         edges: [],
       },
     };
-    const result = await worker.runUntil(
-      env.client.workflow.execute('helixWorkflow', {
-        args: [input],
-        workflowId: input.executionId,
-        taskQueue: TASK_QUEUE,
-      }),
-    );
+    const result = await env.client.workflow.execute('helixWorkflow', {
+      args: [input],
+      workflowId: input.executionId,
+      taskQueue: TASK_QUEUE,
+    });
     expect((result as { status: string }).status).toBe('completed');
 
     const execution = await store.getExecution('t1', 'exec-hello-1');
@@ -97,5 +101,30 @@ describe('Metis worker: hello-world helixWorkflow', () => {
     expect(names).toContain('workflow.execution.started');
     expect(names).toContain('workflow.node.completed');
     expect(names).toContain('workflow.execution.completed');
+  }, 120_000);
+
+  it('records under the id Temporal minted, not a stale executionId in the args', async () => {
+    // A Temporal Schedule replays one action payload at every tick, so the
+    // executionId in those args is a constant: taking it at face value gives a
+    // schedule one run row, overwritten for ever. The id Temporal minted (for a
+    // scheduled fire, the action id with the fire time appended) is the only
+    // per-fire identity available, and it is what the run must be filed under.
+    const stale = 'exec_sch_t1_wf-hello';
+    const minted = `${stale}-2026-07-29T09:00:00Z`;
+    const result = await env.client.workflow.execute('helixWorkflow', {
+      args: [
+        {
+          tenantId: 't1',
+          workflowId: 'wf-hello',
+          executionId: stale,
+          definition: { nodes: [{ id: 'n1', type: 'echo', config: {} }], edges: [] },
+        } satisfies HelixWorkflowInput,
+      ],
+      workflowId: minted,
+      taskQueue: TASK_QUEUE,
+    });
+    expect((result as { status: string }).status).toBe('completed');
+    expect((await store.getExecution('t1', minted))?.meta.status).toBe('completed');
+    expect(await store.getExecution('t1', stale)).toBeUndefined();
   }, 120_000);
 });

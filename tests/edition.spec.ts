@@ -28,12 +28,16 @@ describe('edition profile', () => {
     expect(included).toContain('metis-ports');
     expect(included).toContain('metis-engine');
     expect(included).not.toContain('example-gated');
+    // The first paid capability: sold, so it must be absent from the open
+    // build by the same mechanism as the example, not by a special case.
+    expect(included).not.toContain('metis-approvals');
   });
 
   it('the helix edition resolves to the full set with no source edit', () => {
     const included = resolveEditionPackages(repoRoot, 'helix') as string[];
     expect(included).toContain('metis-ports');
     expect(included).toContain('example-gated');
+    expect(included).toContain('metis-approvals');
   });
 
   it('an unknown edition is rejected', () => {
@@ -48,6 +52,7 @@ describe('edition profile', () => {
     });
     expect(existsSync(join(repoRoot, 'packages', 'metis-ports', 'dist', 'index.js'))).toBe(true);
     expect(existsSync(join(repoRoot, 'packages', 'example-gated', 'dist'))).toBe(false);
+    expect(existsSync(join(repoRoot, 'packages', 'metis-approvals', 'dist'))).toBe(false);
 
     execFileSync(process.execPath, [join(repoRoot, 'scripts', 'build-edition.mjs')], {
       cwd: repoRoot,
@@ -55,5 +60,6 @@ describe('edition profile', () => {
       stdio: 'pipe',
     });
     expect(existsSync(join(repoRoot, 'packages', 'example-gated', 'dist', 'index.js'))).toBe(true);
+    expect(existsSync(join(repoRoot, 'packages', 'metis-approvals', 'dist', 'index.js'))).toBe(true);
   }, 120_000);
 });

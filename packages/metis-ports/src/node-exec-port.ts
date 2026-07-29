@@ -117,6 +117,54 @@ export interface NodeExecPort {
 }
 
 // ---------------------------------------------------------------------------
+// Signal park: the handler contract for work that finishes outside the run.
+// ---------------------------------------------------------------------------
+
+/**
+ * The park a handler asks for when the answer can only come from outside a
+ * human signing off, a counterparty confirming. The engine parks durably on
+ * `signalType` (no compute burned while it waits) and dispatches the node
+ * AGAIN with the answer, so a handler sees its own decision as ordinary
+ * signal params. When the timeout runs out the node is dispatched with
+ * `expired` instead: what an expiry MEANS is the handler's rule, never the
+ * engine's, because the engine cannot know whether silence is safe.
+ */
+export const SIGNAL_PARK_ACTION = { type: 'signal', action: 'park' } as const;
+
+export interface SignalPark {
+  /** The signal name that answers this park; unique to the node and run. */
+  signalType: string;
+  /** How long the park may last before the node is dispatched as expired. */
+  timeoutMs?: number;
+  /**
+   * What is being decided, carried onto the run's waiting log line. A queue
+   * can then show every parked decision from the run list alone, instead of
+   * opening each run to find out what it is waiting for.
+   */
+  details?: Record<string, unknown>;
+}
+
+/** The park a result asks for, or undefined when it is not a park. */
+export function signalPark(result: NodeExecutionResult): SignalPark | undefined {
+  if (result.nodeAction?.type !== SIGNAL_PARK_ACTION.type) return undefined;
+  if (result.nodeAction.action !== SIGNAL_PARK_ACTION.action) return undefined;
+  const park = result.nodeAction.data as SignalPark | undefined;
+  return park?.signalType ? park : undefined;
+}
+
+/** The park envelope a handler returns; 202 reads as accepted, not done. */
+export function parkOnSignal(park: SignalPark, message: string): NodeExecutionResult {
+  return { status: 202, message, nodeAction: { ...SIGNAL_PARK_ACTION, data: park } };
+}
+
+/** True when these signal params are the engine's expiry, not a real answer.
+ *  The engine sends `{expired:true}` when a park's deadline passes; a handler
+ *  reads it here rather than reaching for the literal. */
+export function isParkExpiry(signalParams: unknown): boolean {
+  return (signalParams as { expired?: unknown } | undefined)?.expired === true;
+}
+
+// ---------------------------------------------------------------------------
 // Status helpers (mirror Helix's executeNode classification) so the engine and
 // handlers agree on what a status means without re-deriving it everywhere.
 // ---------------------------------------------------------------------------

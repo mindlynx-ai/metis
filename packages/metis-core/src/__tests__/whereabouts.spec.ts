@@ -52,6 +52,38 @@ describe('deriveWhereabouts (where a running execution genuinely is)', () => {
     expect(deriveWhereabouts(logs, labelOf)).toEqual({ runState: 'running', atNode: 'Approve' });
   });
 
+  it('a step that parks AFTER its dispatch still reads as waiting', () => {
+    // An approval (and an accepted cloud job) is dispatched first and parks
+    // second, so its started line is already on the log while it waits.
+    const logs = [
+      { nodeId: 'n2', event: 'workflow.node.started' },
+      {
+        nodeId: 'n2',
+        event: 'workflow.node.waiting',
+        signalType: 'approval:n2',
+        details: { kind: 'approval', title: 'Refund order 4182' },
+      },
+    ];
+    expect(deriveWhereabouts(logs, labelOf)).toEqual({
+      runState: 'waiting',
+      waitingOn: {
+        signalType: 'approval:n2',
+        until: undefined,
+        details: { kind: 'approval', title: 'Refund order 4182' },
+      },
+    });
+  });
+
+  it('the decision retires the park: the run is moving again', () => {
+    const logs = [
+      { nodeId: 'n2', event: 'workflow.node.started' },
+      { nodeId: 'n2', event: 'workflow.node.waiting', signalType: 'approval:n2' },
+      { nodeId: 'n2', event: 'workflow.node.completed' },
+      { nodeId: 'n1', event: 'workflow.node.started' },
+    ];
+    expect(deriveWhereabouts(logs, labelOf)).toEqual({ runState: 'running', atNode: 'Fetch orders' });
+  });
+
   it('an unlabelled current step falls back to the node type', () => {
     const logs = [{ nodeId: 'nx', nodeType: 'code', event: 'workflow.node.started' }];
     expect(deriveWhereabouts(logs, labelOf).atNode).toBe('code');

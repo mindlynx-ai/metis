@@ -1,0 +1,32 @@
+{
+  "name": "@mindlynx/metis-approvals",
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mindlynx-ai/metis.git",
+    "directory": "packages/metis-approvals"
+  },
+  "homepage": "https://github.com/mindlynx-ai/metis#readme",
+  "bugs": "https://github.com/mindlynx-ai/metis/issues",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "metis": {
+    "edition": "helix"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "dependencies": {
+    "@mindlynx/metis-ports": "0.1.0"
+  },
+  "devDependencies": {
+    "@mindlynx/metis-data-gateway": "0.1.0",
+    "@mindlynx/metis-engine": "0.1.0",
+    "@temporalio/testing": "^1.16.0",
+    "@temporalio/worker": "^1.11.7",
+    "vitest": "^2.0.0"
+  }
+}

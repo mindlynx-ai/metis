@@ -21,8 +21,8 @@
  * and merged into the served connector list instead. All share the `database`
  * auth scheme, so the one connect form renders host/port/database/user/password
  * for every engine. A typed database node (e.g. postgres) references one by id.
- * Postgres and MySQL execute; sqlserver is connect-only until its adapter lands,
- * so a workflow can store its credentials but not yet query it.
+ * Every engine listed here executes; the scheme is kept general so a
+ * connect-only engine could still be catalogued before its adapter lands.
  */
 import type { ConnectorCatalogueRecord } from './loader.js';
 
@@ -40,6 +40,7 @@ export const EXECUTABLE_DATABASE_ENGINES: { engine: string; name: string }[] = [
   { engine: 'postgres', name: 'PostgreSQL' },
   { engine: 'mysql', name: 'MySQL' },
   { engine: 'snowflake', name: 'Snowflake' },
+  { engine: 'sqlserver', name: 'SQL Server' },
 ];
 
 export const DATABASE_CONNECTORS: ConnectorCatalogueRecord[] = [

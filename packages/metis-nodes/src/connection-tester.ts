@@ -33,16 +33,25 @@
  * Postgres client: that is the right client, and it is the path a tester built
  * without a registry takes. Any OTHER engine gets a plain "connect-only"
  * verdict instead. It used to get the Postgres client too, which answered about
- * a protocol the server does not speak: a SQL Server connection pointed at SQL
- * Server read red, and one pointed at a Postgres box read green. Both verdicts
- * were noise an operator could act on.
+ * a protocol the server does not speak: a connection pointed at its own engine
+ * read red, and one pointed at a Postgres box read green. Both verdicts were
+ * noise an operator could act on. Every engine in the open catalogue now has an
+ * adapter, so that branch guards the NEXT engine catalogued before its adapter,
+ * rather than any engine shipping today.
  *
  * The http schemes do an SSRF-guarded probe of the connector's baseUrl (or its
  * declared healthCheck) carrying the auth headers.
+ *
+ * An object store (`sigv4`) is probed with a SIGNED list of one key. It cannot
+ * go down the http path: S3 answers 403 to an unsigned request whether the
+ * credentials are good, bad or absent, so a working connection would read red
+ * and no verdict would mean anything.
  */
+import { createHash } from 'node:crypto';
 import pg from 'pg';
 import { authHeadersFromMaterial } from './auth-headers.js';
 import { checkUrlForSsrf } from './http-node.js';
+import { checkEndpoint, resolveTarget, s3Error, s3Request } from './s3-client.js';
 import type {
   ConnectionHealth,
   ConnectionStatus,
@@ -66,8 +75,10 @@ export function classifyDbError(error: unknown): ConnectionHealth {
   const message = error instanceof Error ? error.message : String(error);
   if (PG_AUTH_CODES.has(code)) return verdict('auth_failed', message);
   // MySQL names its refusals, and an HTTP engine (Snowflake) reports them in
-  // the message; both mean "reached it, credentials rejected".
-  if (code.startsWith('ER_ACCESS_DENIED') || code === 'ER_DBACCESS_DENIED_ERROR') {
+  // the message; both mean "reached it, credentials rejected". SQL Server folds
+  // every login-phase refusal into ELOGIN, which covers a bad password and a
+  // database the login cannot open alike.
+  if (code.startsWith('ER_ACCESS_DENIED') || code === 'ER_DBACCESS_DENIED_ERROR' || code === 'ELOGIN') {
     return verdict('auth_failed', message);
   }
   // Snowflake says "JWT token is invalid"; other services put it the other way
@@ -77,7 +88,10 @@ export function classifyDbError(error: unknown): ConnectionHealth {
     /unauthorized|authentication failed|invalid credentials/i.test(message) ||
     (/\b(jwt|token)\b/i.test(message) && /invalid|expired|malformed/i.test(message));
   if (refused) return verdict('auth_failed', message);
-  if (code === 'ENOTFOUND' || code === 'ECONNREFUSED' || code === 'ETIMEDOUT') {
+  // SQL Server has its own spellings for never getting there: ESOCKET wraps the
+  // refused or reset socket, and its timeout is ETIMEOUT, one letter off the
+  // one every other client uses.
+  if (['ENOTFOUND', 'ECONNREFUSED', 'ETIMEDOUT', 'ESOCKET', 'ETIMEOUT'].includes(code)) {
     return verdict('unreachable', message);
   }
   return verdict('error', message);
@@ -192,21 +206,58 @@ async function testHttp(input: ConnectionTestInput): Promise<ConnectionHealth> {
 }
 
 /**
- * Probe an engine through its own adapter. The pool key names the credentials
- * it was opened with (engine, host or account, database, user) so a probe can
- * never be answered by a pool belonging to a different login.
+ * The pool key a probe opens under: the engine plus a fingerprint of the WHOLE
+ * of the material. It used to name the visible fields (host, database, user)
+ * and leave the password out, which meant two connections differing only in
+ * their password shared a pool: the second probe was answered by the first
+ * one's connection and a wrong password read green. That is the one verdict a
+ * tester must never give. The material is hashed rather than spelt out, because
+ * a pool key is a thing that gets compared and logged and a secret is not.
  */
+export function probeKey(engine: string, material: Record<string, string>): string {
+  const fingerprint = createHash('sha256')
+    .update(JSON.stringify(Object.entries(material).sort()))
+    .digest('hex')
+    .slice(0, 16);
+  return `probe:${engine}:${fingerprint}`;
+}
+
+/** Probe an engine through its own adapter, with a SELECT 1. */
 async function testDataSource(
   source: DataSource,
   input: ConnectionTestInput,
 ): Promise<ConnectionHealth> {
   const m = input.material;
-  const key = `probe:${source.engine}:${m.host ?? m.account ?? ''}:${m.database ?? ''}:${m.user ?? ''}`;
+  const key = probeKey(source.engine, m);
   try {
     await source.runQuery({ key, material: m }, 'SELECT 1', { maxRows: 1 });
     return verdict('ok', 'SELECT 1 succeeded');
   } catch (error) {
     return classifyDbError(error);
+  }
+}
+
+/**
+ * Probe an object store by listing one key. A signed request is the only thing
+ * that proves an S3 connection: the endpoint answers 403 to an unsigned GET
+ * whether the credentials are right, wrong or absent, so the http probe would
+ * read red on a perfectly good connection.
+ */
+async function testS3(input: ConnectionTestInput): Promise<ConnectionHealth> {
+  const target = resolveTarget(input.material);
+  if ('error' in target) return verdict('error', target.error);
+  const blocked = await checkEndpoint(target, input.material);
+  if (blocked) return verdict('error', blocked);
+  try {
+    const response = await s3Request(target, { method: 'GET', query: { 'list-type': '2', 'max-keys': '1' } });
+    if (response.status === 401 || response.status === 403) {
+      return verdict('auth_failed', await s3Error(response, 'list'));
+    }
+    if (!response.ok) return verdict('error', await s3Error(response, 'list'));
+    await response.text();
+    return verdict('ok', `listed ${target.bucket}`);
+  } catch (error) {
+    return verdict('unreachable', error instanceof Error ? error.message : String(error));
   }
 }
 
@@ -216,6 +267,7 @@ export class DefaultConnectionTester implements ConnectionTester {
   async testConnection(input: ConnectionTestInput): Promise<ConnectionHealth> {
     try {
       if (input.authScheme === 'none') return verdict('ok', 'no credentials needed');
+      if (input.authScheme === 'sigv4') return await testS3(input);
       // A data engine is proven by querying it, whatever auth scheme its
       // catalogue record happens to declare.
       const source = this.dataSources?.get(input.connectorId);

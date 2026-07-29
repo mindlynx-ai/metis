@@ -221,6 +221,77 @@ describe('trigger ingress: webhooks and schedules', () => {
     expect((relisted.json() as { items: unknown[] }).items).toEqual([]);
   }, 120_000);
 
+  it('gives every fire its own execution record, so the run history survives', async () => {
+    const authed = { authorization: `Bearer ${token}` };
+    // Its own workflow, so its own schedule id: a schedule deleted by an
+    // earlier case and re-created here would race its own teardown.
+    await store.putWorkflowVersion({
+      tenantId: 't1',
+      workflowId: 'wf-ticker',
+      version: 1,
+      changeset: 0,
+      status: 'published',
+      name: 'ticker workflow',
+      type: 'workflow',
+      definition: {
+        nodes: [
+          { id: HOOK, type: 'scheduleconfig', config: { cron: '0 4 * * *' } },
+          { id: RECORD, type: 'record', config: { tick: true } },
+        ],
+        edges: [{ source: HOOK, target: RECORD }],
+      },
+    });
+    const create = await app.inject({
+      method: 'POST',
+      url: '/api/triggers/schedule',
+      payload: { workflowId: 'wf-ticker', cron: '0 4 * * *' },
+      headers: authed,
+    });
+    expect(create.statusCode).toBe(201);
+
+    const executionIds = async (): Promise<string[]> => {
+      const page = await store.listExecutions('t1', { workflowId: 'wf-ticker', limit: 50 });
+      return page.items.map((item) => String(item.executionId));
+    };
+    const fired: string[] = [];
+    for (let fire = 0; fire < 3; fire += 1) {
+      // Temporal derives the per-fire id from the nominal fire time truncated
+      // to the second, so two fires inside one second would collide by design.
+      // Space them, and let each run finish (the schedule skips on overlap)
+      // before asking for the next.
+      if (fire > 0) await new Promise((resolve) => setTimeout(resolve, 1100));
+      const trigger = await app.inject({
+        method: 'POST',
+        url: '/api/triggers/schedule/wf-ticker/run-now',
+        headers: authed,
+      });
+      expect(trigger.statusCode).toBe(202);
+      let fresh: string | undefined;
+      for (let attempt = 0; attempt < 200 && !fresh; attempt += 1) {
+        fresh = (await executionIds()).find((id) => !fired.includes(id));
+        if (!fresh) await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+      expect(fresh).toBeDefined();
+      await waitForCompleted(fresh!);
+      fired.push(fresh!);
+    }
+
+    // Three fires, three records: the defect was one record, overwritten.
+    expect(new Set(fired).size).toBe(3);
+    for (const executionId of fired) {
+      // Traceable both ways: the schedule that produced the run is readable
+      // off the id, and what follows it is the instant the run was due.
+      expect(executionId.startsWith('exec_sch_t1_wf-ticker-')).toBe(true);
+      const firedAt = executionId.slice('exec_sch_t1_wf-ticker-'.length);
+      expect(Number.isNaN(Date.parse(firedAt))).toBe(false);
+      // The id Temporal answers to, so cancel and terminate still reach it.
+      const description = await env.client.workflow.getHandle(executionId).describe();
+      expect(description.workflowId).toBe(executionId);
+    }
+
+    await app.inject({ method: 'DELETE', url: '/api/triggers/schedule/wf-ticker', headers: authed });
+  }, 120_000);
+
   it('rejects scheduling an unpublished workflow', async () => {
     const response = await app.inject({
       method: 'POST',

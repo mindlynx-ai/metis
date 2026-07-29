@@ -139,12 +139,10 @@ suite('UC06 price and promotion updates', () => {
         if (!recorded) await new Promise((r) => setTimeout(r, 1000));
       }
       expect(recorded).toBeDefined();
-      // KNOWN LIMITATION: a schedule pins one execution id for every fire
-      // (exec_sch_<tenant>_<workflow>), so tonight's run overwrites last
-      // night's. The price change is applied correctly, but the history of a
-      // recurring job keeps only the most recent fire. Written up for the
-      // execution-id minting work; not fixed here.
-      expect(recorded?.executionId).toMatch(/^exec_sch_/);
+      // The id names the schedule that fired AND the instant it was due, so
+      // tonight's run cannot overwrite last night's: a recurring job keeps a
+      // record per fire (exec_sch_<tenant>_<workflow>-<fire time>).
+      expect(recorded?.executionId).toMatch(/^exec_sch_.+-\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
     } finally {
       await api('DELETE', `/api/triggers/${triggerId}`);
     }

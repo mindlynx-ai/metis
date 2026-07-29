@@ -56,6 +56,14 @@ const CONNECTOR_CREDENTIALS: Record<string, CredentialFieldDef[]> = {
     { key: 'role', label: 'Role', placeholder: 'ACCOUNTADMIN (optional)' },
     { key: 'accountUrl', label: 'Account URL override', placeholder: 'https://... (only for private link)' },
   ],
+  sqlserver: [
+    { key: 'host', label: 'Host', required: true },
+    { key: 'port', label: 'Port', placeholder: '1433' },
+    { key: 'database', label: 'Database', required: true },
+    { key: 'user', label: 'Username', required: true },
+    { key: 'password', label: 'Password', secret: true, required: true },
+    { key: 'trustServerCertificate', label: 'Trust the server certificate', placeholder: 'true', help: 'The connection is encrypted either way. Set true when the server presents a self-signed certificate, which is what SQL Server does until a real one is installed; otherwise the connection is refused with a certificate error.' },
+  ],
   resend: [
     { key: 'apiKey', label: 'API key', secret: true, required: true, primary: true, placeholder: 're_…' },
   ],
@@ -71,6 +79,16 @@ const CONNECTOR_CREDENTIALS: Record<string, CredentialFieldDef[]> = {
   ],
   sendgrid: [
     { key: 'apiKey', label: 'API key', secret: true, required: true, primary: true, placeholder: 'SG.…' },
+  ],
+  s3: [
+    { key: 'accessKeyId', label: 'Access key ID', required: true, primary: true, placeholder: 'The key id the store issued you' },
+    { key: 'secretAccessKey', label: 'Secret access key', secret: true, required: true, help: 'Signs every request. Never shown again once saved, and never sent: only a signature derived from it is.' },
+    { key: 'region', label: 'Region', required: true, placeholder: 'eu-west-1', help: 'Part of the signature, so it has to match the bucket. Use us-east-1 for a store that has no regions.' },
+    { key: 'bucket', label: 'Bucket', required: true, placeholder: 'my-bucket', help: 'The default bucket; a step can name another.' },
+    { key: 'endpoint', label: 'Endpoint', placeholder: 'https://... (leave empty for Amazon S3)', help: 'The URL of an S3-compatible store: MinIO, Cloudflare R2, Backblaze B2. Leave empty and the region decides the Amazon endpoint.' },
+    { key: 'pathStyle', label: 'Path-style addressing', placeholder: 'true', help: 'Bucket in the path (https://host/bucket/key) rather than the hostname. On by default for a custom endpoint, because most compatible stores have no wildcard DNS.' },
+    { key: 'sessionToken', label: 'Session token', secret: true, help: 'Only for temporary credentials (STS). They expire, so a workflow on a schedule wants a long-lived key instead.' },
+    { key: 'allowPrivateEndpoint', label: 'Allow a private endpoint', placeholder: 'true', help: 'Required to point at a loopback or private address, e.g. MinIO on this machine. Off by default: an endpoint on a private range is otherwise refused, so a connection cannot be turned into a reader of internal services.' },
   ],
   notion: [
     { key: 'token', label: 'Internal integration secret', secret: true, required: true, primary: true, placeholder: 'secret_… / ntn_…' },
@@ -127,6 +145,7 @@ const CONNECTOR_BRAND: Record<string, string> = {
   postgres: '#31648c',
   mysql: '#00758f',
   sqlserver: '#a4373a',
+  s3: '#e25444',
   google: '#4285f4',
   gmail: '#ea4335',
   shopify: '#5a863e',

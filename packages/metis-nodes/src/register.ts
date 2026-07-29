@@ -31,8 +31,10 @@ import { createPostgresNodeHandler } from './postgres-node.js';
 import { PostgresDataSource } from './postgres-data-source.js';
 import { MysqlDataSource } from './mysql-data-source.js';
 import { SnowflakeDataSource } from './snowflake-data-source.js';
+import { SqlServerDataSource } from './sqlserver-data-source.js';
 import { createDataNodeHandler } from './data-node.js';
 import { createSendgridNodeHandler, type SendgridNodeOptions } from './sendgrid-node.js';
+import { createS3NodeHandler } from './s3-node.js';
 import { createConnectorNodeHandler } from './connector-node.js';
 import type { ConnectorRegistry } from './connector-registry.js';
 
@@ -43,14 +45,15 @@ export interface OpenNodeDependencies {
 }
 
 /** The open-edition data sources for the Data node + the table catalogue route:
- *  postgres, mysql and snowflake; athena is an adapter in the Helix build.
- *  Shared so the worker (node handler) and core (table listing) dispatch the
- *  same way. */
+ *  postgres, mysql, snowflake and sqlserver; athena is an adapter in the Helix
+ *  build. Shared so the worker (node handler) and core (table listing)
+ *  dispatch the same way. */
 export function buildDataSources(): DataSourceRegistry {
   return new DataSourceRegistry()
     .register(new PostgresDataSource())
     .register(new MysqlDataSource())
-    .register(new SnowflakeDataSource());
+    .register(new SnowflakeDataSource())
+    .register(new SqlServerDataSource());
 }
 
 export function registerOpenNodeHandlers(
@@ -79,6 +82,9 @@ export function registerOpenNodeHandlers(
     registry.registerNodeHandler(type, data);
   }
   registry.registerNodeHandler('sendgrid', createSendgridNodeHandler(deps.credentials, deps.sendgrid));
+  // One node for every S3-compatible store: the endpoint and the path-style
+  // flag live on the connection, so MinIO, R2 and B2 need no code of their own.
+  registry.registerNodeHandler('s3', createS3NodeHandler(deps.credentials));
   if (deps.connectors) {
     // One shared handler under every wired-connector node type; the handler
     // reads the connector from the node type and the connection from config.

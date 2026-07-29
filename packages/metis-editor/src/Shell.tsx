@@ -53,6 +53,7 @@ const NAV: { to: string; label: string; icon: IconName }[] = [
   { to: '/workflows', label: 'Workflows', icon: 'workflow' },
   { to: '/connectors', label: 'Connectors', icon: 'plug' },
   { to: '/operate', label: 'Operate', icon: 'play' },
+  { to: '/reviews', label: 'Reviews', icon: 'stamp' },
   { to: '/activity', label: 'Activity', icon: 'list' },
 ];
 

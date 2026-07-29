@@ -25,7 +25,7 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useSearchParams } from 'react-router';
 import { toast } from './toast-store.js';
-import { upliftApi, type OfferEntry } from './uplift-api.js';
+import { formatOfferPrice, upliftApi, type OfferEntry } from './uplift-api.js';
 import { ensureUplift, useUplift } from './uplift-store.js';
 import { Icon, type IconName } from './ui/Icon.js';
 
@@ -114,7 +114,11 @@ function CapabilityCard({
       </ul>
       {purchasable && !entitled && (
         <a className="upgrade-link" href={offer.ctaUrl} target="_blank" rel="noreferrer">
-          {connected ? 'Upgrade' : 'See plans'} {'→'}
+          {/* The price rides in the link text rather than a chip of its own:
+              a reader deciding whether to click should not have to hunt for
+              what it costs, and it needs no new styling to say so. */}
+          {connected ? 'Upgrade' : 'See plans'}
+          {offer.price ? ` · ${formatOfferPrice(offer.price)}` : ''} {'→'}
         </a>
       )}
     </article>

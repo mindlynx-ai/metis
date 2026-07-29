@@ -24,26 +24,28 @@
 
 export interface Whereabouts {
   runState: 'waiting' | 'running';
-  /** Present when parked: what the run waits for. */
-  waitingOn?: { signalType?: string; until?: string };
+  /** Present when parked: what the run waits for, and (when the handler that
+   *  parked said so) what the decision is about. */
+  waitingOn?: { signalType?: string; until?: string; nodeId?: string; details?: Record<string, unknown> };
   /** Present when actively working: the current step's label (or type). */
   atNode?: string;
 }
 
 type LogRow = Record<string, unknown>;
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
 export function deriveWhereabouts(
   logs: LogRow[],
   labelOf: (nodeId: string) => string | undefined,
 ): Whereabouts {
   const finished = new Set<string>();
-  const startedNodes = new Set<string>();
   for (const row of logs) {
     const event = String(row.event ?? '');
     if (event.endsWith('node.completed') || event.endsWith('node.failed')) {
       finished.add(String(row.nodeId ?? ''));
     }
-    if (event.endsWith('node.started')) startedNodes.add(String(row.nodeId ?? ''));
   }
   const latest = (suffix: string, exclude: Set<string>): LogRow | undefined => {
     for (let i = logs.length - 1; i >= 0; i -= 1) {
@@ -55,14 +57,17 @@ export function deriveWhereabouts(
     return undefined;
   };
 
-  // A node that STARTED was resumed from its park - dispatch only happens
-  // after the wait, so a started row disqualifies the waiting record.
-  const parkExcluded = new Set([...finished, ...startedNodes]);
-  const parked = latest('node.waiting', parkExcluded);
+  // Only a TERMINAL row retires a park. A started row does not: a handler
+  // that asks to wait is dispatched first and parks after, so its started
+  // line is already on the log while the run sits there (approvals, and the
+  // accepted cloud job) - reading that as "resumed" hid every such run
+  // behind "running" and left the review queue empty.
+  const parked = latest('node.waiting', finished);
   if (parked) {
     const signalType = typeof parked.signalType === 'string' && parked.signalType !== '' ? parked.signalType : undefined;
     const until = typeof parked.until === 'string' ? parked.until : undefined;
-    return { runState: 'waiting', waitingOn: { signalType, until } };
+    const details = isRecord(parked.details) ? parked.details : undefined;
+    return { runState: 'waiting', waitingOn: { signalType, until, details } };
   }
   const active = latest('node.started', finished);
   if (active) {

@@ -31,15 +31,17 @@
  * activities. The Helix playbook edge guards, skills and browser-setup
  * branches of the origin are deliberately not ported.
  */
-import { condition, defineSignal, executeChild, proxyActivities, setHandler } from '@temporalio/workflow';
+import { condition, defineSignal, executeChild, proxyActivities, setHandler, workflowInfo } from '@temporalio/workflow';
 import { getWaitTimeMs } from '../nodes/waituntil.js';
 import { LOOP_CHILD_OUTPUT_BYTES, LOOP_RESULTS_BYTES, type LoopPlan } from '../nodes/loop.js';
-import { cascadeOrphan, getAvailableNodes, isDone, loopBodyIds, sourcesOf } from './graph.js';
+import { cascadeOrphan, getAvailableNodes, isDone, loopBodyIds, signalTarget, sourcesOf } from './graph.js';
 import { awaitCloudJob } from './cloud-park.js';
+import { settleDecisions } from './decision-park.js';
 import { buildExecuteRequest } from './execute-request.js';
 import {
   SIGNAL_DEFAULT_TIMEOUT_MS,
   type EngineActivities,
+  type ExecuteNodeResult,
   type HelixCancelSignalPayload,
   type HelixSignalPayload,
   type HelixWorkflowInput,
@@ -87,7 +89,7 @@ function applySwitchPartition(
 
 const TRIGGER_CONFIG_TYPES = new Set(['webhookconfig', 'scheduleconfig', 'apiconfig']);
 // Branch nodes: their activity result carries selected/orphaned targets.
-const BRANCH_NODE_TYPES = new Set(['switch', 'logic', 'filter', 'comparedatasets']);
+const BRANCH_NODE_TYPES = new Set(['switch', 'logic', 'filter', 'comparedatasets', 'approval']);
 
 /**
  * ponytail: loop bodies never run in the parent walk - each iteration executes
@@ -148,7 +150,17 @@ function collectLeafOutputsFrom(
   return outputs;
 }
 
-export async function helixWorkflow(input: HelixWorkflowInput): Promise<HelixWorkflowResult> {
+export async function helixWorkflow(started: HelixWorkflowInput): Promise<HelixWorkflowResult> {
+  // A schedule registers ONE action payload and replays it at every tick, so
+  // the executionId baked into that payload is the same on the thousandth fire
+  // as on the first: one run row, overwritten for ever, and no history of any
+  // earlier fire. Temporal has already given this run its own workflow id (for
+  // a scheduled action, the action's id with the nominal fire time appended),
+  // and every start path we own sets the workflow id TO the executionId, so
+  // adopting the ambient id costs nothing anywhere else and gives a scheduled
+  // fire an identity of its own - one Temporal answers to, so cancel,
+  // terminate and the status reconciler can still find it.
+  const input: HelixWorkflowInput = { ...started, executionId: workflowInfo().workflowId };
   const prepared = await activities.initiateWorkflow({ ...input, graphKind: 'workflow' });
   const nodes = prepared.nodes;
   const edges = prepared.edges;
@@ -176,13 +188,7 @@ export async function helixWorkflow(input: HelixWorkflowInput): Promise<HelixWor
 
   setHandler(helixSignal, (payload) => {
     const wanted = String(payload.signalType ?? '').toLowerCase();
-    const target = nodes.find(
-      (candidate) =>
-        candidate.type.toLowerCase() === 'signal' &&
-        candidate.signalReceived !== true &&
-        (candidate.nodeStatus === 'Pending' || candidate.nodeStatus === 'InProgress') &&
-        String(candidate.config?.signalType ?? '').toLowerCase() === wanted,
-    );
+    const target = signalTarget(nodes, wanted);
     if (target) {
       target.signalParams = payload.signalParams;
       target.signalReceived = true;
@@ -260,6 +266,32 @@ export async function helixWorkflow(input: HelixWorkflowInput): Promise<HelixWor
     return 'go';
   }
 
+  /**
+   * Wait out a parked dispatch. Two things park: an accepted cloud job, and
+   * a handler that needs a decision from outside the run (a sign-off). Both
+   * wait durably, and both race the run's cancel signal.
+   */
+  async function awaitPark(
+    node: RuntimeNode,
+    nodeType: string,
+    isBranch: boolean,
+    result: ExecuteNodeResult,
+    nodeSequence: number,
+  ): Promise<ExecuteNodeResult | 'cancelled'> {
+    if (result.jobId) return awaitCloudJob(input, node, result.jobId, nodeSequence, () => cancelled);
+    if (!result.park) return result;
+    return settleDecisions(input, node, result, {
+      isCancelled: () => cancelled,
+      // A fresh sequence per round: the first dispatch already wrote this
+      // node's started line, and the log's sort key must stay unique.
+      nextSequence: () => (sequence += 1),
+      dispatch: (next) =>
+        activities.executeNode(
+          buildExecuteRequest(input, states, nodes, edges, node, nodeType, isBranch, next),
+        ),
+    });
+  }
+
   async function processNode(node: RuntimeNode): Promise<void> {
     if (failureReason !== undefined || cancelled) return;
     if (node.nodeStatus !== 'Pending') return;
@@ -286,10 +318,9 @@ export async function helixWorkflow(input: HelixWorkflowInput): Promise<HelixWor
       buildExecuteRequest(input, states, nodes, edges, node, nodeType, isBranch, nodeSequence),
     );
 
-    // A parked dispatch: the cloud accepted the job; await it durably,
-    // racing the run's cancel signal (cloud-park.ts owns the mechanics).
-    if (result.outcome === 'parked' && result.jobId) {
-      const settled = await awaitCloudJob(input, node, result.jobId, nodeSequence, () => cancelled);
+    // A parked dispatch waits out its cloud job or its human decision here.
+    if (result.outcome === 'parked') {
+      const settled = await awaitPark(node, nodeType, isBranch, result, nodeSequence);
       if (settled === 'cancelled') return;
       result = settled;
     }
@@ -315,11 +346,28 @@ export async function helixWorkflow(input: HelixWorkflowInput): Promise<HelixWor
       });
     }
 
-    if (isBranch && result.outcome === 'completed') {
-      await reportSwitchOrphans(result.output as SwitchNodeOutput);
-    }
+    if (isBranch) await reportBranchPartition(node, result);
 
     await walkSuccessors(node);
+  }
+
+  /**
+   * Orphan the branches a branch node did not take. A node this edition
+   * cannot run took NONE of them: an approval gate that could not be
+   * evaluated must not open every path below it, so the walk stops there
+   * rather than guessing its way onwards to whatever moves the money.
+   */
+  async function reportBranchPartition(node: RuntimeNode, result: ExecuteNodeResult): Promise<void> {
+    if (result.outcome === 'completed') {
+      await reportSwitchOrphans(result.output as SwitchNodeOutput);
+      return;
+    }
+    if (result.outcome !== 'unimplemented') return;
+    await reportSwitchOrphans({
+      selectedSources: [],
+      selectedTargetIds: [],
+      orphanedTargetIds: edges.filter((edge) => edge.source === node.id).map((edge) => edge.target),
+    });
   }
 
   /**

@@ -32,13 +32,20 @@
 /** What differs between engines in generated SQL. */
 export interface SqlDialect {
   name: string;
-  /** " for Postgres, ` for MySQL. */
+  /** " for Postgres, ` for MySQL, [ for SQL Server. */
   quoteChar: string;
-  /** $1, $2 ... for Postgres; ? for MySQL. */
+  /** The closing quote, when it is not the opening one again: SQL Server is
+   *  the odd one out, bracketing an identifier as [name]. */
+  quoteEndChar?: string;
+  /** $1, $2 ... for Postgres; ? for MySQL; @p1, @p2 ... for SQL Server. */
   placeholder: (index: number) => string;
   /** The schema an unqualified table sits in. MySQL has no layer above the
    *  database, so a qualified name would be wrong there. */
   defaultSchema?: string;
+  /** How a row cap is written. Postgres and MySQL take a trailing LIMIT; SQL
+   *  Server has no LIMIT at all and caps with a TOP that sits in FRONT of the
+   *  columns, so the fragment cannot simply be appended at the end. */
+  limitStyle?: 'limit' | 'top';
 }
 
 export const POSTGRES_DIALECT: SqlDialect = {
@@ -54,8 +61,25 @@ export const MYSQL_DIALECT: SqlDialect = {
   placeholder: () => '?',
 };
 
+export const SQLSERVER_DIALECT: SqlDialect = {
+  name: 'sqlserver',
+  quoteChar: '[',
+  quoteEndChar: ']',
+  // The mssql driver binds by NAME, and names its positional inputs p1, p2 ...
+  // so generated SQL and hand-written SQL for this engine agree on @p1.
+  placeholder: (index) => `@p${index}`,
+  // Where an unqualified table lands unless the login says otherwise.
+  defaultSchema: 'dbo',
+  limitStyle: 'top',
+};
+
+const DIALECTS: Record<string, SqlDialect> = {
+  mysql: MYSQL_DIALECT,
+  sqlserver: SQLSERVER_DIALECT,
+};
+
 export function dialectFor(engine: string): SqlDialect {
-  return engine === 'mysql' ? MYSQL_DIALECT : POSTGRES_DIALECT;
+  return DIALECTS[engine] ?? POSTGRES_DIALECT;
 }
 
 export interface PgColumn {
@@ -109,7 +133,7 @@ function quoteIdent(d: SqlDialect, name: string, label = 'identifier'): string {
   if (!IDENT_RE.test(name)) {
     throw new Error(`${d.name}: invalid ${label} "${name}" (must match /^[A-Za-z_]\\w*$/)`);
   }
-  return `${d.quoteChar}${name}${d.quoteChar}`;
+  return `${d.quoteChar}${name}${d.quoteEndChar ?? d.quoteChar}`;
 }
 
 /** `[db.]schema.table`, each part quoted. */
@@ -168,7 +192,11 @@ function buildSelect(d: SqlDialect, config: PgBuilderConfig): BuiltQuery {
 
   const first = tables[0]!;
   const isDistinct = (config.operation ?? '').toLowerCase() === 'select distinct';
-  let query = `SELECT ${isDistinct ? 'DISTINCT ' : ''}${selectColumns(d, tables)} FROM ${qualified(d, config, first.name)}`;
+  const cap = typeof config.limit === 'number' && config.limit > 0 ? Math.floor(config.limit) : undefined;
+  // A SQL Server cap has to be decided before the column list is written, not
+  // appended after it, so it is resolved here rather than at the end.
+  const top = cap !== undefined && d.limitStyle === 'top' ? `TOP (${cap}) ` : '';
+  let query = `SELECT ${isDistinct ? 'DISTINCT ' : ''}${top}${selectColumns(d, tables)} FROM ${qualified(d, config, first.name)}`;
   if (first.alias) query += ` ${quoteIdent(d, first.alias, 'alias')}`;
 
   const params: unknown[] = [];
@@ -182,8 +210,8 @@ function buildSelect(d: SqlDialect, config: PgBuilderConfig): BuiltQuery {
   if (config.orderBy && config.orderBy.length > 0) {
     query += ` ORDER BY ${orderByClause(d, config.orderBy, tables, first)}`;
   }
-  if (typeof config.limit === 'number' && config.limit > 0) {
-    query += ` LIMIT ${Math.floor(config.limit)}`;
+  if (cap !== undefined && d.limitStyle !== 'top') {
+    query += ` LIMIT ${cap}`;
   }
   return { query, params };
 }
@@ -271,8 +299,9 @@ function buildUpsert(config: PgBuilderConfig): BuiltQuery {
  *
  * Reads are generated for whichever engine the connection uses. Writes are
  * Postgres-only for now and say so: INSERT/UPDATE/DELETE lean on `RETURNING *`
- * and upsert on `ON CONFLICT`, neither of which has a portable equivalent, and
- * emitting Postgres syntax at MySQL would fail with a confusing parser error
+ * and upsert on `ON CONFLICT`, neither of which has a portable equivalent (SQL
+ * Server spells them OUTPUT INSERTED.* and MERGE, MySQL neither), and emitting
+ * Postgres syntax at another engine would fail with a confusing parser error
  * instead of an answerable one. Raw SQL reaches every engine meanwhile.
  */
 export function buildQuery(config: PgBuilderConfig, dialect: SqlDialect = POSTGRES_DIALECT): BuiltQuery {

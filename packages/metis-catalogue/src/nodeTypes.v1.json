@@ -413,6 +413,115 @@
       "docs": "## What it is\nA yes/no gate on the workflow's trigger input: an AND/OR/NOT rule tree routes to the Yes or No branch.\n\n## How it works\nThe rule tests the run's INPUT (what the trigger received) via `ctx.input.<field>` paths. Groups combine children with AND / OR / NOT; nest groups for complex rules. Yes runs when the tree holds; No otherwise; the losing branch is orphaned.\n\n## Gotchas\n- `ctx.input.` paths only - a `{{step.data...}}` reference will not resolve here. To branch on a step's output, use Switch.\n- A missing field is falsy, never an error."
     },
     {
+      "type": "approval",
+      "category": "logic",
+      "execution": "local",
+      "entitlement": "cap.approvals",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "required": [
+          "title"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "What is being approved",
+            "description": "The one line a reviewer reads first, e.g. 'Refund order 4182'. References resolve, so name the actual thing: Refund {{order.data.id}}."
+          },
+          "summary": {
+            "type": "object",
+            "title": "Show the reviewer",
+            "description": "The values needed to decide, as label and value pairs: Amount, Customer, Reason. References like {{order.data.total}} are filled in when the approval is raised.",
+            "x-helix-widget": "dataBuilder"
+          },
+          "approverRole": {
+            "type": "string",
+            "title": "Who may approve",
+            "description": "The lowest role allowed to decide. Admin by default: signing off is a privileged act, and viewers can never decide whatever this says.",
+            "enum": [
+              "admin",
+              "editor"
+            ],
+            "default": "admin"
+          },
+          "slaHours": {
+            "type": "number",
+            "title": "Decide within (hours)",
+            "description": "How long the run waits before the SLA runs out. The wait is free: no compute is used while it is parked.",
+            "minimum": 0,
+            "default": 24
+          },
+          "onExpiry": {
+            "type": "string",
+            "title": "If nobody decides",
+            "description": "Reject: take the rejected branch (the safe default, silence is not consent). Escalate: raise it once more, flagged urgent, then reject. Fail: stop the run so a person has to look.",
+            "enum": [
+              "reject",
+              "escalate",
+              "fail"
+            ],
+            "default": "reject"
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ]
+          },
+          "approver": {
+            "type": "string"
+          },
+          "approverRole": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "expired": {
+            "type": "boolean"
+          },
+          "escalated": {
+            "type": "boolean"
+          },
+          "selectedTargetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "orphanedTargetIds": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "Approval",
+        "icon": "stamp",
+        "colour": "amber-600",
+        "description": "Park the run until a person signs off, then take the approved or rejected branch."
+      },
+      "tier": "open",
+      "docs": "## What it is\nA human sign-off gate inside a run: the run parks, someone reviews it, and the Approved or Rejected branch runs. Available in Helix.\n\n## How it works\nWhen the step is reached the approval is raised with the values you chose to show, and the run parks durably (no compute is used while it waits, and it survives restarts). The reviewer decides in Reviews; their identity comes from their session, never from the request, so the run's log answers 'who approved this'. The decision, the reason and the time are recorded on the run.\n\n## Config\n**What is being approved** and **Show the reviewer** are what a reviewer sees, so put the numbers that decide it there (amount, customer, reason). **Who may approve** is the lowest role allowed to decide, admin by default. **Decide within** sets the SLA and **If nobody decides** what happens when it runs out.\n\n## Gotchas\n- Nothing runs below an approval until it is decided: wire the Rejected branch, or a rejection simply ends that path.\n- Expiry never means approved. The safest it gets is Reject.\n- A viewer cannot approve at all, whatever the role says."
+    },
+    {
       "type": "waituntil",
       "category": "logic",
       "execution": "local",
@@ -1440,6 +1549,186 @@
       },
       "tier": "open",
       "docs": "## What it is\nSend transactional email via a SendGrid connection.\n\n## How it works\nPick your SendGrid connection, set from/to/subject/body; `{{...}}` references personalise any field. The response (message id) is the step's output.\n\n## Gotchas\n- The from address must be verified in SendGrid.\n- Templates, cc/bcc and open-tracking are not yet supported."
+    },
+    {
+      "type": "s3",
+      "category": "integration",
+      "execution": "local",
+      "versions": [
+        "1.0.0"
+      ],
+      "status": "v1",
+      "configSchema": {
+        "type": "object",
+        "required": [
+          "connectorId",
+          "operation"
+        ],
+        "properties": {
+          "connectorId": {
+            "type": "string",
+            "title": "Connection",
+            "description": "The object store connection to use. It carries the keys, the region, the bucket and, for a store that is not Amazon's, the endpoint.",
+            "x-helix-widget": "connectorRef",
+            "x-helix-options": "/_resource/connectors?provider=s3"
+          },
+          "operation": {
+            "type": "string",
+            "title": "What to do",
+            "description": "Put a file in, get one back, list what is under a prefix, or presign a temporary link somebody else can use.",
+            "enum": [
+              "put",
+              "get",
+              "list",
+              "presign"
+            ],
+            "default": "put"
+          },
+          "key": {
+            "type": "string",
+            "title": "Key",
+            "description": "The object's full path inside the bucket, e.g. returns/{{order.data.id}}/photo.jpg. Every operation but List needs one."
+          },
+          "bucket": {
+            "type": "string",
+            "title": "Bucket",
+            "description": "Overrides the connection's bucket, so one connection can serve several."
+          },
+          "body": {
+            "type": "string",
+            "title": "Content",
+            "description": "Put: the text to store. Capped at 256 KB because it travels through the run; use Copy from URL for anything bigger."
+          },
+          "sourceUrl": {
+            "type": "string",
+            "title": "Copy from URL",
+            "description": "Put: fetch this URL and store what it serves, up to 25 MB. The bytes go straight to the bucket and never enter the run's data."
+          },
+          "contentType": {
+            "type": "string",
+            "title": "Content type",
+            "description": "How the object is served later, e.g. image/jpeg. Taken from the source when copying from a URL."
+          },
+          "output": {
+            "type": "string",
+            "title": "Get returns",
+            "description": "Reference: size, type and a temporary link, moving no bytes. Text: the content inline, up to 256 KB, for text only.",
+            "enum": [
+              "reference",
+              "text"
+            ],
+            "default": "reference"
+          },
+          "prefix": {
+            "type": "string",
+            "title": "Prefix",
+            "description": "List: only keys starting with this, e.g. products/2026/."
+          },
+          "maxKeys": {
+            "type": "integer",
+            "title": "Maximum keys",
+            "description": "List: how many objects to return, up to 1000.",
+            "default": 1000
+          },
+          "continuationToken": {
+            "type": "string",
+            "title": "Continue from",
+            "description": "List: the nextToken an earlier List gave back, to read the next page."
+          },
+          "method": {
+            "type": "string",
+            "title": "Presign for",
+            "description": "GET hands somebody a download link. PUT hands them an upload slot, which is how a file too big for this step gets into the bucket.",
+            "enum": [
+              "GET",
+              "PUT"
+            ],
+            "default": "GET"
+          },
+          "expiresIn": {
+            "type": "integer",
+            "title": "Link expires in (seconds)",
+            "description": "How long a presigned link stays valid. 15 minutes by default, 7 days at most.",
+            "default": 900
+          },
+          "allowedHosts": {
+            "type": "array",
+            "title": "Allowed source hosts",
+            "description": "The hosts Copy from URL may point at. Naming one is what allows a private or local address, which is otherwise refused.",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "bucket": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "size": {
+            "type": "integer"
+          },
+          "contentType": {
+            "type": "string"
+          },
+          "etag": {
+            "type": "string"
+          },
+          "lastModified": {
+            "type": "string"
+          },
+          "location": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          },
+          "expiresIn": {
+            "type": "integer"
+          },
+          "expiresAt": {
+            "type": "string"
+          },
+          "method": {
+            "type": "string"
+          },
+          "inline": {
+            "type": "boolean"
+          },
+          "body": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": "string"
+          },
+          "objects": {
+            "type": "array"
+          },
+          "count": {
+            "type": "integer"
+          },
+          "truncated": {
+            "type": "boolean"
+          },
+          "nextToken": {
+            "type": "string"
+          }
+        }
+      },
+      "handler_status": "ready",
+      "palette": {
+        "label": "Object Store",
+        "icon": "doc",
+        "colour": "emerald-500",
+        "description": "Move files in and out of S3 or any S3-compatible store: put, get, list, or hand out a temporary link."
+      },
+      "tier": "open",
+      "docs": "## What it is\nFiles, in and out of an object store: put one in, read one back, list what is there, or hand somebody a temporary link. It speaks the S3 REST API, so the same step works against Amazon S3, MinIO, Cloudflare R2, Backblaze B2 or anything else S3-compatible. Which one it is comes from the connection, not from the step.\n\n## How it works\nPick a connection (it carries the keys, the region, the bucket and, for a non-Amazon store, the endpoint), choose an operation and give a key. The key is a path inside the bucket, and references resolve, so name the actual thing: `returns/{{order.data.id}}/photo.jpg`.\n\n**Put** stores content you write inline, or copies whatever a URL serves straight into the bucket. **Get** hands back a reference by default (size, type, and a temporary link) and can return small text inline instead. **List** gives the keys under a prefix. **Presign** mints a temporary URL: a GET link for somebody to download with, or a PUT slot for somebody to upload into, without either of them holding a key.\n\n## Size\nBytes do not travel through a run. A step's output is carried along the whole workflow, and it has a hard payload limit, so:\n- inline text (content to put, or a text get) is capped at 256 KB;\n- a copy from a source URL is capped at 25 MB and goes straight to the bucket;\n- anything larger belongs on a presigned PUT URL, which the far side uploads to directly.\nEach ceiling refuses with a message that says so. Nothing is quietly truncated.\n\n## Gotchas\n- A get returns a link, not the file. That is deliberate: an image inline would break the run at the next step.\n- A presigned link is bearer access for as long as it lives. Keep the expiry short.\n- A private or local endpoint (MinIO on your own machine) has to be named on the connection with allowPrivateEndpoint, otherwise it is refused as an SSRF risk.\n- Most S3-compatible stores need path-style addressing; a connection with a custom endpoint uses it by default."
     }
   ]
 }

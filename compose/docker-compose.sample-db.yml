@@ -16,15 +16,34 @@
 #
 #   docker compose -f docker-compose.yml -f docker-compose.sample-db.yml up -d
 #
-# Both carry the SAME orders and customers, so a workflow written against one
-# engine can be pointed at the other and the acceptance suite can run identical
-# cases against each. Add a connection in Metis with:
+# Postgres and MySQL carry the SAME orders and customers, so a workflow written
+# against one engine can be pointed at the other and the acceptance suite can
+# run identical cases against each. Add a connection in Metis with:
 #
-#   Postgres  host: postgres  port: 5432  database: metis_sample  user: metis  password: sample
-#   MySQL     host: mysql     port: 3306  database: metis_sample  user: metis  password: sample
+#   Postgres   host: postgres   port: 5432  database: metis_sample  user: metis  password: sample
+#   MySQL      host: mysql      port: 3306  database: metis_sample  user: metis  password: sample
+#   SQL Server host: sqlserver  port: 1433  database: master        user: sa     password: Metis-Sample-1
+#              and trustServerCertificate: true
+#
+# The object store is here too, for the S3 node. Add an S3 connection with:
+#
+#   MinIO      endpoint: http://minio:9000  region: us-east-1  bucket: metis-sample
+#              accessKeyId: metis  secretAccessKey: metis-sample-secret
+#              pathStyle: true  allowPrivateEndpoint: true
 #
 # then a SQL step like "select * from orders". Kept out of the hero compose so
 # the offline two-service quickstart (gate 5) stays a pure Temporal + Metis boot.
+#
+# SQL Server is the odd one of the three. Microsoft's images create no database
+# and run no init script, so it has neither metis_sample nor the seeded orders:
+# the acceptance suite builds its fixture in master with ordinary statements,
+# the same way it does against a hosted warehouse. It also presents a self-signed
+# certificate, so a connection to it has to say trustServerCertificate.
+#
+# MinIO is the odd one the other way: it needs nothing bespoke at all. It speaks
+# the S3 REST API, so the S3 node signs for it exactly as it signs for Amazon,
+# and the only two things a connection says differently are the endpoint and
+# path-style addressing (no wildcard DNS here, so bucket.host cannot resolve).
 
 services:
   postgres:
@@ -59,6 +78,77 @@ services:
       timeout: 5s
       retries: 20
 
+  sqlserver:
+    # The full SQL Server image is amd64 only, so the default here is Azure SQL
+    # Edge: the same engine, built for arm64 as well, which is what an Apple
+    # Silicon laptop needs. Point METIS_SQLSERVER_IMAGE at
+    # mcr.microsoft.com/mssql/server:2022-latest on an x86 machine.
+    image: ${METIS_SQLSERVER_IMAGE:-mcr.microsoft.com/azure-sql-edge:latest}
+    restart: unless-stopped
+    environment:
+      # Neither image starts until the licence is accepted.
+      ACCEPT_EULA: 'Y'
+      # A throwaway password for a throwaway sample container, published in the
+      # open exactly like the two above. It is not short because the server
+      # enforces its own complexity rule and refuses to start without it.
+      MSSQL_SA_PASSWORD: 'Metis-Sample-1'
+    networks:
+      - metis
+    volumes:
+      - sample-db-sqlserver:/var/opt/mssql
+    healthcheck:
+      # No sqlcmd in the arm64 image, so this proves the listener is accepting
+      # connections (which SQL Server opens only once master has recovered)
+      # rather than that a login succeeds.
+      test: ['CMD-SHELL', 'timeout 1 bash -c "</dev/tcp/127.0.0.1/1433"']
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  minio:
+    # The sample object store for the S3 node. MinIO is multi-arch, so it runs
+    # on an Apple Silicon laptop where the alternatives do not, and it answers
+    # the same REST API Amazon does. Pin METIS_MINIO_IMAGE to hold a release.
+    image: ${METIS_MINIO_IMAGE:-minio/minio:latest}
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: metis
+      # A throwaway secret for a throwaway sample container, published in the
+      # open exactly like the database passwords above.
+      MINIO_ROOT_PASSWORD: metis-sample-secret
+    # The only sample service that publishes ports, and for a reason: a
+    # presigned URL is meant to be opened from OUTSIDE the compose network (a
+    # browser, a test on the host), and a link nobody can reach proves nothing.
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    networks:
+      - metis
+    volumes:
+      - sample-object-store:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio-create-bucket:
+    # MinIO creates no bucket on its own, so the sample bucket is made once and
+    # the container exits, the way the SQL seeds run once and stop.
+    image: ${METIS_MINIO_MC_IMAGE:-minio/mc:latest}
+    depends_on:
+      minio:
+        condition: service_healthy
+    networks:
+      - metis
+    entrypoint:
+      - /bin/sh
+      - -c
+      - mc alias set sample http://minio:9000 metis metis-sample-secret && mc mb --ignore-existing sample/metis-sample
+
 volumes:
   sample-db-data:
   sample-db-mysql:
+  sample-db-sqlserver:
+  sample-object-store:

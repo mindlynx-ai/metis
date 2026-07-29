@@ -32,15 +32,46 @@ import { HELIX_ACCOUNT_CONNECTOR_ID, discoverOidc } from '@mindlynx/metis-ports'
 import type { CloudEntitlementsClient, OffersClient } from '@mindlynx/metis-ports';
 import { requireAction } from './auth-gate.js';
 
-/** The offline/air-gapped offers view: everything coming soon, no network.
- *  The live manifest (when reachable) always wins over this. */
+/**
+ * Where a reader is sent to buy. A real published page rather than a
+ * placeholder: this manifest is what a public instance serves when it has no
+ * gateway, so a dead link here is a dead link on the storefront.
+ */
+const PLANS_URL = 'https://docs.metisflow.io/pricing/';
+
+/**
+ * One plan, deliberately. Pricing every capability separately is a decision
+ * this product has not earned yet, so everything purchasable sits in the same
+ * subscription and capabilities join it as they ship. Changing the price is
+ * editing PRO_PRICE and the pricing page, nothing else.
+ */
+export const PRO_PRICE = { amount: 900, currency: 'GBP', interval: 'month' } as const;
+
+/**
+ * The offline/air-gapped offers view. The live manifest (when a gateway is
+ * reachable) always wins over this, so the two must agree on shape: a
+ * capability is `available` when it can be BOUGHT, which is independent of
+ * whether this instance is entitled to it. Entitlement comes from
+ * /api/entitlements and nothing here can grant it.
+ */
 export const STATIC_OFFERS: OfferEntry[] = [
+  {
+    id: 'cap.approvals',
+    title: 'Approvals',
+    description: 'Human sign-off gates inside a run.',
+    // The first capability that actually exists to sell, so the first one
+    // priced. The others stay coming-soon until their code does too.
+    state: 'available',
+    ctaUrl: PLANS_URL,
+    price: PRO_PRICE,
+    message: 'pauses a run for a human decision.',
+  },
   {
     id: 'cap.data',
     title: 'Big data',
     description: 'Query millions of rows and run heavy transforms in the cloud.',
     state: 'coming-soon',
-    ctaUrl: 'https://helix.example/plans',
+    ctaUrl: PLANS_URL,
     // The palette's uplift pitch tail; mirrors the live manifest so the
     // strip reads the same offline.
     message: 'handles millions of rows.',
@@ -50,28 +81,21 @@ export const STATIC_OFFERS: OfferEntry[] = [
     title: 'Memory',
     description: 'Give workflows long-term recall.',
     state: 'coming-soon',
-    ctaUrl: 'https://helix.example/plans',
+    ctaUrl: PLANS_URL,
   },
   {
     id: 'cap.agent',
     title: 'Agents',
     description: 'Delegate steps to autonomous skills.',
     state: 'coming-soon',
-    ctaUrl: 'https://helix.example/plans',
-  },
-  {
-    id: 'cap.approvals',
-    title: 'Approvals',
-    description: 'Human sign-off gates inside a run.',
-    state: 'coming-soon',
-    ctaUrl: 'https://helix.example/plans',
+    ctaUrl: PLANS_URL,
   },
   {
     id: 'cap.model',
     title: 'Models',
     description: 'Managed AI models with spending caps.',
     state: 'coming-soon',
-    ctaUrl: 'https://helix.example/plans',
+    ctaUrl: PLANS_URL,
   },
 ];
 

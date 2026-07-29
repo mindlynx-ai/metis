@@ -23,6 +23,7 @@ import { describe, it, expect } from 'vitest';
 import { getConnectorCatalogue, listAllConnectors } from '../loader.js';
 import { DATABASE_CONNECTORS } from '../database-connectors.js';
 import { EXTRA_CONNECTORS } from '../extra-connectors.js';
+import { STORAGE_CONNECTORS } from '../storage-connectors.js';
 
 describe('database connectors', () => {
   it('are all on the database auth scheme with a postgres among them', () => {
@@ -34,7 +35,9 @@ describe('database connectors', () => {
     const top100 = getConnectorCatalogue().connectors;
     const all = listAllConnectors();
     expect(top100).toHaveLength(100);
-    expect(all).toHaveLength(100 + EXTRA_CONNECTORS.length + DATABASE_CONNECTORS.length);
+    expect(all).toHaveLength(
+      100 + EXTRA_CONNECTORS.length + DATABASE_CONNECTORS.length + STORAGE_CONNECTORS.length,
+    );
     expect(all.map((c) => c.connectorId)).toContain('postgres');
     // ids stay unique across the union.
     expect(new Set(all.map((c) => c.connectorId)).size).toBe(all.length);

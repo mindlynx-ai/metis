@@ -16,4 +16,5 @@
 export * from './loader.js';
 export * from './database-connectors.js';
 export * from './extra-connectors.js';
+export * from './storage-connectors.js';
 export * from './connector-credentials.js';

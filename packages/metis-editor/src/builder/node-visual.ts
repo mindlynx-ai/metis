@@ -33,6 +33,7 @@ const TYPE_ICON: Record<string, IconName> = {
   signal: 'bolt',
   switch: 'branch',
   logic: 'branch',
+  approval: 'stamp',
   waituntil: 'clock',
   noop: 'minus',
   stopanderror: 'alert',
@@ -47,6 +48,7 @@ const TYPE_ICON: Record<string, IconName> = {
   connector: 'plug',
   postgres: 'database',
   sendgrid: 'mail',
+  s3: 'doc',
 };
 
 const CATEGORY_ICON: Record<string, IconName> = {
@@ -73,6 +75,7 @@ export function nodeIcon(type: string, category: string): IconName {
  *   - a `switch` routes by `source-<optionId>` (one per switchOption) and
  *     `source-default` for the fall-through;
  *   - a `logic` node routes by `true` / `false`;
+ *   - an `approval` routes by `approved` / `rejected`;
  *   - everything else has one unnamed output (sourceHandle null connects it).
  * `top` positions the handle vertically on the node's right edge.
  */
@@ -111,6 +114,14 @@ export function outputPorts(nodeType: string, config?: Record<string, unknown>):
     return [
       { id: 'true', label: 'Yes', top: '32%' },
       { id: 'false', label: 'No', top: '68%' },
+    ];
+  }
+  if (type === 'approval') {
+    // The engine routes an approval by these handle ids. Nothing runs below
+    // an undecided gate, so an unwired Rejected handle simply ends that path.
+    return [
+      { id: 'approved', label: 'Approved', top: '32%' },
+      { id: 'rejected', label: 'Rejected', top: '68%' },
     ];
   }
   if (type === 'loop') {

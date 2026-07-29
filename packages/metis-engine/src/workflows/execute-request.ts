@@ -62,7 +62,9 @@ export function buildExecuteRequest(
             }))
         : undefined,
     inputData: isBranch ? input.input : undefined,
-    signalParams: nodeType === 'signal' ? node.signalParams : undefined,
+    // Set on a signal node's resume, and on any node the workflow parked for
+    // an outside decision: both are dispatched again carrying their answer.
+    signalParams: node.signalParams,
     routing: cloudRoutingFor(input.definition.cloudRouting, node),
   };
 }

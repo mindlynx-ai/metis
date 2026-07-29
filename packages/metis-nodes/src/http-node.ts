@@ -201,7 +201,10 @@ export async function checkUrlForSsrf(rawUrl: string, allowedHosts?: string[]): 
   }
 }
 
-async function fetchFollowingGuardedRedirects(
+/** Exported because every fetch of an author-supplied URL needs this, not just
+ *  the http node: a source that 302s to 169.254.169.254 would otherwise walk
+ *  straight past a guard that only ever looked at the first hop. */
+export async function fetchFollowingGuardedRedirects(
   url: string,
   init: RequestInit,
   allowedHosts: string[] | undefined,

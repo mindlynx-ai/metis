@@ -48,6 +48,23 @@ const startBody = z.object({
 const signalBody = z.object({ signalType: z.string().min(1), signalParams: z.unknown().optional() });
 const cancelBody = z.object({ reason: z.string().optional() });
 
+/**
+ * Stamp WHO sent a signal, from the session, over anything the body claimed.
+ * A step that acts on a signal (an approval sign-off, above all) must be able
+ * to attribute it: "approved by" is only worth having when the sender cannot
+ * choose the name. Scalar params are left alone; there is nowhere to put it.
+ */
+function withSignaller(signalParams: unknown, session: Session): unknown {
+  const isPlainObject =
+    typeof signalParams === 'object' && signalParams !== null && !Array.isArray(signalParams);
+  if (signalParams !== undefined && !isPlainObject) return signalParams;
+  return {
+    ...((signalParams ?? {}) as Record<string, unknown>),
+    signalledBy: session.userId,
+    signalledByRole: session.role,
+  };
+}
+
 /** The consent receipt line, when the run's workflow has cloud routing on. */
 async function appendConsentReceipt(
   store: WorkflowStore,
@@ -342,7 +359,7 @@ export function registerExecutionLifecycleRoutes(
       }
       await executions.signal(id, 'helixSignal', {
         signalType: parsed.data.signalType,
-        signalParams: parsed.data.signalParams,
+        signalParams: withSignaller(parsed.data.signalParams, session),
       });
       await trail(session, 'execution.signalled', id, { signalType: parsed.data.signalType });
       return reply.code(202).send({ ok: true });

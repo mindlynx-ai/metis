@@ -29,6 +29,7 @@ editor's palette and inspector Guide tab:
 
 ## The project
 
+- [Pricing](pricing.md) - what is free forever, and what the paid plan adds
 - [Source on GitHub](https://github.com/mindlynx-ai/metis)
 - [Contributing](https://github.com/mindlynx-ai/metis/blob/main/CONTRIBUTING.md)
 - [Security policy](https://github.com/mindlynx-ai/metis/blob/main/SECURITY.md)

@@ -27,6 +27,7 @@ import { fileURLToPath } from 'node:url';
 import { DATABASE_CONNECTORS, EXECUTABLE_DATABASE_ENGINES } from './database-connectors.js';
 import { deriveKeywords } from './node-keywords.js';
 import { EXTRA_CONNECTORS } from './extra-connectors.js';
+import { STORAGE_CONNECTORS } from './storage-connectors.js';
 import {
   credentialSchemaFor,
   brandColorFor,
@@ -123,6 +124,10 @@ const BASE_NODE_META: Record<string, { group?: string; keywords: string[] }> = {
   connector: { group: 'developer-tools', keywords: ['connector', 'http', 'api', 'integration', 'connect'] },
   postgres: { group: 'data-flow', keywords: ['postgres', 'database', 'sql', 'query', 'db'] },
   sendgrid: { group: 'communication', keywords: ['sendgrid', 'email', 'mail', 'send', 'smtp'] },
+  s3: {
+    group: 'content-and-files',
+    keywords: ['s3', 'object store', 'bucket', 'file', 'upload', 'download', 'storage', 'minio', 'r2', 'blob', 'presign'],
+  },
 };
 
 function withBaseMeta(entry: CatalogueEntry): CatalogueEntry {
@@ -340,7 +345,7 @@ export interface ConnectorCatalogueRecord {
   connectorId: string;
   name: string;
   baseUrl: string;
-  authScheme: 'bearer' | 'header' | 'basic' | 'none' | 'database';
+  authScheme: 'bearer' | 'header' | 'basic' | 'none' | 'database' | 'sigv4';
   authHeaderName?: string;
   headers?: Record<string, string>;
   tier: 'open' | 'premium';
@@ -379,13 +384,18 @@ export function getConnectorCatalogue(options: GetCatalogueOptions = {}): Connec
 
 /**
  * Every connector offered to the UI: the frozen top-100 SaaS catalogue plus the
- * extra wired HTTP connectors and the infra/database connectors (both live
- * outside the length-locked connectors.v1.json). This is what the connector
+ * extra wired HTTP connectors, the infra/database connectors and the object
+ * stores (all of which live outside the length-locked connectors.v1.json). This is what the connector
  * picker and connections list consume; getConnectorCatalogue stays the
  * top-100 alone.
  */
 export function listAllConnectors(): ConnectorCatalogueRecord[] {
-  return [...getConnectorCatalogue().connectors, ...EXTRA_CONNECTORS, ...DATABASE_CONNECTORS].map((c) => ({
+  return [
+    ...getConnectorCatalogue().connectors,
+    ...EXTRA_CONNECTORS,
+    ...DATABASE_CONNECTORS,
+    ...STORAGE_CONNECTORS,
+  ].map((c) => ({
     ...c,
     // Attach the credential schema + brand mark the UI renders (a connector is
     // rarely a single key: Stripe carries three fields, a database five).

@@ -123,4 +123,45 @@ describe('unregistered-node upgrade response', () => {
 
     expect(JSON.parse(JSON.stringify(definition))).toEqual(definition);
   }, 60_000);
+
+  it('a paid GATE opens no branch: nothing below an approval runs without one', async () => {
+    const definition: HelixWorkflowInput['definition'] = {
+      nodes: [
+        { id: START, type: 'echo', config: { step: 'start' } },
+        { id: PAID, type: 'approval', config: { title: 'Refund order 4182' } },
+        { id: AFTER, type: 'echo', config: { step: 'pay-the-supplier' } },
+      ],
+      edges: [
+        { source: START, target: PAID },
+        // Both branches wired, as the builder draws them.
+        { source: PAID, target: AFTER, sourceHandle: 'approved' },
+      ],
+    };
+    const input: HelixWorkflowInput = {
+      tenantId: 't1',
+      workflowId: 'wf-upgrade',
+      executionId: 'exec-upgrade-2',
+      definition,
+    };
+    const result = (await env.client.workflow.execute('helixWorkflow', {
+      args: [input],
+      workflowId: input.executionId,
+      taskQueue: TASK_QUEUE,
+    })) as { status: string };
+    // The run does not crash and does not fail: the definition stays valid.
+    expect(result.status).toBe('completed');
+
+    const execution = await store.getExecution('t1', 'exec-upgrade-2');
+    const upgrade = execution?.logs.find(
+      (log) => log.nodeId === PAID && log.event === 'workflow.node.unimplemented',
+    );
+    expect(upgrade?.outcome).toBe('unimplemented');
+    // A gate that could not be evaluated must not let the money move: the
+    // step below it is orphaned, not run "because the walk continues".
+    expect(
+      execution?.logs.some((log) => log.nodeId === AFTER && log.event === 'workflow.node.started'),
+    ).toBe(false);
+    const orphaned = execution?.logs.find((log) => log.event === 'workflow.node.orphaned');
+    expect(orphaned?.nodeIds).toContain(AFTER);
+  }, 60_000);
 });

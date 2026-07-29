@@ -227,6 +227,11 @@ export function registerWorkflowRoutes(
         status: 'draft',
         changeset,
       });
+      // The edit that changed what a published workflow does is exactly the
+      // entry an auditor works backwards from, and without this the trail
+      // jumped from created straight to published with the graph rewritten
+      // in between by nobody.
+      await trail(session, 'workflow.updated', workflowId, { version: latest.version, changeset });
       return reply.send({ id: workflowId, workflowId, version: latest.version, changeset });
     },
   );
@@ -275,6 +280,19 @@ export function registerWorkflowRoutes(
     async (request, reply) => {
       const session = request.session as Session;
       const { workflowId } = request.params as { workflowId: string };
+      // Soft, because an execution row carries only the workflowId: hard
+      // deletion would leave every past run in Operate pointing at an id that
+      // no longer resolves. The store's soft delete keeps the versions
+      // readable (so a finished run still opens its graph) and only drops the
+      // workflow from the listing indexes.
+      //
+      // The existence check is what makes the answer honest. Store writes are
+      // keyed by tenant, so deleting an id this tenant does not own was
+      // already a no-op, but it replied 204 and the caller (the editor, the
+      // MCP tool) reported the workflow gone. A repeat delete still answers
+      // 204: soft-deleted versions survive the read, so idempotency holds.
+      const latest = await store.getLatestVersion(session.tenantId, workflowId);
+      if (!latest) return reply.code(404).send({ error: 'workflow not found' });
       await store.softDeleteWorkflow(session.tenantId, workflowId);
       await trail(session, 'workflow.deleted', workflowId);
       // A deleted workflow must not keep firing on its schedule.

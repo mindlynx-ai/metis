@@ -31,6 +31,7 @@ import { ensureUplift, useUplift } from '../uplift-store.js';
 import { Icon } from '../ui/Icon.js';
 import { defaultsFor } from './inspector/schema.js';
 import { nodeIcon } from './node-visual.js';
+import { addableEntries } from './palette-entries.js';
 import { suggestedStepTypes, suggestedTitle } from './suggested-steps.js';
 
 /** Storefront metadata only: names and pitches, never implementations. */
@@ -149,8 +150,8 @@ export function Palette({
   }, [open, onClose]);
 
   const ready = useMemo(
-    () => catalogue.filter((entry) => !entry.alias_of && entry.handler_status === 'ready'),
-    [catalogue],
+    () => addableEntries(catalogue, uplift.capabilities),
+    [catalogue, uplift.capabilities],
   );
 
   const searching = query.trim() !== '';
@@ -187,8 +188,12 @@ export function Palette({
         .filter((entry) => entry.execution === 'both' && entry.entitlement)
         .map((entry) => entry.entitlement),
     );
-    return uplift.offers.filter((offer) => !inline.has(offer.id));
-  }, [ready, uplift.offers]);
+    // A capability the account already has is not an upsell: its steps are in
+    // the list above, so a locked card for it would be selling what is owned.
+    return uplift.offers.filter(
+      (offer) => !inline.has(offer.id) && !uplift.capabilities.includes(offer.id),
+    );
+  }, [ready, uplift.offers, uplift.capabilities]);
 
   // Browse: entries bucketed into groups, in the fixed group order.
   const groups = useMemo(() => {

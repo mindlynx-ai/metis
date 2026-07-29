@@ -91,10 +91,34 @@ export interface RuntimeNode extends WorkflowNode {
   nodeStatus: NodeRuntimeStatus;
   signalReceived?: boolean;
   signalParams?: unknown;
+  /** Set while a handler-requested park is open: the signal name that
+   *  answers it. A signal node matches on its config instead. */
+  awaitingSignalType?: string;
 }
 
 /** Default wait on a parked signal node: 24 hours. */
 export const SIGNAL_DEFAULT_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * How many times one node may park for an outside decision in a single run.
+ * A park is meant to happen once, twice with an escalation; the cap is here
+ * because a handler that parks on every dispatch would otherwise grow
+ * workflow history without bound and never fail.
+ */
+export const MAX_SIGNAL_PARKS = 8;
+
+/** What a handler asked to wait for (structurally the ports' SignalPark;
+ *  restated because this module must stay free of runtime imports). */
+export interface SignalParkRequest {
+  signalType: string;
+  timeoutMs?: number;
+  details?: Record<string, unknown>;
+}
+
+/** The signal params delivered when a park's deadline passes. Handlers read
+ *  it through the ports' isParkExpiry; it lives here because workflow code
+ *  cannot import the ports barrel (it reaches node built-ins). */
+export const PARK_EXPIRED = { expired: true } as const;
 
 export interface HelixSignalPayload {
   signalType: string;
@@ -198,6 +222,9 @@ export interface MarkNodeWaitingRequest {
   signalType?: string;
   /** waituntil: the ISO time the node sleeps until (whereabouts display). */
   until?: string;
+  /** What the park is about, from the handler that asked for it: enough for
+   *  a queue to show the decision without opening the run. */
+  details?: Record<string, unknown>;
   sequence: number;
 }
 
@@ -208,7 +235,8 @@ export interface SwitchNodeOutput {
 }
 
 export interface ExecuteNodeResult {
-  /** 'parked' = a cloud job was accepted; the workflow awaits pollCloudJob. */
+  /** 'parked' = a cloud job was accepted (jobId) or the handler is waiting on
+   *  an outside decision (park); either way the workflow does the waiting. */
   outcome: 'completed' | 'failed' | 'unimplemented' | 'parked';
   output?: unknown;
   error?: { message: string; code?: string };
@@ -216,6 +244,8 @@ export interface ExecuteNodeResult {
   attempts?: number;
   /** The accepted cloud job handle (outcome 'parked' only). */
   jobId?: string;
+  /** What the handler is waiting for (outcome 'parked' only). */
+  park?: SignalParkRequest;
 }
 
 export interface PollCloudJobRequest {

@@ -20,9 +20,11 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { SingleTenantIdentity } from '@mindlynx/metis-ports';
 import {
+  AuditStore,
   DataGateway,
   SqliteAdapter,
   WorkflowStore,
+  registerAuditTable,
   registerWorkflowTables,
 } from '@mindlynx/metis-data-gateway';
 import { buildCoreServer } from '../server.js';
@@ -47,9 +49,14 @@ const edge = (source: string, target: string) => ({
 
 describe('definition CRUD with publish validation', () => {
   let app: FastifyInstance;
+  // A second tenant's server over the SAME store: the only way to prove the
+  // routes are scoped by session tenant rather than by who holds the id.
+  let otherApp: FastifyInstance;
   let store: WorkflowStore;
+  let audit: AuditStore;
   let adminToken: string;
   let viewerToken: string;
+  let otherToken: string;
 
   const bareDefinition = {
     nodes: [node(WORK, 'echo', { v: 1 })],
@@ -64,27 +71,37 @@ describe('definition CRUD with publish validation', () => {
     const dir = mkdtempSync(join(tmpdir(), 'metis-crud-'));
     const gateway = new DataGateway(new SqliteAdapter(join(dir, 'crud.db')));
     registerWorkflowTables(gateway);
+    registerAuditTable(gateway);
     store = new WorkflowStore(gateway);
+    audit = new AuditStore(gateway);
     const identity = await SingleTenantIdentity.create('t1', [
       { userId: 'jeremy', secret: 'pw', role: 'admin' },
       { userId: 'watcher', secret: 'pw', role: 'viewer' },
     ]);
-    app = buildCoreServer({ identity, store });
+    app = buildCoreServer({ identity, store, audit });
     await app.ready();
-    const login = async (userId: string) => {
-      const response = await app.inject({
+    const login = async (instance: FastifyInstance, userId: string) => {
+      const response = await instance.inject({
         method: 'POST',
         url: '/api/auth/login',
         payload: { userId, secret: 'pw' },
       });
       return (response.json() as { token: string }).token;
     };
-    adminToken = await login('jeremy');
-    viewerToken = await login('watcher');
+    adminToken = await login(app, 'jeremy');
+    viewerToken = await login(app, 'watcher');
+
+    const otherIdentity = await SingleTenantIdentity.create('t2', [
+      { userId: 'mallory', secret: 'pw', role: 'admin' },
+    ]);
+    otherApp = buildCoreServer({ identity: otherIdentity, store, audit });
+    await otherApp.ready();
+    otherToken = await login(otherApp, 'mallory');
   });
 
   afterAll(async () => {
     await app?.close();
+    await otherApp?.close();
   });
 
   const call = (
@@ -169,6 +186,50 @@ describe('definition CRUD with publish validation', () => {
     }
     const listed = await call('GET', '/api/workflows?limit=10', undefined, viewerToken);
     expect(listed.statusCode).toBe(200);
+  });
+
+  it('trails the edit and the deletion, not only the creation', async () => {
+    const { id } = (await create('audited', bareDefinition)).json() as { id: string };
+    await call('PATCH', `/api/workflows/${id}`, { name: 'audited, renamed' });
+    await call('DELETE', `/api/workflows/${id}`);
+    const actions = (await audit.list('t1', { entityId: id })).map((entry) => entry.action);
+    expect(actions).toContain('workflow.created');
+    expect(actions).toContain('workflow.updated');
+    expect(actions).toContain('workflow.deleted');
+  });
+
+  it('refuses to edit or delete a workflow owned by another tenant', async () => {
+    const { id } = (await create('t1 private', bareDefinition)).json() as { id: string };
+    const asOtherTenant = (method: 'GET' | 'PATCH' | 'DELETE', body?: unknown) =>
+      otherApp.inject({
+        method,
+        url: `/api/workflows/${id}`,
+        payload: body as Record<string, unknown> | undefined,
+        headers: { authorization: `Bearer ${otherToken}` },
+      });
+    expect((await asOtherTenant('GET')).statusCode).toBe(404);
+    expect((await asOtherTenant('PATCH', { name: 'stolen' })).statusCode).toBe(404);
+    expect((await asOtherTenant('DELETE')).statusCode).toBe(404);
+
+    // The refusals must be refusals, not writes that happened to miss: the
+    // owner still reads the original name and an undeleted workflow.
+    const owned = (await call('GET', `/api/workflows/${id}`)).json() as {
+      name: string;
+      deleted?: boolean;
+    };
+    expect(owned.name).toBe('t1 private');
+    expect(owned.deleted).not.toBe(true);
+  });
+
+  it('answers 404 for an unknown workflow rather than inventing one', async () => {
+    expect((await call('PATCH', '/api/workflows/wf_nope', { name: 'x' })).statusCode).toBe(404);
+    expect((await call('DELETE', '/api/workflows/wf_nope')).statusCode).toBe(404);
+  });
+
+  it('rejects an update whose body is not a workflow', async () => {
+    const { id } = (await create('validated', bareDefinition)).json() as { id: string };
+    const bad = await call('PATCH', `/api/workflows/${id}`, { name: '', nodes: [] });
+    expect(bad.statusCode).toBe(400);
   });
 
   it('rejects a workflow with no nodes', async () => {

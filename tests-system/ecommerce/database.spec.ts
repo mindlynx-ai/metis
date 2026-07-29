@@ -49,6 +49,29 @@ function material(prefix: string, fallback?: Record<string, string>): Record<str
 }
 
 /**
+ * SQL Server takes the same host/port credentials as the other two and one
+ * more: the container presents a self-signed certificate, as every SQL Server
+ * does until somebody installs a real one, so the connection has to say it
+ * trusts it. That is a property of the connection, which is why it is material
+ * rather than a flag on the adapter.
+ */
+function sqlServerMaterial(): Record<string, string> | undefined {
+  const base = material('METIS_SQLSERVER', {
+    host: 'sqlserver',
+    port: '1433',
+    // The images seed no database, so the fixture lives in master.
+    database: 'master',
+    user: 'sa',
+    // The throwaway password the sample compose file publishes in the open,
+    // next to the other two. It only looks like a real one because SQL Server
+    // refuses to start on a password as plain as "sample".
+    // eslint-disable-next-line sonarjs/no-hardcoded-passwords
+    password: 'Metis-Sample-1',
+  });
+  return base && { ...base, trustServerCertificate: 'true' };
+}
+
+/**
  * Snowflake's credentials are a different shape entirely: the SQL API never
  * takes a password. Either a programmatic access token or a key pair will do,
  * so the fixture accepts whichever is configured. The private key may be given
@@ -94,7 +117,7 @@ interface EngineFixture {
   /** A scratch table name this engine's cases create and drop. */
   scratch: string;
   /** Hand-written SQL stays the author's own dialect, so the cases bind the
-   *  way the engine does: $1 for Postgres, ? for MySQL. */
+   *  way the engine does: $1 for Postgres, ? for MySQL, @p1 for SQL Server. */
   placeholder: (index: number) => string;
   /** Whether the visual builder can generate for this engine (reads only). */
   builder: boolean;
@@ -129,6 +152,29 @@ const ENGINES: EngineFixture[] = [
     }),
     scratch: 'metis_probe_my',
     placeholder: () => '?',
+    builder: true,
+  },
+  {
+    engine: 'sqlserver',
+    connectorId: 'sqlserver',
+    material: sqlServerMaterial(),
+    // Microsoft's images create no database and run no init script, so the
+    // container arrives with nothing but master in it: the fixture is built
+    // here, exactly as it is for a hosted warehouse.
+    seed: [
+      "IF OBJECT_ID('orders', 'U') IS NOT NULL DROP TABLE orders",
+      'CREATE TABLE orders (id int, customer varchar(128), email varchar(190), amount decimal(10,2), status varchar(32))',
+      `INSERT INTO orders (id, customer, email, amount, status) VALUES
+         (1, 'Ada Lovelace', 'ada@example.com', 129.00, 'paid'),
+         (2, 'Alan Turing', 'alan@example.com', 59.50, 'paid'),
+         (3, 'Grace Hopper', 'grace@example.com', 240.00, 'refunded'),
+         (4, 'Katherine Johnson', 'kj@example.com', 88.25, 'paid'),
+         (5, 'Linus Torvalds', 'linus@example.com', 15.00, 'pending'),
+         (6, 'Margaret Hamilton', 'mh@example.com', 512.75, 'paid')`,
+    ],
+    scratch: 'metis_probe_ms',
+    // The driver binds by name, so a positional value is @p1 here.
+    placeholder: (index) => `@p${index}`,
     builder: true,
   },
   {

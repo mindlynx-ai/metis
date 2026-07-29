@@ -19,13 +19,17 @@
  * unit-tested pure; the real database SELECT 1 gates on PG_URL and the real
  * http probe on NET_TEST, so `npm test` stays hermetic.
  */
-import { describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect } from 'vitest';
+import { createServer, type Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import {
   DefaultConnectionTester,
   classifyDbError,
   httpAuthHeaders,
+  probeKey,
   resolveHttpProbe,
 } from '../connection-tester.js';
+import { buildDataSources } from '../register.js';
 import { DataSourceRegistry, type DataSource } from '@mindlynx/metis-ports';
 
 const tester = new DefaultConnectionTester();
@@ -37,6 +41,17 @@ describe('connection tester classification', () => {
     expect(classifyDbError({ code: 'ECONNREFUSED', message: 'refused' }).status).toBe('unreachable');
     expect(classifyDbError({ code: 'ENOTFOUND', message: 'dns' }).status).toBe('unreachable');
     expect(classifyDbError({ message: 'something else' }).status).toBe('error');
+  });
+
+  it('reads a SQL Server refusal in its own vocabulary', () => {
+    // A bad password arrives as ELOGIN, and the timeout is ETIMEOUT rather than
+    // the ETIMEDOUT every other client spells. Left unclassified, a mistyped
+    // password reads as a generic error the operator cannot act on.
+    expect(classifyDbError({ code: 'ELOGIN', message: "Login failed for user 'sa'." }).status).toBe(
+      'auth_failed',
+    );
+    expect(classifyDbError({ code: 'ESOCKET', message: 'socket hang up' }).status).toBe('unreachable');
+    expect(classifyDbError({ code: 'ETIMEOUT', message: 'timeout' }).status).toBe('unreachable');
   });
 
   it('builds auth headers per scheme', () => {
@@ -116,6 +131,41 @@ describe.skipIf(!PG_URL)('connection tester: real database (PG_URL)', () => {
     expect(['auth_failed', 'unreachable']).toContain(health.status);
     expect(health.ok).toBe(false);
   });
+
+  it('a wrong password still fails after a good one, through the pooled adapter', async () => {
+    // The two cases above go through the bare pg.Client, which opens and closes
+    // a connection per probe and so could never have shown the bug. The bug
+    // lived on the ADAPTER path, where the probe borrows a cached pool: the key
+    // left the password out, so a second probe differing only in password was
+    // answered by the first one's already-open pool and read green.
+    //
+    // Order matters and is the whole point: the good probe must run FIRST so
+    // there is a warm pool for the bad one to be wrongly served by.
+    const url = new URL(PG_URL!);
+    const pooled = new DefaultConnectionTester(buildDataSources());
+    const material = {
+      host: url.hostname,
+      port: url.port,
+      database: url.pathname.replace(/^\//, ''),
+      user: decodeURIComponent(url.username),
+      password: decodeURIComponent(url.password),
+    };
+
+    const good = await pooled.testConnection({
+      connectorId: 'postgres',
+      authScheme: 'database',
+      material,
+    });
+    expect(good.status).toBe('ok');
+
+    const bad = await pooled.testConnection({
+      connectorId: 'postgres',
+      authScheme: 'database',
+      material: { ...material, password: `${material.password}-wrong` },
+    });
+    expect(bad.ok).toBe(false);
+    expect(bad.status).toBe('auth_failed');
+  });
 });
 
 describe.skipIf(process.env.NET_TEST !== '1')('connection tester: real http (NET_TEST)', () => {
@@ -175,6 +225,20 @@ describe('testing a data engine goes through its own adapter', () => {
     expect(asked).toMatch(/select 1/i);
   });
 
+  it('gives a different password its own pool, so a wrong one cannot read green', () => {
+    // The bug this closes, seen live against a real server: the key named the
+    // host, database and user and left the password out, so a second connection
+    // that differed only in its password was answered by the first one's open
+    // pool and a wrong password passed the test. Same material, same key, so a
+    // repeat probe still reuses the pool it opened.
+    const good = { host: 'db', database: 'sales', user: 'sa', password: 'right' };
+    const bad = { ...good, password: 'wrong' };
+    expect(probeKey('sqlserver', good)).not.toBe(probeKey('sqlserver', bad));
+    expect(probeKey('sqlserver', good)).toBe(probeKey('sqlserver', { ...good }));
+    // And the key never carries the secret it was built from.
+    expect(probeKey('sqlserver', good)).not.toContain('right');
+  });
+
   it('reports a refused login as auth_failed, not a generic error', async () => {
     const sources = new DataSourceRegistry().register(
       engine('snowflake', async () => {
@@ -220,20 +284,24 @@ describe('testing a data engine goes through its own adapter', () => {
   });
 
   it('says a database engine with no adapter is connect-only rather than guessing', async () => {
-    // sqlserver has a catalogue record but no adapter. The old fallback ran a
-    // Postgres client against it, so the verdict described a protocol the
-    // server does not speak: red against a real SQL Server, green against a
-    // Postgres box. Neither told the operator anything true.
-    const sources = new DataSourceRegistry();
+    // The old fallback ran a Postgres client at any engine, so the verdict
+    // described a protocol the server does not speak: red against the real
+    // thing, green against a Postgres box. Neither told the operator anything.
+    // This used to name sqlserver, which now HAS an adapter, so it names athena
+    // (a Helix-build engine) against the REAL registry: the case then proves
+    // the engine is genuinely unadapted rather than assuming it, and says so
+    // the day somebody registers one.
+    const sources = buildDataSources();
+    expect(sources.engines()).not.toContain('athena');
     const health = await new DefaultConnectionTester(sources).testConnection({
-      connectorId: 'sqlserver',
+      connectorId: 'athena',
       authScheme: 'database',
-      baseUrl: 'sqlserver://',
-      material: { host: 'db.internal', port: '1433', database: 'sales', user: 'u', password: 'p' },
+      baseUrl: 'athena://',
+      material: { host: 'db.internal', port: '443', database: 'sales', user: 'u', password: 'p' },
     });
     expect(health.ok).toBe(false);
     expect(health.status).toBe('error');
-    expect(health.message).toMatch(/sqlserver/);
+    expect(health.message).toMatch(/athena/);
     expect(health.message).toMatch(/connect-only/i);
   });
 
@@ -248,5 +316,79 @@ describe('testing a data engine goes through its own adapter', () => {
     // No base URL to probe, which is the http path's own complaint.
     expect(health.ok).toBe(false);
     expect(health.message).toMatch(/base URL/i);
+  });
+});
+
+describe('probing an object store', () => {
+  let server: Server;
+  let endpoint: string;
+  let status = 200;
+
+  beforeAll(async () => {
+    server = createServer((_req, res) => {
+      res.statusCode = status;
+      // Signed or not, the probe has to reach ListObjectsV2 to learn anything:
+      // this records that it did by answering only that path.
+      res.end(
+        status === 200
+          ? '<ListBucketResult><Name>b</Name></ListBucketResult>'
+          : '<Error><Code>SignatureDoesNotMatch</Code><Message>no</Message></Error>',
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    endpoint = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  afterAll(() => {
+    server.close();
+  });
+
+  const material = (extra: Record<string, string> = {}) => ({
+    connectorId: 's3',
+    authScheme: 'sigv4',
+    material: {
+      accessKeyId: 'AKIDEXAMPLE',
+      secretAccessKey: 'stub-secret',
+      region: 'eu-west-1',
+      bucket: 'b',
+      endpoint,
+      allowPrivateEndpoint: 'true',
+      ...extra,
+    },
+  });
+
+  it('reads green when the signed listing is accepted', async () => {
+    status = 200;
+    const health = await tester.testConnection(material());
+    expect(health.status).toBe('ok');
+    expect(health.message).toContain('b');
+  });
+
+  it('separates a rejected signature from an unreachable store', async () => {
+    status = 403;
+    expect((await tester.testConnection(material())).status).toBe('auth_failed');
+    status = 200;
+    const away = await tester.testConnection(material({ endpoint: 'http://127.0.0.1:1' }));
+    expect(away.status).toBe('unreachable');
+  });
+
+  it('refuses a private endpoint the connection did not name', async () => {
+    status = 200;
+    const health = await tester.testConnection({
+      ...material(),
+      material: { ...material().material, allowPrivateEndpoint: 'false' },
+    });
+    expect(health.status).toBe('error');
+    expect(health.message).toMatch(/allowPrivateEndpoint/);
+  });
+
+  it('says what is missing rather than probing half a connection', async () => {
+    const health = await tester.testConnection({
+      connectorId: 's3',
+      authScheme: 'sigv4',
+      material: { accessKeyId: 'k', secretAccessKey: 's', region: 'eu-west-1' },
+    });
+    expect(health.status).toBe('error');
+    expect(health.message).toMatch(/no bucket/);
   });
 });

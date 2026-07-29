@@ -38,6 +38,7 @@ const ALLOWED = new Set([
   'docs/connectors.md',
   'docs/running-tests.md',
   'docs/mcp.md',
+  'docs/pricing.md',
   'deploy/aws/README.md',
 ]);
 

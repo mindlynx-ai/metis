@@ -30,6 +30,7 @@ import {
   OffersClient,
   UnentitledError,
   discoverOidc,
+  formatOfferPrice,
 } from '../uplift.js';
 import { startHelixStub, STUB_OFFERS, type HelixStub } from '../adapters/helix-stub.js';
 
@@ -315,5 +316,29 @@ describe('refresh rotation at the stub', () => {
   it('rejects an unknown refresh token without touching anything', async () => {
     stub = await startHelixStub();
     expect((await refreshGrant(stub.url, 'refresh_forged')).status).toBe(400);
+  });
+});
+
+/**
+ * Price formatting sits beside the type so the gateway, the offline manifest
+ * and the editor cannot drift into three spellings of the same nine pounds.
+ * The editor keeps its own copy (it cannot import from ports across the
+ * module-boundary gate), so this is the definition both must agree with.
+ */
+describe('formatOfferPrice', () => {
+  it('states a whole amount without trailing zeroes', () => {
+    expect(formatOfferPrice({ amount: 900, currency: 'GBP', interval: 'month' })).toBe('£9/month');
+  });
+
+  it('keeps the pence when there are pence', () => {
+    expect(formatOfferPrice({ amount: 1250, currency: 'GBP', interval: 'month' })).toBe(
+      '£12.50/month',
+    );
+  });
+
+  it('falls back to the ISO code rather than guessing a symbol', () => {
+    expect(formatOfferPrice({ amount: 9900, currency: 'ZAR', interval: 'year' })).toBe(
+      'ZAR 99/year',
+    );
   });
 });

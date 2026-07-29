@@ -203,6 +203,22 @@ describe('testing a data engine goes through its own adapter', () => {
     expect(health.ok).toBe(true);
   });
 
+  it('still sends postgres to the postgres client when no registry was supplied', async () => {
+    // A tester built without a DataSourceRegistry is a supported construction,
+    // and the PG_URL suite uses it. Narrowing the no-adapter fallback broke
+    // exactly this path once; it only failed where PG_URL was set, so it must
+    // be pinned somewhere that runs everywhere.
+    const health = await new DefaultConnectionTester().testConnection({
+      connectorId: 'postgres',
+      authScheme: 'database',
+      material: { host: '127.0.0.1', port: '1', database: 'd', user: 'u', password: 'p' },
+    });
+    // No server on port 1, so it cannot be ok. The point is that it reports a
+    // connection attempt, not the connect-only refusal.
+    expect(health.ok).toBe(false);
+    expect(health.message).not.toMatch(/connect-only/i);
+  });
+
   it('says a database engine with no adapter is connect-only rather than guessing', async () => {
     // sqlserver has a catalogue record but no adapter. The old fallback ran a
     // Postgres client against it, so the verdict described a protocol the

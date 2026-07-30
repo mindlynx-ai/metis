@@ -22,7 +22,7 @@
  */
 import type { FastifyInstance } from 'fastify';
 import type { Session } from '@mindlynx/metis-ports';
-import type { WorkflowStore } from '@mindlynx/metis-data-gateway';
+import type { AuditStore, WorkflowStore } from '@mindlynx/metis-data-gateway';
 import { requireAction } from './auth-gate.js';
 
 export interface SchedulesLike {
@@ -44,7 +44,22 @@ export function registerScheduleRoutes(
   app: FastifyInstance,
   schedules: SchedulesLike,
   store?: WorkflowStore,
+  audit?: AuditStore,
 ): void {
+  // A paused schedule stops a workflow firing without changing it, so the
+  // definition history shows nothing at all: this is the only record that a
+  // person switched it off. The schedule is keyed by workflow, so that is the
+  // entity an auditor looks it up by.
+  const trail = (session: Session, action: string, workflowId: string) =>
+    audit?.record({
+      tenantId: session.tenantId,
+      actor: session.userId,
+      action,
+      entityType: 'schedule',
+      entityId: workflowId,
+      outcome: 'ok',
+    });
+
   app.get('/api/operate/schedules', async (request, reply) => {
     const session = request.session as Session;
     const items = await schedules.describeAll(session.tenantId);
@@ -65,6 +80,7 @@ export function registerScheduleRoutes(
       const session = request.session as Session;
       const { workflowId } = request.params as { workflowId: string };
       await schedules.pause(session.tenantId, workflowId);
+      await trail(session, 'schedule.paused', workflowId);
       return reply.code(202).send({ workflowId, paused: true });
     },
   );
@@ -76,6 +92,7 @@ export function registerScheduleRoutes(
       const session = request.session as Session;
       const { workflowId } = request.params as { workflowId: string };
       await schedules.unpause(session.tenantId, workflowId);
+      await trail(session, 'schedule.unpaused', workflowId);
       return reply.code(202).send({ workflowId, paused: false });
     },
   );

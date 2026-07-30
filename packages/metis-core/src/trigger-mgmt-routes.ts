@@ -23,6 +23,8 @@
  */
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
+import type { Session } from '@mindlynx/metis-ports';
+import type { AuditStore } from '@mindlynx/metis-data-gateway';
 import { requireAction } from './auth-gate.js';
 
 export interface TriggersPort {
@@ -51,7 +53,11 @@ const createTriggerBody = z.object({
   pollParams: z.record(z.string(), z.unknown()).optional(),
 });
 
-export function registerTriggerMgmtRoutes(app: FastifyInstance, triggers: TriggersPort): void {
+export function registerTriggerMgmtRoutes(
+  app: FastifyInstance,
+  triggers: TriggersPort,
+  audit?: AuditStore,
+): void {
   app.get('/api/triggers', async (_request, reply) => {
     return reply.send({ items: await triggers.list() });
   });
@@ -94,8 +100,20 @@ export function registerTriggerMgmtRoutes(app: FastifyInstance, triggers: Trigge
   });
 
   app.delete('/api/triggers/:triggerId', { preHandler: requireAction('edit') }, async (request, reply) => {
+    const session = request.session as Session;
     const { triggerId } = request.params as { triggerId: string };
     await triggers.remove(triggerId);
+    // Removing a trigger stops a published workflow firing and takes the
+    // trigger row with it. Without this line nothing says it ever existed, so
+    // "why did the nightly run stop" has no answer.
+    await audit?.record({
+      tenantId: session.tenantId,
+      actor: session.userId,
+      action: 'trigger.deleted',
+      entityType: 'trigger',
+      entityId: triggerId,
+      outcome: 'ok',
+    });
     return reply.code(204).send();
   });
 }

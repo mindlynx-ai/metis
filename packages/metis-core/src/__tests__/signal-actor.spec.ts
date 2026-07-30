@@ -26,9 +26,11 @@ import { join } from 'node:path';
 import type { FastifyInstance } from 'fastify';
 import { SingleTenantIdentity, type ExecutionPort, type ExecutionStatusValue } from '@mindlynx/metis-ports';
 import {
+  AuditStore,
   DataGateway,
   SqliteAdapter,
   WorkflowStore,
+  registerAuditTable,
   registerWorkflowTables,
 } from '@mindlynx/metis-data-gateway';
 import { buildCoreServer } from '../server.js';
@@ -62,6 +64,7 @@ class RecordingExecutions implements ExecutionPort {
 describe('the signal route stamps who sent it', () => {
   let app: FastifyInstance;
   let executions: RecordingExecutions;
+  let audit: AuditStore;
   let adminToken: string;
   let editorToken: string;
   let viewerToken: string;
@@ -70,13 +73,15 @@ describe('the signal route stamps who sent it', () => {
     const dir = mkdtempSync(join(tmpdir(), 'metis-signal-actor-'));
     const gateway = new DataGateway(new SqliteAdapter(join(dir, 'signals.db')));
     registerWorkflowTables(gateway);
+    registerAuditTable(gateway);
+    audit = new AuditStore(gateway);
     const identity = await SingleTenantIdentity.create('t1', [
       { userId: 'jeremy', secret: 'pw', role: 'admin' },
       { userId: 'sam', secret: 'pw', role: 'editor' },
       { userId: 'watcher', secret: 'pw', role: 'viewer' },
     ]);
     executions = new RecordingExecutions();
-    app = buildCoreServer({ identity, store: new WorkflowStore(gateway), executions });
+    app = buildCoreServer({ identity, store: new WorkflowStore(gateway), executions, audit });
     await app.ready();
     const login = async (userId: string) => {
       const response = await app.inject({
@@ -142,5 +147,56 @@ describe('the signal route stamps who sent it', () => {
   it('a viewer cannot signal at all, so a viewer can never approve', async () => {
     const response = await signal(viewerToken, { decision: 'approved' });
     expect(response.statusCode).toBe(403);
+  });
+
+  // The audit trail's side of the same rule: a decision on a sign-off gate is
+  // recorded AS a decision, so "who approved that" is one query rather than a
+  // scan of every signal ever sent. A run of its own per case keeps the
+  // entries unambiguous.
+  const decide = (
+    token: string,
+    executionId: string,
+    signalType: string,
+    signalParams: unknown,
+  ) =>
+    app.inject({
+      method: 'POST',
+      url: `/api/executions/${executionId}/signal`,
+      payload: { signalType, signalParams },
+      headers: { authorization: `Bearer ${token}` },
+    });
+  const trailOf = async (executionId: string) =>
+    (await audit.list('t1', { entityId: executionId })).map((entry) => ({
+      action: entry.action,
+      actor: entry.actor,
+      signalType: entry.detail?.signalType,
+    }));
+
+  it('records an approval as an approval, against the approver', async () => {
+    await decide(adminToken, 'exec-approved', 'approval:node-1', {
+      decision: 'approved',
+      reason: 'checked',
+    });
+    expect(await trailOf('exec-approved')).toEqual([
+      { action: 'approval.approved', actor: 'jeremy', signalType: 'approval:node-1' },
+    ]);
+  });
+
+  it('records a rejection as a rejection, by the session and not the body', async () => {
+    await decide(editorToken, 'exec-rejected', 'approval:node-2', {
+      decision: 'rejected',
+      signalledBy: 'jeremy',
+    });
+    expect(await trailOf('exec-rejected')).toEqual([
+      { action: 'approval.rejected', actor: 'sam', signalType: 'approval:node-2' },
+    ]);
+  });
+
+  it('leaves everything else a plain signal, including an unreadable answer', async () => {
+    await decide(adminToken, 'exec-other', 'manual', { decision: 'approved' });
+    // An answer the approval step would refuse is not named a decision here.
+    await decide(adminToken, 'exec-other', 'approval:node-3', { decision: 'maybe' });
+    const actions = (await trailOf('exec-other')).map((entry) => entry.action);
+    expect(actions).toEqual(['execution.signalled', 'execution.signalled']);
   });
 });

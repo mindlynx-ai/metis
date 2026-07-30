@@ -65,6 +65,31 @@ function withSignaller(signalParams: unknown, session: Session): unknown {
   };
 }
 
+/**
+ * The approval node's signal name. A literal rather than an import from
+ * metis-approvals: core does not depend on that package, and one prefix is not
+ * worth a dependency edge for.
+ */
+const APPROVAL_SIGNAL_PREFIX = 'approval:';
+
+/**
+ * The decision an approval signal carries, if it carries one. A sign-off gate
+ * answered as a bare "signal sent" loses the only fact anyone ever asks the
+ * audit trail for: that a PERSON approved or rejected something. An answer the
+ * approval step would refuse as unreadable is not named a decision here
+ * either, matching what the run itself will record.
+ */
+function approvalDecisionOf(
+  signalType: string,
+  signalParams: unknown,
+): 'approved' | 'rejected' | undefined {
+  if (!signalType.startsWith(APPROVAL_SIGNAL_PREFIX)) return undefined;
+  const decision = String(
+    (signalParams as { decision?: unknown } | undefined)?.decision ?? '',
+  ).toLowerCase();
+  return decision === 'approved' || decision === 'rejected' ? decision : undefined;
+}
+
 /** The consent receipt line, when the run's workflow has cloud routing on. */
 async function appendConsentReceipt(
   store: WorkflowStore,
@@ -361,7 +386,17 @@ export function registerExecutionLifecycleRoutes(
         signalType: parsed.data.signalType,
         signalParams: withSignaller(parsed.data.signalParams, session),
       });
-      await trail(session, 'execution.signalled', id, { signalType: parsed.data.signalType });
+      // The approver is the session that sent it, the same identity
+      // withSignaller stamps on the answer: never anything the body claimed.
+      // ponytail: the engine still has the last word (an editor answering an
+      // admin-only gate is refused), and a decision applied by a raw Temporal
+      // signal that bypasses this route is not audited at all, because there
+      // is no HTTP session to attribute it to. Both verdicts land on the run's
+      // own log; this line is who submitted the decision.
+      const decision = approvalDecisionOf(parsed.data.signalType, parsed.data.signalParams);
+      await trail(session, decision ? `approval.${decision}` : 'execution.signalled', id, {
+        signalType: parsed.data.signalType,
+      });
       return reply.code(202).send({ ok: true });
     },
   );

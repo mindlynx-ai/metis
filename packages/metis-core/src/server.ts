@@ -212,11 +212,11 @@ export function buildCoreServer(deps: CoreDependencies): FastifyInstance {
     }
 
     if (deps.schedules) {
-      registerScheduleRoutes(authed, deps.schedules, deps.store);
+      registerScheduleRoutes(authed, deps.schedules, deps.store, deps.audit);
     }
 
     if (deps.triggers) {
-      registerTriggerMgmtRoutes(authed, deps.triggers);
+      registerTriggerMgmtRoutes(authed, deps.triggers, deps.audit);
     }
 
     if (deps.audit) {

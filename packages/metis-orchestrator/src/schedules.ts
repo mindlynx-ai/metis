@@ -44,13 +44,19 @@ export class ScheduleService {
     options: ScheduleServiceOptions = {},
   ) {
     this.taskQueue = options.taskQueue ?? 'metis-workflow-tasks';
-    this.holder = new SelfHealing<Client>(async () => {
-      if (options.client) return options.client;
-      const connection = await Connection.connect({
-        address: options.address ?? 'localhost:7233',
-      });
-      return new Client({ connection, namespace: options.namespace ?? 'default' });
-    });
+    this.holder = new SelfHealing<Client>(
+      async () => {
+        if (options.client) return options.client;
+        const connection = await Connection.connect({
+          address: options.address ?? 'localhost:7233',
+        });
+        return new Client({ connection, namespace: options.namespace ?? 'default' });
+      },
+      // Only what this builder opened; an injected client is the caller's.
+      async (client) => {
+        if (!options.client) await client.connection.close();
+      },
+    );
   }
 
   async create(tenantId: string, workflowId: string, cron: string): Promise<{ scheduleId: string }> {

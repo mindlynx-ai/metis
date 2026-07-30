@@ -50,6 +50,59 @@ describe('withSelfHeal (ported hardening)', () => {
     expect(built).toBe(1);
   });
 
+  // The whole bug: a rejected promise is not undefined, so `??=` kept it. One
+  // dev Temporal a second slow to accept gRPC poisoned every start, cancel,
+  // list and schedule for the life of the process.
+  it('does not cache a failed build: the next call builds again', async () => {
+    let built = 0;
+    const healer = new SelfHealing(async () => {
+      built += 1;
+      if (built === 1) throw new Error('ECONNREFUSED 127.0.0.1:7233');
+      return { call: async () => 'ok' };
+    });
+    await expect(healer.withSelfHeal((client) => client.call())).rejects.toThrow(/ECONNREFUSED/);
+    expect(await healer.withSelfHeal((client) => client.call())).toBe('ok');
+    expect(built).toBe(2);
+  });
+
+  // The await sat outside the try, so the one path that can heal a bad connect
+  // never saw one.
+  it('heals a build that fails with a stale-channel signature', async () => {
+    let built = 0;
+    const healer = new SelfHealing(async () => {
+      built += 1;
+      if (built === 1) throw new Error('14 UNAVAILABLE: connection refused');
+      return { call: async () => 'ok from client 2' };
+    });
+    expect(await healer.withSelfHeal((client) => client.call())).toBe('ok from client 2');
+    expect(built).toBe(2);
+  });
+
+  it('closes the client it is dropping, so a heal does not leak a channel', async () => {
+    const closed: number[] = [];
+    let built = 0;
+    const healer = new SelfHealing(
+      async () => {
+        built += 1;
+        const generation = built;
+        return {
+          generation,
+          call: async () => {
+            if (generation === 1) throw new Error('14 UNAVAILABLE: Channel has been shut down');
+            return 'ok';
+          },
+        };
+      },
+      (client) => {
+        closed.push(client.generation);
+      },
+    );
+    expect(await healer.withSelfHeal((client) => client.call())).toBe('ok');
+    expect(closed).toEqual([1]);
+    await healer.reset();
+    expect(closed).toEqual([1, 2]);
+  });
+
   it('reuses the same client across calls', async () => {
     let built = 0;
     const healer = new SelfHealing(async () => {

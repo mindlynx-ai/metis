@@ -26,25 +26,56 @@ const STALE_CHANNEL_SIGNATURES =
 export class SelfHealing<TClient> {
   private client: Promise<TClient> | undefined;
 
-  constructor(private readonly build: () => Promise<TClient>) {}
+  /**
+   * `close` releases whatever the builder acquired. Without it a heal drops the
+   * client reference and leaks the gRPC channel it was holding, one per heal.
+   * Optional because a builder that hands back an injected client has nothing
+   * of its own to release.
+   */
+  constructor(
+    private readonly build: () => Promise<TClient>,
+    private readonly close?: (client: TClient) => Promise<void> | void,
+  ) {}
 
   private clientPromise(): Promise<TClient> {
-    this.client ??= this.build();
+    if (!this.client) {
+      // A REJECTED promise is not undefined, so `??=` cached the failure for
+      // the process lifetime: one slow first connect (a dev Temporal a second
+      // late accepting gRPC) and every later start, cancel, list, reset and
+      // schedule rejected with that same stale error for ever, long after
+      // Temporal was healthy. Retract the attempt as it fails so the next call
+      // builds again.
+      const pending: Promise<TClient> = this.build().catch((error: unknown) => {
+        // Only retract OUR attempt: a reset in the meantime has already put a
+        // newer one in place and that one is not ours to drop.
+        if (this.client === pending) this.client = undefined;
+        throw error;
+      });
+      this.client = pending;
+    }
     return this.client;
   }
 
-  reset(): void {
+  async reset(): Promise<void> {
+    const held = this.client;
     this.client = undefined;
+    if (!held || !this.close) return;
+    // A client that never built has nothing to close, and its rejection is the
+    // caller's to report, not ours to re-raise from here.
+    await held.then((client) => this.close?.(client)).catch(() => undefined);
   }
 
   async withSelfHeal<T>(operation: (client: TClient) => Promise<T>): Promise<T> {
-    const client = await this.clientPromise();
     try {
+      // Inside the try: a build that fails with a stale-channel signature is
+      // exactly the case this class exists for, and awaiting it outside meant
+      // the one path that could heal a bad connect never saw it.
+      const client = await this.clientPromise();
       return await operation(client);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       if (!STALE_CHANNEL_SIGNATURES.test(message)) throw error;
-      this.reset();
+      await this.reset();
       const rebuilt = await this.clientPromise();
       return operation(rebuilt);
     }

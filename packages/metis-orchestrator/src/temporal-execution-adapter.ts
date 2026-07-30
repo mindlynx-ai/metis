@@ -57,13 +57,21 @@ export class TemporalExecutionAdapter implements ExecutionPort {
   constructor(options: TemporalAdapterOptions = {}) {
     this.taskQueue = options.taskQueue ?? 'metis-workflow-tasks';
     this.namespace = options.namespace ?? 'default';
-    this.holder = new SelfHealing<Client>(async () => {
-      if (options.client) return options.client;
-      const connection = await Connection.connect({
-        address: options.address ?? 'localhost:7233',
-      });
-      return new Client({ connection, namespace: options.namespace ?? 'default' });
-    });
+    this.holder = new SelfHealing<Client>(
+      async () => {
+        if (options.client) return options.client;
+        const connection = await Connection.connect({
+          address: options.address ?? 'localhost:7233',
+        });
+        return new Client({ connection, namespace: options.namespace ?? 'default' });
+      },
+      // Only what this builder opened. An injected client belongs to the caller
+      // (tests, the collapsed runtime) and closing it would take their channel
+      // down with ours.
+      async (client) => {
+        if (!options.client) await client.connection.close();
+      },
+    );
   }
 
   async start(

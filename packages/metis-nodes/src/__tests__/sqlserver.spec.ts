@@ -23,7 +23,15 @@
  */
 import { describe, expect, it } from 'vitest';
 import { buildQuery, dialectFor, SQLSERVER_DIALECT } from '../postgres-query.js';
-import { capAtSource, namedParams, paramDeclaration } from '../sqlserver-data-source.js';
+import {
+  capAtSource,
+  loadSqlServer,
+  namedParams,
+  paramDeclaration,
+  SqlServerDataSource,
+} from '../sqlserver-data-source.js';
+import { buildDataSources } from '../register.js';
+import { DefaultConnectionTester } from '../connection-tester.js';
 
 describe('the SQL Server dialect', () => {
   const select = {
@@ -137,5 +145,46 @@ describe('binding parameters the way the driver does', () => {
   it('declares those parameters for a describe, and nothing when there are none', () => {
     expect(paramDeclaration(2)).toBe('@p1 sql_variant, @p2 sql_variant');
     expect(paramDeclaration(0)).toBeNull();
+  });
+});
+
+describe('the driver is optional', () => {
+  /** What createRequire throws for a module that is not installed. */
+  const absent = (id: string): string => {
+    throw Object.assign(new Error(`Cannot find module '${id}'`), { code: 'MODULE_NOT_FOUND' });
+  };
+
+  it('registers the adapter when mssql resolves', () => {
+    // It is a dependency of this workspace, so it resolves here.
+    expect(loadSqlServer()).toBeInstanceOf(SqlServerDataSource);
+    expect(buildDataSources().engines()).toContain('sqlserver');
+  });
+
+  it('leaves sqlserver unadapted when it does not, instead of failing the import', () => {
+    // mssql reaches tedious, @azure/identity and a browser MSAL bundle: 60 MB
+    // installed for SQL Server AD auth almost nobody self-hosting uses, which
+    // is why `npm ci --omit=optional` has to be a supported install. An EAGER
+    // `import mssql from 'mssql'` took the whole metis-nodes barrel down with
+    // it when it was missing, so the worker, the palette and the control plane
+    // all died at import over a driver nobody had asked for.
+    expect(loadSqlServer(absent)).toBeUndefined();
+    expect(buildDataSources(absent).engines()).not.toContain('sqlserver');
+    // The rest of the open engines are untouched.
+    expect(buildDataSources(absent).engines()).toEqual(['mysql', 'postgres', 'snowflake']);
+  });
+
+  it('reports connect-only for it rather than throwing, the way athena does', async () => {
+    // `locked` on the table-catalogue route and connect-only here are the same
+    // mechanism: dataSources.get(engine) is undefined. Both are already proven
+    // against athena, so what is worth pinning is that an mssql-less install
+    // lands sqlserver on that path rather than on a stack trace.
+    const health = await new DefaultConnectionTester(buildDataSources(absent)).testConnection({
+      connectorId: 'sqlserver',
+      authScheme: 'database',
+      baseUrl: 'sqlserver://',
+      material: { host: 'db.internal', port: '1433', database: 'sales', user: 'u', password: 'p' },
+    });
+    expect(health.ok).toBe(false);
+    expect(health.message).toMatch(/connect-only/i);
   });
 });

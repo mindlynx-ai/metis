@@ -29,8 +29,16 @@
  *     the same character twice.
  *   - A describe is a system procedure, not a LIMIT 0 wrap, because a derived
  *     table refuses to hold a query that has its own ORDER BY.
+ *
+ * The driver is OPTIONAL, and loaded through createRequire the way the code
+ * node loads isolated-vm and the sqlite adapter loads node:sqlite. `mssql`
+ * reaches `tedious`, which reaches `@azure/identity` and a browser MSAL bundle:
+ * 60 MB installed, for SQL Server AD auth almost no self-hoster uses. Anyone who
+ * does not want it installs with `--omit=optional`, and the engine then degrades
+ * to `locked` the same way athena does, rather than throwing.
  */
-import mssql from 'mssql';
+import { createRequire } from 'node:module';
+import type mssqlType from 'mssql';
 import { isWrappableSelect } from './postgres-data-source.js';
 import {
   capRows,
@@ -46,6 +54,36 @@ import {
 const CONNECT_TIMEOUT_MS = 15_000;
 const DEFAULT_PORT = 1433;
 
+const requireModule = createRequire(import.meta.url);
+let driver: typeof mssqlType | undefined;
+
+/** The driver, loaded on first use. Only reached from an adapter that
+ *  loadSqlServer already resolved, so a throw here is a broken install, not an
+ *  absent optional dependency. */
+function mssql(): typeof mssqlType {
+  driver ??= requireModule('mssql') as typeof mssqlType;
+  return driver;
+}
+
+/**
+ * Is the driver installed? Answered by RESOLVING rather than loading, so asking
+ * costs nothing and cannot half-initialise a module. `undefined` means the
+ * adapter is not registered, which is the existing "no open adapter" path: the
+ * inspector shows `locked` and falls back to a typed table name, the connection
+ * tester says connect-only, and the node reports the upgrade response. Every one
+ * of those already existed for athena.
+ */
+export function loadSqlServer(
+  resolve: (id: string) => string = (id: string) => requireModule.resolve(id),
+): SqlServerDataSource | undefined {
+  try {
+    resolve('mssql');
+    return new SqlServerDataSource();
+  } catch {
+    return undefined;
+  }
+}
+
 /**
  * One pool per connection, as the Postgres and MySQL adapters keep. Connecting
  * is asynchronous here, unlike theirs, so the cache holds the PROMISE: two
@@ -53,15 +91,15 @@ const DEFAULT_PORT = 1433;
  * A failed connect is evicted, or a single mistyped password would be
  * remembered for the life of the worker.
  */
-const pools = new Map<string, Promise<mssql.ConnectionPool>>();
+const pools = new Map<string, Promise<mssqlType.ConnectionPool>>();
 
-export function sqlServerPoolFor(
+function sqlServerPoolFor(
   key: string,
   material: Record<string, string>,
-): Promise<mssql.ConnectionPool> {
+): Promise<mssqlType.ConnectionPool> {
   const existing = pools.get(key);
   if (existing) return existing;
-  const opening = new mssql.ConnectionPool({
+  const opening = new (mssql().ConnectionPool)({
     server: material.host ?? '',
     port: material.port ? Number(material.port) : DEFAULT_PORT,
     database: material.database || undefined,
@@ -125,7 +163,7 @@ export class SqlServerDataSource implements DataSource {
     connection: DataConnection,
     sql: string,
     inputs: Record<string, unknown> = {},
-  ): Promise<mssql.IResult<Record<string, unknown>>> {
+  ): Promise<mssqlType.IResult<Record<string, unknown>>> {
     const pool = await sqlServerPoolFor(connection.key, connection.material);
     const request = pool.request();
     for (const [name, value] of Object.entries(inputs)) request.input(name, value);

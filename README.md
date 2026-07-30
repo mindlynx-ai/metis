@@ -31,6 +31,12 @@ The compose path needs **Docker** and nothing else. Running from source needs:
 - **Docker**, if you want the compose stack rather than the CLI's own Temporal
   dev server.
 
+The SQL Server driver is optional. It is installed by default, but it reaches
+`tedious`, `@azure/identity` and a browser MSAL bundle, about 60 MB, so
+`npm ci --omit=optional` is supported and leaves everything except SQL Server
+working. That engine then behaves like any other Metis does not carry an
+adapter for: its connections store and show as locked rather than failing.
+
 Three ports have to be free: **3000** (editor and API), **7233** (Temporal
 gRPC) and **8233** (the Temporal Web UI). All three move in
 `metis.config.json` under `ports`, and that file may hold only the keys you

@@ -32,7 +32,7 @@ import { createPostgresNodeHandler } from './postgres-node.js';
 import { PostgresDataSource } from './postgres-data-source.js';
 import { MysqlDataSource } from './mysql-data-source.js';
 import { SnowflakeDataSource } from './snowflake-data-source.js';
-import { SqlServerDataSource } from './sqlserver-data-source.js';
+import { loadSqlServer } from './sqlserver-data-source.js';
 import { createDataNodeHandler } from './data-node.js';
 import { createSendgridNodeHandler, type SendgridNodeOptions } from './sendgrid-node.js';
 import { createS3NodeHandler } from './s3-node.js';
@@ -48,13 +48,21 @@ export interface OpenNodeDependencies {
 /** The open-edition data sources for the Data node + the table catalogue route:
  *  postgres, mysql, snowflake and sqlserver; athena is an adapter in the Helix
  *  build. Shared so the worker (node handler) and core (table listing)
- *  dispatch the same way. */
-export function buildDataSources(): DataSourceRegistry {
-  return new DataSourceRegistry()
+ *  dispatch the same way.
+ *
+ *  sqlserver is registered only when its optional driver is installed. An
+ *  install that omitted it leaves the registry exactly as it is for athena, and
+ *  every surface downstream already knows what to do with an engine that has no
+ *  adapter. `resolve` is the seam a test drives, because the honest way to prove
+ *  an absent optional dependency is the resolution path, not uninstalling the
+ *  package underneath a running suite. */
+export function buildDataSources(resolve?: (id: string) => string): DataSourceRegistry {
+  const registry = new DataSourceRegistry()
     .register(new PostgresDataSource())
     .register(new MysqlDataSource())
-    .register(new SnowflakeDataSource())
-    .register(new SqlServerDataSource());
+    .register(new SnowflakeDataSource());
+  const sqlServer = loadSqlServer(resolve);
+  return sqlServer ? registry.register(sqlServer) : registry;
 }
 
 export function registerOpenNodeHandlers(

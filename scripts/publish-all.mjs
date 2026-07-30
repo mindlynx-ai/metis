@@ -27,6 +27,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveEditionPackages, orderByDependencies } from './build-edition.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const publish = process.argv.includes('--publish');
@@ -40,20 +41,18 @@ if (!npmEntry) {
 }
 const npm = (args, options) => execFileSync(process.execPath, [npmEntry, ...args], options);
 
-// Dependency order: ports first, the CLI (which depends on everything) last.
-const ORDER = [
-  'metis-ports',
-  'metis-data-gateway',
-  'metis-catalogue',
-  'metis-engine',
-  // Before metis-nodes, which registers its handler among the open ones.
-  'metis-approvals',
-  'metis-nodes',
-  'metis-orchestrator',
-  'metis-core',
-  'metis-editor',
-  'metis-cli',
-];
+// Which packages, and in what order, both derived rather than listed. The
+// edition markers already say what is open, and build-edition already knows how
+// to topologically sort by workspace dependency, so ports comes first and the
+// CLI (which depends on everything) last without anybody maintaining that.
+//
+// The hardcoded list this replaces cost twice. A gated package stayed out of it
+// by hand, which is one typo away from publishing a paid package (example-gated
+// is now `private: true` as well, so npm refuses regardless). And a contributor
+// adding an open package got a silently unpublished dependency: everything
+// still built, and the published tarballs pointed at a version nobody could
+// install.
+const ORDER = orderByDependencies(root, resolveEditionPackages(root, 'open'));
 
 const versions = new Set(
   ORDER.map((pkg) =>

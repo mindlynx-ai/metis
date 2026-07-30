@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 import { describe, it, expect } from 'vitest';
+import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -74,6 +75,47 @@ describe('workspace layout', () => {
   it('ships LICENSE and NOTICE at the root', () => {
     expect(readFileSync(join(repoRoot, 'LICENSE'), 'utf8')).toContain('Apache License');
     expect(readFileSync(join(repoRoot, 'NOTICE'), 'utf8')).toContain('Seillen');
+  });
+});
+
+describe('what a published tarball carries', () => {
+  it.each(PUBLISHED)('%s ships dist and nothing else', (name) => {
+    // No package declared `files` and there is no .npmignore anywhere, so npm
+    // fell back to "everything not gitignored": src/, __tests__/ and, worst,
+    // metis-editor's e2e/ with ~2,500 lines of Playwright specs in it.
+    expect(manifest(name).files).toEqual(['dist']);
+  });
+
+  it('packs no source or test entry, proven against npm itself', () => {
+    // The rule above is the cheap check on every package; this is the one real
+    // pack, on the package that was worst (141 entries, 128 of them not dist).
+    // It holds whether or not dist has been built: with no dist the tarball is
+    // just the manifest, which still carries no src.
+    //
+    // npm prints the file list on STDERR (stdout is the tarball name alone), so
+    // a test reading stdout would pass against anything.
+    const npmCli = process.env.npm_execpath;
+    expect(npmCli, 'run the suite through npm so the npm CLI path is known').toBeTruthy();
+    const packed = spawnSync(
+      process.execPath,
+      [npmCli as string, 'pack', '--dry-run', '--workspace', '@mindlynx/metis-editor'],
+      { cwd: repoRoot, encoding: 'utf8' },
+    );
+    const output = `${packed.stdout}${packed.stderr}`;
+    expect(output).toContain('Tarball Contents');
+    expect(output).not.toMatch(/\bsrc\//);
+    expect(output).not.toMatch(/\be2e\//);
+    expect(output).not.toMatch(/__tests__/);
+  }, 60_000);
+
+  it('keeps the gated example out of the publish set twice over', () => {
+    // ORDER used to exclude it by hand. A stray `npm publish --workspaces` at
+    // the root ignores that list entirely, so the manifest has to say so too.
+    const gated = JSON.parse(
+      readFileSync(join(repoRoot, 'packages', 'example-gated', 'package.json'), 'utf8'),
+    ) as { private?: boolean };
+    expect(gated.private).toBe(true);
+    expect(PUBLISHED).not.toContain('example-gated');
   });
 });
 

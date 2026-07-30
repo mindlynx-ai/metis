@@ -22,6 +22,15 @@
  * typed name. Material is resolved server-side and never returned. An engine
  * with no open adapter (athena, which lives in Helix) returns `locked`, not an
  * error, so the inspector degrades to a typed table name.
+ *
+ * EVERY route here needs `edit`. They are authoring surfaces that spend the
+ * tenant's stored credentials against a live database, and `/validate` does not
+ * merely check a query, it EXECUTES it (describeQuery wraps it in a `SELECT *
+ * FROM (...) LIMIT 0`, which still plans and evaluates). They carried no guard
+ * at all, so the lowest-privilege account could enumerate a production schema
+ * and run author-supplied SQL through somebody else's connection. Note that
+ * `requireAction('view')` would have been no guard either: `can()` returns true
+ * for `view` for every role, by design, so `view` means "signed in".
  */
 import type { FastifyInstance } from 'fastify';
 import type {
@@ -29,6 +38,7 @@ import type {
   DataSourceRegistry,
   Session,
 } from '@mindlynx/metis-ports';
+import { requireAction } from './auth-gate.js';
 
 /** The connection's engine is its connector type (a database connection's
  *  connectorId IS the engine: postgres, athena, snowflake, ...). */
@@ -50,7 +60,7 @@ export function registerDataResourceRoutes(
   credentials: ConnectorCredentialStore,
   dataSources: DataSourceRegistry,
 ): void {
-  app.get('/api/data/tables', async (request, reply) => {
+  app.get('/api/data/tables', { preHandler: requireAction('edit') }, async (request, reply) => {
     const session = request.session as Session;
     const connectionId = String((request.query as { connectionId?: string }).connectionId ?? '');
     if (!connectionId) return reply.code(400).send({ error: 'connectionId is required' });
@@ -80,7 +90,7 @@ export function registerDataResourceRoutes(
     }
   });
 
-  app.post('/api/data/validate', async (request, reply) => {
+  app.post('/api/data/validate', { preHandler: requireAction('edit') }, async (request, reply) => {
     const session = request.session as Session;
     const body = (request.body ?? {}) as { connectionId?: string; query?: string; params?: unknown[] };
     if (!body.connectionId || !body.query) {
@@ -112,30 +122,34 @@ export function registerDataResourceRoutes(
     }
   });
 
-  app.get('/api/data/tables/:table/columns', async (request, reply) => {
-    const session = request.session as Session;
-    const { table } = request.params as { table: string };
-    const connectionId = String((request.query as { connectionId?: string }).connectionId ?? '');
-    if (!connectionId) return reply.code(400).send({ error: 'connectionId is required' });
+  app.get(
+    '/api/data/tables/:table/columns',
+    { preHandler: requireAction('edit') },
+    async (request, reply) => {
+      const session = request.session as Session;
+      const { table } = request.params as { table: string };
+      const connectionId = String((request.query as { connectionId?: string }).connectionId ?? '');
+      if (!connectionId) return reply.code(400).send({ error: 'connectionId is required' });
 
-    const resolved = await resolveEngine(credentials, session.tenantId, connectionId);
-    if (!resolved) return reply.code(404).send({ error: 'unknown connection' });
+      const resolved = await resolveEngine(credentials, session.tenantId, connectionId);
+      if (!resolved) return reply.code(404).send({ error: 'unknown connection' });
 
-    const source = dataSources.get(resolved.engine);
-    if (!source) return reply.send({ engine: resolved.engine, locked: true, columns: [] });
+      const source = dataSources.get(resolved.engine);
+      if (!source) return reply.send({ engine: resolved.engine, locked: true, columns: [] });
 
-    try {
-      const columns = await source.describeTable(
-        { key: `${session.tenantId}/${connectionId}`, material: resolved.material },
-        table,
-      );
-      return reply.send({ engine: resolved.engine, columns });
-    } catch (error) {
-      return reply.send({
-        engine: resolved.engine,
-        columns: [],
-        error: error instanceof Error ? error.message : 'could not describe table',
-      });
-    }
-  });
+      try {
+        const columns = await source.describeTable(
+          { key: `${session.tenantId}/${connectionId}`, material: resolved.material },
+          table,
+        );
+        return reply.send({ engine: resolved.engine, columns });
+      } catch (error) {
+        return reply.send({
+          engine: resolved.engine,
+          columns: [],
+          error: error instanceof Error ? error.message : 'could not describe table',
+        });
+      }
+    },
+  );
 }

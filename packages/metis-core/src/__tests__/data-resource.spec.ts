@@ -60,6 +60,7 @@ describe('data resource routes (the table catalogue)', () => {
   beforeAll(async () => {
     const identity = await SingleTenantIdentity.create('t1', [
       { userId: 'jeremy', secret: 'pw', role: 'admin' },
+      { userId: 'watcher', secret: 'pw', role: 'viewer' },
     ]);
     app = buildCoreServer({
       identity,
@@ -147,5 +148,68 @@ describe('data resource routes (the table catalogue)', () => {
     });
     const pg = await make('postgres');
     expect((await post('/api/data/validate', { connectionId: pg })).statusCode).toBe(400);
+  });
+
+  describe('a viewer cannot reach the tenant database through these routes', () => {
+    // These three carried no guard at all. `/validate` is the sharp one: it does
+    // not check a query, it EXECUTES it (describeQuery wraps it in a SELECT that
+    // still plans and evaluates), so the lowest-privilege account could run
+    // author-supplied SQL through somebody else's stored credentials. The other
+    // two hand back a live production schema.
+    //
+    // requireAction('view') would have been no guard either - can() returns true
+    // for `view` for every role, so `view` only means "signed in".
+    let viewer: string;
+    let connectionId: string;
+
+    beforeAll(async () => {
+      viewer = (
+        (
+          await app.inject({
+            method: 'POST',
+            url: '/api/auth/login',
+            payload: { userId: 'watcher', secret: 'pw' },
+          })
+        ).json() as { token: string }
+      ).token;
+      connectionId = await make('postgres');
+    });
+
+    const asViewer = (method: 'GET' | 'POST', url: string, payload?: unknown) =>
+      app.inject({
+        method,
+        url,
+        headers: { authorization: `Bearer ${viewer}` },
+        ...(payload ? { payload: payload as Record<string, unknown> } : {}),
+      });
+
+    it('refuses all three with 403', async () => {
+      for (const [method, url, payload] of [
+        ['GET', `/api/data/tables?connectionId=${connectionId}`, undefined],
+        ['GET', `/api/data/tables/orders/columns?connectionId=${connectionId}`, undefined],
+        ['POST', '/api/data/validate', { connectionId, query: 'select 1' }],
+      ] as const) {
+        const res = await asViewer(method, url, payload);
+        expect(res.statusCode, `${method} ${url}`).toBe(403);
+      }
+    });
+
+    it('does not run the query it refused', async () => {
+      // The proof that matters: a refusal that still executed would be no
+      // refusal. `boom` throws inside describeQuery, so if the handler ran we
+      // would see the database's message rather than a 403.
+      const res = await asViewer('POST', '/api/data/validate', {
+        connectionId,
+        query: 'select boom from orders',
+      });
+      expect(res.statusCode).toBe(403);
+      expect(res.body).not.toMatch(/boom/);
+    });
+
+    it('still lets an editor through, so the guard is not simply off', async () => {
+      const res = await post('/api/data/validate', { connectionId, query: 'select 1' });
+      expect(res.statusCode).toBe(200);
+      expect(res.json()).toMatchObject({ valid: true });
+    });
   });
 });

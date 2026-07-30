@@ -149,7 +149,7 @@ export function registerConnectionRoutes(
   // not working. Resolves the material server-side (never returned) and the
   // connection's connector TYPE for the scheme/baseUrl, then calls the tester.
   if (tester) {
-    app.post('/api/connections/:id/test', async (request, reply) => {
+    app.post('/api/connections/:id/test', { preHandler: requireAction('edit') }, async (request, reply) => {
       const session = request.session as Session;
       const { id } = request.params as { id: string };
       const connection = (await credentials.listConnections(session.tenantId)).find(
@@ -187,7 +187,7 @@ export function registerConnectionRoutes(
     // Test raw material WITHOUT saving, so the create-connection modal can
     // verify credentials before committing them. When a connectorId (a service)
     // is given, its scheme/baseUrl fill in the gaps.
-    app.post('/api/connections/test', async (_request, reply) => {
+    app.post('/api/connections/test', { preHandler: requireAction('edit') }, async (_request, reply) => {
       const parsed = testBody.safeParse(_request.body);
       if (!parsed.success) return reply.code(400).send({ error: 'material is required' });
       const body = parsed.data;

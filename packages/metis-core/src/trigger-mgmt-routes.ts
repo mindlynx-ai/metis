@@ -58,11 +58,32 @@ export function registerTriggerMgmtRoutes(
   triggers: TriggersPort,
   audit?: AuditStore,
 ): void {
+  // A trigger is what makes a published workflow fire on its own, and none of
+  // these routes touch the definition, so the workflow's own history shows
+  // nothing: arming one, changing its lock and removing it are only ever
+  // recorded here.
+  const trail = (
+    session: Session,
+    action: string,
+    triggerId: string,
+    detail?: Record<string, unknown>,
+  ) =>
+    audit?.record({
+      tenantId: session.tenantId,
+      actor: session.userId,
+      action,
+      entityType: 'trigger',
+      entityId: triggerId,
+      outcome: 'ok',
+      detail,
+    });
+
   app.get('/api/triggers', async (_request, reply) => {
     return reply.send({ items: await triggers.list() });
   });
 
   app.post('/api/triggers', { preHandler: requireAction('edit') }, async (request, reply) => {
+    const session = request.session as Session;
     const parsed = createTriggerBody.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'invalid body' });
@@ -72,6 +93,14 @@ export function registerTriggerMgmtRoutes(
     }
     try {
       const record = await triggers.create(parsed.data);
+      // Disarming a workflow was trailed and arming one was not, which is
+      // worse than trailing neither: the trail read as though the nightly run
+      // had always been off. Never the secret a webhook trigger may carry -
+      // which workflow now fires, and how, is the whole of the record.
+      await trail(session, 'trigger.created', String(record.triggerId), {
+        workflowId: parsed.data.workflowId,
+        kind: parsed.data.kind,
+      });
       const HINTS: Record<string, string> = {
         webhook: `POST to /hooks/${record.triggerId}`,
         schedule: 'live in Temporal now',
@@ -88,6 +117,7 @@ export function registerTriggerMgmtRoutes(
   // replace a leaked secret, and the only workable order when the sender mints
   // the secret itself: the endpoint must exist before there is one to store.
   app.put('/api/triggers/:triggerId/secret', { preHandler: requireAction('edit') }, async (request, reply) => {
+    const session = request.session as Session;
     const parsed = rotateSecretBody.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: 'a non-empty secret is required' });
@@ -95,6 +125,11 @@ export function registerTriggerMgmtRoutes(
     const { triggerId } = request.params as { triggerId: string };
     const rotated = await triggers.setSecret(triggerId, parsed.data.secret);
     if (!rotated) return reply.code(404).send({ error: 'unknown trigger' });
+    // THAT the lock changed, and nothing whatsoever about it: not the secret,
+    // not its length, not a prefix. This route exists to replace a leaked
+    // secret, so an entry that narrowed the new one would work against the
+    // reason it was called. No detail at all is the only safe amount of it.
+    await trail(session, 'trigger.secretRotated', triggerId);
     // The secret itself is never echoed back.
     return reply.send({ triggerId, rotated: true });
   });
@@ -106,14 +141,7 @@ export function registerTriggerMgmtRoutes(
     // Removing a trigger stops a published workflow firing and takes the
     // trigger row with it. Without this line nothing says it ever existed, so
     // "why did the nightly run stop" has no answer.
-    await audit?.record({
-      tenantId: session.tenantId,
-      actor: session.userId,
-      action: 'trigger.deleted',
-      entityType: 'trigger',
-      entityId: triggerId,
-      outcome: 'ok',
-    });
+    await trail(session, 'trigger.deleted', triggerId);
     return reply.code(204).send();
   });
 }

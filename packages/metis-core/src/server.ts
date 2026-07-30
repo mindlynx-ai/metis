@@ -188,7 +188,7 @@ export function buildCoreServer(deps: CoreDependencies): FastifyInstance {
     });
 
     if (deps.uplift) {
-      registerAccountRoutes(authed, deps.uplift, accountStates);
+      registerAccountRoutes(authed, deps.uplift, accountStates, deps.audit);
     }
 
     // The laptop shape collapses core and orchestrator into one

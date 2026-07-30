@@ -37,9 +37,11 @@ import {
   type HelixStub,
 } from '@mindlynx/metis-ports';
 import {
+  AuditStore,
   DataGateway,
   SqliteAdapter,
   WorkflowStore,
+  registerAuditTable,
   registerWorkflowTables,
 } from '@mindlynx/metis-data-gateway';
 import { buildCoreServer, type TokenIssuingIdentity } from '../server.js';
@@ -66,11 +68,20 @@ function freshStore(): WorkflowStore {
   return new WorkflowStore(gateway);
 }
 
+function freshAudit(): AuditStore {
+  const gateway = new DataGateway(
+    new SqliteAdapter(join(mkdtempSync(join(tmpdir(), 'metis-acct-audit-')), 'audit.db')),
+  );
+  registerAuditTable(gateway);
+  return new AuditStore(gateway);
+}
+
 describe('connect flow against the stub OIDC', () => {
   let stub: HelixStub;
   let app: FastifyInstance;
   let token: string;
   const credentials = new FakeCredentialPort();
+  const audit = freshAudit();
 
   beforeAll(async () => {
     stub = await startHelixStub({ email: 'jeremy@helix.example', entitled: ['cap.data'] });
@@ -78,6 +89,7 @@ describe('connect flow against the stub OIDC', () => {
     app = buildCoreServer({
       identity: await adminIdentity(),
       credentials,
+      audit,
       uplift: {
         offers: new OffersClient({ baseUrl: stub.url }),
         entitlements: new CloudEntitlementsClient({ baseUrl: stub.url, getBearer }),
@@ -181,6 +193,9 @@ describe('connect flow against the stub OIDC', () => {
   });
 
   it('disconnect removes the link and entitlements fall to empty', async () => {
+    const link = (await credentials.listConnections('t1')).find(
+      (connection) => connection.connectorId === HELIX_ACCOUNT_CONNECTOR_ID,
+    );
     const disconnect = await app.inject({
       method: 'DELETE',
       url: '/api/account',
@@ -193,6 +208,37 @@ describe('connect flow against the stub OIDC', () => {
       headers: { authorization: `Bearer ${token}` },
     });
     expect((entitlements.json() as { capabilities: string[] }).capabilities).toEqual([]);
+
+    // The trail's side of it, in two entries because two things went. The
+    // account entry is the instance-level fact; the connection entry exists
+    // because this route deletes the vault row directly instead of going
+    // through /api/connections, so the credential's own trail would otherwise
+    // stop mid-sentence.
+    expect(
+      (await audit.list('t1', { entityId: HELIX_ACCOUNT_CONNECTOR_ID })).map((entry) => ({
+        action: entry.action,
+        actor: entry.actor,
+        entityType: entry.entityType,
+      })),
+    ).toEqual([{ action: 'account.disconnected', actor: 'jeremy', entityType: 'account' }]);
+    expect(
+      (await audit.list('t1', { entityId: String(link?.connectionId) })).map((entry) => ({
+        action: entry.action,
+        actor: entry.actor,
+        entityType: entry.entityType,
+      })),
+    ).toEqual([{ action: 'connection.deleted', actor: 'jeremy', entityType: 'connection' }]);
+  });
+
+  it('a disconnect with nothing linked records nothing: no event happened', async () => {
+    expect(await credentials.listConnections('t1')).toEqual([]);
+    const disconnect = await app.inject({
+      method: 'DELETE',
+      url: '/api/account',
+      headers: { authorization: `Bearer ${token}` },
+    });
+    expect(disconnect.json()).toEqual({ connected: false });
+    expect(await audit.list('t1', { action: 'account.disconnected' })).toHaveLength(1);
   });
 });
 

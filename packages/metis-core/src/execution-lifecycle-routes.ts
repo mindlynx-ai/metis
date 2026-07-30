@@ -189,6 +189,12 @@ export function registerExecutionLifecycleRoutes(
     // the decision that governs this run lands in its history (sequence 1;
     // engine node lines start at 11, so the receipt always sorts first).
     await appendConsentReceipt(store, session, executionId, definition, body.cloudConsent);
+    // Who ran it. The execution row has no requestedBy field and the run log
+    // carries no actor, so this line is the ONLY answer to "who started this";
+    // cancelling and terminating a run were already trailed, which made the
+    // start the one lifecycle event nobody could attribute. The workflow is the
+    // detail an auditor reads next, since the execution id says nothing.
+    await trail(session, 'execution.started', executionId, { workflowId: body.workflowId });
     return reply.code(202).send({ executionId, runId: started.runId, status: 'running' });
   });
 
@@ -224,9 +230,16 @@ export function registerExecutionLifecycleRoutes(
     { preHandler: requireAction('edit') },
     async (request, reply) => {
       if (!executions.reset) return reply.code(501).send({ error: 'reset not supported' });
+      const session = request.session as Session;
       const { id } = request.params as { id: string };
       const parsed = cancelBody.safeParse(request.body ?? {});
-      const result = await executions.reset(id, parsed.success ? parsed.data.reason : undefined);
+      const reason = parsed.success ? parsed.data.reason : undefined;
+      const result = await executions.reset(id, reason);
+      // A reset runs the work again from the first task, so every side effect
+      // the run had can happen twice. Its own action name rather than a detail
+      // field on another one: the trail filters actions by equality, so "who
+      // re-ran this" has to be a name you can ask for.
+      await trail(session, 'execution.reset', id, { reason });
       return reply.code(202).send({ executionId: id, runId: result.runId });
     },
   );

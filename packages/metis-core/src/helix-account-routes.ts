@@ -30,6 +30,7 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { ConnectorCredentialStore, OfferEntry, Session } from '@mindlynx/metis-ports';
 import { HELIX_ACCOUNT_CONNECTOR_ID, discoverOidc } from '@mindlynx/metis-ports';
 import type { CloudEntitlementsClient, OffersClient } from '@mindlynx/metis-ports';
+import type { AuditStore } from '@mindlynx/metis-data-gateway';
 import { requireAction } from './auth-gate.js';
 
 /**
@@ -282,7 +283,18 @@ export function registerAccountRoutes(
   authed: FastifyInstance,
   deps: UpliftDeps,
   states: ConnectStateStore,
+  audit?: AuditStore,
 ): void {
+  const trail = (session: Session, action: string, entityType: string, entityId: string) =>
+    audit?.record({
+      tenantId: session.tenantId,
+      actor: session.userId,
+      action,
+      entityType,
+      entityId,
+      outcome: 'ok',
+    });
+
   authed.post(
     '/api/account/connect',
     { preHandler: requireAction('admin') },
@@ -326,7 +338,19 @@ export function registerAccountRoutes(
     async (request, reply) => {
       const session = request.session as Session;
       const link = await accountLink(deps.credentials, session.tenantId);
-      if (link) await deps.credentials.deleteConnection(session.tenantId, link.connectionId);
+      if (link) {
+        await deps.credentials.deleteConnection(session.tenantId, link.connectionId);
+        // Two entries, because two things went and each answers a question
+        // keyed on a different entity. The account line is the instance-level
+        // fact - this box is no longer linked to a Helix account - and no
+        // connection id identifies that; there is one link per instance, so the
+        // reserved connector id IS its id. The connection line is there because
+        // this route deletes the vault row itself instead of going through
+        // /api/connections: without it, "what became of connection X" ends
+        // mid-sentence for the one credential that reaches a paid service.
+        await trail(session, 'account.disconnected', 'account', HELIX_ACCOUNT_CONNECTOR_ID);
+        await trail(session, 'connection.deleted', 'connection', String(link.connectionId));
+      }
       deps.entitlements.invalidate();
       return reply.send({ connected: false });
     },

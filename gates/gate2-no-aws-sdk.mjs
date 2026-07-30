@@ -18,14 +18,20 @@ import { existsSync, readFileSync } from 'node:fs';
 import { walkFiles, collectImportSpecifiers, isSourceFile } from './lib/scan.mjs';
 
 const AWS_SCOPE = '@aws-' + 'sdk/';
+// v3 is the scoped one. v2 is unscoped and still installable, and the crypto
+// packages are a cloud-vendor dependency by any other name.
+const AWS_PACKAGES = [AWS_SCOPE, 'aws-' + 'sdk', '@aws-' + 'crypto/'];
 const FIXTURES_PREFIX = 'gates/fixtures';
+
+const isAwsPackage = (spec) =>
+  AWS_PACKAGES.some((name) => spec === name || spec.startsWith(name.endsWith('/') ? name : `${name}/`));
 
 export function runNoAwsSdkGate(rootDir) {
   const violations = [];
   for (const file of walkFiles(rootDir, [FIXTURES_PREFIX])) {
     if (!isSourceFile(file)) continue;
     for (const spec of collectImportSpecifiers(file)) {
-      if (spec.startsWith(AWS_SCOPE)) {
+      if (isAwsPackage(spec)) {
         violations.push({
           file: relative(rootDir, file),
           rule: 'no-aws-sdk',
@@ -37,7 +43,7 @@ export function runNoAwsSdkGate(rootDir) {
   const lockPath = join(rootDir, 'package-lock.json');
   if (existsSync(lockPath)) {
     const lock = readFileSync(lockPath, 'utf8');
-    if (lock.includes(`node_modules/${AWS_SCOPE}`)) {
+    if (AWS_PACKAGES.some((name) => lock.includes(`node_modules/${name}`))) {
       violations.push({
         file: 'package-lock.json',
         rule: 'no-aws-sdk',

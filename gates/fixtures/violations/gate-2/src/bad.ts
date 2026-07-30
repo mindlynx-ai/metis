@@ -14,5 +14,9 @@
  * limitations under the License.
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
+// v2 is unscoped, and the crypto packages are not under the SDK scope either;
+// the gate matched on the scope alone and let both through.
+import AWS from 'aws-sdk';
+import { Sha256 } from '@aws-crypto/sha256-js';
 
-export const planted = DynamoDBClient;
+export const planted = [DynamoDBClient, AWS, Sha256];

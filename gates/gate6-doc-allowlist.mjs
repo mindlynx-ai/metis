@@ -18,12 +18,17 @@
  * Gate 6: shippable-markdown allowlist. The identifier scan (gate 4) catches
  * secrets and infra names, but the real pre-launch risk was internal PLANNING
  * docs quietly shipping (build plans, porting ledgers). Every tracked markdown
- * file at the repo root or under docs/ must be on this list; anything else
- * fails the gate. Package READMEs and generated node docs are allowed by
- * pattern.
+ * file must be on this list; anything else fails the gate. Package READMEs and
+ * generated node docs are allowed by pattern.
+ *
+ * "Tracked" is git's answer, not the filesystem's. The gate used to walk the
+ * tree, which got it wrong in both directions: it skipped docs/internal (the
+ * exact directory it exists to police, so only .gitignore stood between the
+ * build plans and the public repo) and it flagged a maintainer's untracked
+ * scratch notes, which cannot ship. Reading the index judges what would
+ * actually go out, so the gate fires the moment an internal doc is staged.
  */
-import { readdirSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const ALLOWED = new Set([
   'README.md',
@@ -48,29 +53,30 @@ const ALLOWED_PATTERNS = [
   /^\.github\//, // issue/PR templates
 ];
 
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'internal', 'test-results', 'playwright-report']);
+const FIXTURES_PREFIX = 'gates/fixtures';
 
-function walkMarkdown(dir, rootDir, found) {
-  for (const name of readdirSync(dir)) {
-    if (SKIP_DIRS.has(name)) continue;
-    const full = join(dir, name);
-    const stats = statSync(full);
-    if (stats.isDirectory()) walkMarkdown(full, rootDir, found);
-    else if (name.endsWith('.md')) found.push(relative(rootDir, full));
-  }
-  return found;
+/** Every markdown file in git's index, relative to rootDir. */
+function trackedMarkdown(rootDir) {
+  // git's location varies by platform, so PATH resolution is required.
+  // eslint-disable-next-line sonarjs/no-os-command-from-path
+  const out = execFileSync('git', ['ls-files', '-z', '--', '*.md'], {
+    cwd: rootDir,
+    encoding: 'utf8',
+  });
+  return out.split('\0').filter(Boolean);
 }
 
 export function runDocAllowlistGate(rootDir) {
-  const tracked = walkMarkdown(rootDir, rootDir, []);
+  let tracked;
+  try {
+    tracked = trackedMarkdown(rootDir);
+  } catch (error) {
+    // A gate that cannot look must not report success.
+    return [{ rule: 'doc-allowlist', file: '(git)', detail: `cannot list tracked files: ${error.message}` }];
+  }
   return tracked
-    .filter((file) => {
-      const atRootOrDocs = !file.includes('/') || file.startsWith('docs/') || file.startsWith('deploy/');
-      const inScope = atRootOrDocs || /README\.md$/.test(file);
-      if (!inScope) return false;
-      if (ALLOWED.has(file)) return false;
-      return !ALLOWED_PATTERNS.some((pattern) => pattern.test(file));
-    })
+    .filter((file) => !file.startsWith(`${FIXTURES_PREFIX}/`))
+    .filter((file) => !ALLOWED.has(file) && !ALLOWED_PATTERNS.some((pattern) => pattern.test(file)))
     .map((file) => ({
       rule: 'doc-allowlist',
       file,

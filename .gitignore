@@ -4,6 +4,9 @@ coverage/
 .metis/
 *.local.md
 .env
+# Except gate 4's planted violation: a fake key that has to be tracked, or the
+# test proving .env is scanned only passes on the machine that wrote it.
+!gates/fixtures/violations/gate-4/.env
 test-results/
 playwright-report/
 

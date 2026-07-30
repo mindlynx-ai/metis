@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { join, relative, extname } from 'node:path';
+import { join, relative, extname, basename } from 'node:path';
 import { existsSync, readFileSync } from 'node:fs';
 import { walkFiles } from './lib/scan.mjs';
 
@@ -28,6 +28,21 @@ const BANNED_PATTERNS = [
   { name: 'private-key-block', pattern: new RegExp('-----BEGIN [A-Z ]*PRIV' + 'ATE KEY-----') },
 ];
 
+/**
+ * Internal product names, checked only in text somebody reads: markdown and
+ * the catalogue, whose strings render in the editor's inspector and Guide tab.
+ * A leak here shipped once, in the Data step's `output` description.
+ *
+ * They are deliberately NOT checked in source, where the same words are the
+ * closed-type namespace the open tree names so that it can police it: gate 1
+ * bans importing those modules, gate 3 bans shipping node types with those
+ * prefixes, loader.ts lists them, and the catalogue spec asserts they are
+ * absent. Scanning code would flag the guards and still miss the prose.
+ */
+const PROSE_PATTERNS = [
+  { name: 'internal-product-name', pattern: new RegExp('tach' + 'yon|cor' + 'tex', 'i') },
+];
+
 const TEXT_EXTENSIONS = new Set([
   '.ts',
   '.tsx',
@@ -40,11 +55,36 @@ const TEXT_EXTENSIONS = new Set([
   '.md',
   '.yml',
   '.yaml',
-  '.env',
   '.sh',
+  '.sql',
+  '.pem',
+  '.example',
 ]);
+// Extension is the wrong question for the files most likely to hold a key.
+// `.env` sat in the extension set for months and matched nothing, because
+// extname('.env') is ''; the same blind spot hid the Dockerfile, the Caddyfile
+// and the deploy state file.
+const TEXT_FILENAME_PREFIXES = ['.env', 'Dockerfile'];
+const TEXT_FILENAMES = new Set(['Caddyfile', '.state']);
 const FIXTURES_PREFIX = 'gates/fixtures';
+// Internal planning notes are gitignored and gate 6 keeps them out of the
+// index, so they cannot ship. They are still swept for secrets; only the
+// product names are excused, since naming those is what they are for.
+const INTERNAL_DOCS_PREFIX = 'docs/internal';
 const SKIP_FILES = new Set(['package-lock.json']);
+
+function isScannable(name) {
+  return (
+    TEXT_EXTENSIONS.has(extname(name)) ||
+    TEXT_FILENAMES.has(name) ||
+    TEXT_FILENAME_PREFIXES.some((prefix) => name.startsWith(prefix))
+  );
+}
+
+function isProse(rel, name) {
+  if (/^nodeTypes.*\.json$/.test(name)) return true;
+  return name.endsWith('.md') && !rel.startsWith(`${INTERNAL_DOCS_PREFIX}/`);
+}
 
 export function runIdentifierScanGate(rootDir) {
   const allowlistPath = join(rootDir, 'gates', 'scan-allowlist.json');
@@ -53,12 +93,13 @@ export function runIdentifierScanGate(rootDir) {
     : [];
   const violations = [];
   for (const file of walkFiles(rootDir, [FIXTURES_PREFIX])) {
-    if (!TEXT_EXTENSIONS.has(extname(file))) continue;
+    const name = basename(file);
+    if (!isScannable(name) || SKIP_FILES.has(name)) continue;
     const rel = relative(rootDir, file);
-    if (SKIP_FILES.has(rel.split('/').pop() ?? '')) continue;
     if (allowlist.some((prefix) => rel === prefix || rel.startsWith(`${prefix}/`))) continue;
     const text = readFileSync(file, 'utf8');
-    for (const banned of BANNED_PATTERNS) {
+    const patterns = isProse(rel, name) ? [...BANNED_PATTERNS, ...PROSE_PATTERNS] : BANNED_PATTERNS;
+    for (const banned of patterns) {
       if (banned.pattern.test(text)) {
         violations.push({
           file: rel,

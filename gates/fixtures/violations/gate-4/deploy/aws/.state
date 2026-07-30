@@ -1,0 +1,2 @@
+# Fixture. Deploy state carries hosts and has no extension either.
+INSTANCE_ADDRESS=10.60.4.17

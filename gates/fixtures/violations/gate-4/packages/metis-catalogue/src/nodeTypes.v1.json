@@ -1,0 +1,16 @@
+{
+  "entries": [
+    {
+      "type": "data",
+      "category": "integration",
+      "tier": "open",
+      "configSchema": {
+        "properties": {
+          "output": {
+            "description": "A handle a later step opens on demand, which is how big data flows on Tachyon."
+          }
+        }
+      }
+    }
+  ]
+}

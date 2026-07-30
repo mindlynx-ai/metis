@@ -25,6 +25,11 @@ import { MetisRuntime } from './runtime.js';
 import { buildControlServer } from './control-server.js';
 import { syncCatalogueConnectors } from './connectors.js';
 import { DEFAULT_CONFIG } from './scaffold.js';
+import { assertServableSecret } from './seed-users.js';
+
+// The container serves a published port, so the same refusal applies here as in
+// `metis up`. The compose file opts in explicitly for the throwaway local stack.
+assertServableSecret(process.env);
 
 const dataDir = process.env.METIS_DATA_DIR ?? '/data';
 const temporalAddress = process.env.METIS_TEMPORAL_ADDRESS ?? 'temporal:7233';
@@ -54,7 +59,12 @@ const app = await buildControlServer({
   runtime,
   editorDir: join(process.cwd(), 'packages', 'metis-editor', 'dist'),
 });
-await app.listen({ port: config.ports.editor, host: '0.0.0.0' });
+// Every interface, by default and correctly: this is the container entrypoint,
+// and a container that listens only on its own loopback cannot serve its
+// published port. The exposure decision belongs to the port mapping in the
+// compose file (which binds 127.0.0.1), not here. `metis up` on a host machine
+// defaults the other way round - see bindHost in cli.ts.
+await app.listen({ port: config.ports.editor, host: process.env.METIS_HOST ?? '0.0.0.0' });
 log(`Metis is up. Editor and API on port ${config.ports.editor}.`);
 
 const shutdown = () => {

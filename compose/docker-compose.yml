@@ -48,10 +48,21 @@ services:
     environment:
       METIS_TEMPORAL_ADDRESS: temporal:7233
       METIS_DATA_DIR: /data
+      # Inside the container, listening on every interface is what makes the
+      # published port work at all. The exposure decision is the mapping below,
+      # not this.
+      METIS_HOST: 0.0.0.0
+      # A throwaway local stack, so the well-known admin secret is allowed - but
+      # said out loud rather than inherited by accident. Set METIS_ADMIN_SECRET
+      # instead for anything you would mind a stranger reaching.
+      METIS_INSECURE_DEMO: 'true'
     networks:
       - metis
     ports:
-      - '3000:3000'
+      # Bound to loopback, matching the Temporal UI above. Published on every
+      # interface this was the editor, the authenticated API and the run history
+      # offered to the whole network the host had joined.
+      - '127.0.0.1:3000:3000'
     volumes:
       - metis-data:/data
 

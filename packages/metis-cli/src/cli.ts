@@ -34,6 +34,7 @@ import {
 } from './connectors.js';
 import { parseFlags, buildTriggerInput, formatTriggerList } from './triggers.js';
 import { buildWebhookInput, formatWebhookList } from './webhooks.js';
+import { assertServableSecret } from './seed-users.js';
 
 export const HELP_TEXT = `metis: the open-source workflow engine
 
@@ -115,14 +116,39 @@ function editorDir(cwd: string): string | undefined {
   return candidates.find((candidate) => existsSync(candidate));
 }
 
+/**
+ * Where to listen. Loopback by default: `metis up` is how somebody runs this on
+ * their own machine, and binding every interface put the editor, the whole
+ * authenticated API and the run history on whatever network the laptop happened
+ * to be joined to. The compose file already pinned the Temporal UI to 127.0.0.1
+ * while leaving the app open, which reads as an oversight rather than a choice.
+ * `METIS_HOST=0.0.0.0` is the deliberate opt-in for anyone serving other
+ * machines, and the container entrypoint sets it because a published container
+ * port is exactly that opt-in.
+ */
+function bindHost(env: Record<string, string | undefined>): string {
+  return env.METIS_HOST ?? '127.0.0.1';
+}
+
 export async function cmdUp(context: CliContext): Promise<number> {
+  // Before anything is downloaded, spawned or bound: a refusal after the Temporal
+  // dev server is already running would leave the operator with a stack trace and
+  // an orphaned child.
+  assertServableSecret(process.env);
   const config = loadConfig(context.cwd);
   const runtime = new MetisRuntime({ projectDir: context.cwd, config, log: context.stdout });
   await runtime.start();
   const seeded = await syncCatalogueConnectors(runtime.connectors);
   context.stdout(`Catalogue in sync: ${seeded.seeded} connectors.`);
   const app = await buildControlServer({ runtime, editorDir: editorDir(context.cwd) });
-  await app.listen({ port: config.ports.editor, host: '0.0.0.0' });
+  const host = bindHost(process.env);
+  await app.listen({ port: config.ports.editor, host });
+  if (host !== '127.0.0.1' && host !== 'localhost') {
+    context.stdout(
+      `Listening on ${host}: reachable from other machines. Anyone who can reach `
+        + 'this port needs only the admin secret.',
+    );
+  }
   context.stdout(`Editor and API on http://localhost:${config.ports.editor}`);
   context.stdout(`Temporal Web UI on http://localhost:${config.ports.temporalUi}`);
   context.stdout('Metis is up. Press Ctrl+C to stop.');

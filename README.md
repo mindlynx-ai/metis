@@ -22,8 +22,16 @@ docker compose -f compose/docker-compose.yml up --build
 
 Open http://localhost:3000, sign in, and build your first workflow. The stack is
 two containers, the official Temporal image and the Metis image, with SQLite in
-a mounted volume so your work persists across restarts. Nothing reaches the
-network beyond the two containers talking to each other.
+a mounted volume so your work persists across restarts.
+
+Both published ports are bound to `127.0.0.1`, so the editor and API are reachable
+from your machine and not from the rest of your network. The compose stack also
+sets `METIS_INSECURE_DEMO=true`, which permits the well-known default admin
+secret because it is a throwaway local stack. **Before you put this anywhere
+other people can reach, set `METIS_ADMIN_SECRET` and drop that flag** - the
+default is published in this repository, so it is not a secret at all. Serving
+other machines deliberately is `METIS_HOST=0.0.0.0` plus a port mapping you
+choose.
 
 ## Quickstart: npx (the developer loop)
 

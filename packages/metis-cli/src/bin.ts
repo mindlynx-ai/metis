@@ -16,9 +16,23 @@
  */
 import { runCli } from './cli.js';
 
-const code = await runCli(process.argv.slice(2), {
-  cwd: process.cwd(),
-  stdout: (line) => process.stdout.write(`${line}\n`),
-  stderr: (line) => process.stderr.write(`${line}\n`),
-});
-process.exit(code);
+// A configuration refusal is a message, not a crash. Without this, the very
+// first command a newcomer runs answers a misconfiguration with a V8 stack
+// trace into dist/, which buries the sentence that tells them what to set.
+// ponytail: only the message survives here - a genuine internal fault loses its
+// stack unless METIS_DEBUG is set, which is the trade a CLI wants.
+try {
+  const code = await runCli(process.argv.slice(2), {
+    cwd: process.cwd(),
+    stdout: (line) => process.stdout.write(`${line}\n`),
+    stderr: (line) => process.stderr.write(`${line}\n`),
+  });
+  process.exit(code);
+} catch (error) {
+  const message = error instanceof Error ? error.message : String(error);
+  process.stderr.write(`${message}\n`);
+  if (process.env.METIS_DEBUG === 'true' && error instanceof Error) {
+    process.stderr.write(`${error.stack ?? ''}\n`);
+  }
+  process.exit(1);
+}

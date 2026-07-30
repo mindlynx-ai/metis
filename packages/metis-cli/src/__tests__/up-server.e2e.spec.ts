@@ -73,6 +73,10 @@ describe.skipIf(!enabled)('metis up stays alive until a signal (METIS_E2E)', () 
       cwd: dir,
       detached: true,
       stdio: ['ignore', 'pipe', 'pipe'],
+      // A boot with no admin secret is refused now, so the harness has to supply
+      // one exactly as a real operator does. Inheriting the parent environment
+      // alone used to be enough because the default was silently accepted.
+      env: { ...process.env, METIS_ADMIN_SECRET: 'up-server-e2e-secret' },
     });
     let childOutput = '';
     const capture = (chunk: Buffer) => {

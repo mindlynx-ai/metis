@@ -18,24 +18,50 @@
  * The users seeded into the single-tenant identity at boot, derived from the
  * environment. Two demo-safety rules live here:
  *
- *   - In production (`METIS_ENV=production`) a non-default admin secret is
- *     mandatory; the app refuses to boot on the default, so a public demo can
- *     never sit behind admin/metis.
  *   - An optional extra user (a tester) is seeded when both `METIS_DEMO_USER`
  *     and `METIS_DEMO_SECRET` are set - editor role by default.
+ *
+ * The default admin secret is refused by `assertServableSecret`, which the two
+ * commands that LISTEN call before they bind. The check deliberately does not
+ * live in `seedUsers`: every CLI subcommand builds a runtime, so refusing here
+ * would make `metis triggers list` demand a secret to read a local file. That
+ * is friction with no security behind it, and friction is what makes somebody
+ * set the insecure flag permanently and defeat the point.
  */
 import type { Role, UserSeed } from '@mindlynx/metis-ports';
 
 const DEFAULT_ADMIN_SECRET = 'metis';
 const ROLES: ReadonlySet<Role> = new Set<Role>(['admin', 'editor', 'viewer']);
 
+/** True when the operator has said, in as many words, that they want the
+ *  well-known secret anyway (a throwaway demo, a workshop, a screenshot). */
+export function insecureDemoOptIn(env: Record<string, string | undefined>): boolean {
+  return env.METIS_INSECURE_DEMO === 'true';
+}
+
+/**
+ * Refuse to serve on the published default secret. Called by the commands that
+ * open a port, never by the ones that only read the project.
+ *
+ * It used to be guarded only when `METIS_ENV=production`, which nothing sets on
+ * the way anyone actually starts Metis - so a plain `metis up` came up as
+ * admin/metis, on a port that was bound to every interface, with the password
+ * sitting in a public repository.
+ */
+export function assertServableSecret(env: Record<string, string | undefined>): void {
+  const adminSecret = env.METIS_ADMIN_SECRET ?? DEFAULT_ADMIN_SECRET;
+  if (adminSecret !== DEFAULT_ADMIN_SECRET || insecureDemoOptIn(env)) return;
+  throw new Error(
+    'METIS_ADMIN_SECRET must be set before Metis will serve: the built-in '
+      + 'default is published in the source, so anyone who can reach this port '
+      + 'would be an administrator. Set METIS_ADMIN_SECRET to something only you '
+      + 'know, or set METIS_INSECURE_DEMO=true if you genuinely want the default '
+      + 'on a throwaway instance.',
+  );
+}
+
 export function seedUsers(env: Record<string, string | undefined>): UserSeed[] {
   const adminSecret = env.METIS_ADMIN_SECRET ?? DEFAULT_ADMIN_SECRET;
-  if (env.METIS_ENV === 'production' && adminSecret === DEFAULT_ADMIN_SECRET) {
-    throw new Error(
-      'METIS_ADMIN_SECRET must be set to a non-default value when METIS_ENV=production',
-    );
-  }
 
   const users: UserSeed[] = [{ userId: 'admin', secret: adminSecret, role: 'admin' }];
 

@@ -69,7 +69,8 @@ Two kinds:
   `TestWorkflowEnvironment` - copy the harness in
   `packages/metis-engine/src/__tests__/flow-nodes-walk.spec.ts`.
 - An editor e2e that adds the node from the picker and round-trips its config
-  (`packages/metis-editor/e2e/`).
+  (`packages/metis-editor/e2e/`). The e2e suite needs its browser once:
+  `npx playwright install chromium`.
 - `npm run typecheck && npm run lint && npm test && npm run gates && npm run e2e`
   all green. The coverage test (`node-coverage.spec.ts`) fails the build if a
   catalogue type has no execution path - update its inline list for engine

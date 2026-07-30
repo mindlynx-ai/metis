@@ -12,6 +12,39 @@ machine, and needs no cloud account and no AWS.
 - SQLite by default, Postgres when you want it, both through one data gateway.
 - A CLI that downloads and manages the Temporal dev server for you.
 
+## Prerequisites
+
+The compose path needs **Docker** and nothing else. Running from source needs:
+
+- **Node 22.13 or newer.** The default datastore is `node:sqlite`, which was
+  behind `--experimental-sqlite` until 22.13, so 22.12 boots and then throws.
+  `.nvmrc` pins the version this is developed on.
+- **A C++ toolchain, unless your platform has a prebuild.** The Code step runs
+  in a real V8 isolate (`isolated-vm`), a native addon. It ships prebuilt
+  binaries for Apple Silicon macOS, Linux x64 and arm64 (glibc and musl) and
+  Windows x64, on Node 22 and 24, and those installs compile nothing. Anything
+  else (an Intel Mac, an odd Node version) falls back to `node-gyp rebuild`,
+  which needs Python and a compiler or `npm ci` fails on the spot. macOS:
+  `xcode-select --install`. Debian or Ubuntu:
+  `apt install -y build-essential python3`. Windows: the "Desktop development
+  with C++" workload from Visual Studio Build Tools.
+- **Docker**, if you want the compose stack rather than the CLI's own Temporal
+  dev server.
+
+Three ports have to be free: **3000** (editor and API), **7233** (Temporal
+gRPC) and **8233** (the Temporal Web UI). All three move in
+`metis.config.json` under `ports`, and that file may hold only the keys you
+are changing:
+
+```json
+{ "ports": { "temporalGrpc": 7333, "temporalUi": 8333 } }
+```
+
+If you already run a Temporal, move 7233 before you start. The dev server logs
+`can't set frontend port 7233: bind: address already in use` and carries on, so
+`metis up` still says it is up while the worker talks to whichever Temporal
+already had the port.
+
 ## Quickstart: docker compose (the hero path)
 
 You need Docker. From the repository root:
@@ -33,32 +66,34 @@ default is published in this repository, so it is not a secret at all. Serving
 other machines deliberately is `METIS_HOST=0.0.0.0` plus a port mapping you
 choose.
 
-## Quickstart: npx (the developer loop)
-
-You need Node 22 or newer. In an empty directory:
+## Quickstart: from source (the developer loop)
 
 ```
-npx @mindlynx/metis-cli init     # scaffold a project and a sample workflow
-npx @mindlynx/metis-cli up        # start Temporal, the worker, the API and the editor
+git clone https://github.com/mindlynx-ai/metis.git && cd metis
+npm ci && npm run build
+export METIS_ADMIN_SECRET=pick-your-own
+node packages/metis-cli/dist/bin.js init   # scaffold a project and a sample workflow
+node packages/metis-cli/dist/bin.js up     # Temporal, the worker, the API and the editor
 ```
 
-`metis up` downloads and manages the Temporal dev server the first time you run
-it, so you never install Temporal by hand. The editor and API come up on port
-3000, the Temporal Web UI on 8233. To run the sample workflow from the command
-line instead:
+`up` downloads and manages the Temporal dev server the first time you run it,
+so you never install Temporal by hand. The editor and API come up on port 3000,
+the Temporal Web UI on 8233. Sign in as `admin` with the secret you exported.
+To run the sample workflow from the command line instead:
 
 ```
-npx @mindlynx/metis-cli run hello
+node packages/metis-cli/dist/bin.js run hello
 ```
 
-> The npm packages are on their way to the registry. Until they land, run the
-> CLI from source - same result, one extra step:
->
-> ```
-> git clone https://github.com/mindlynx-ai/metis.git && cd metis
-> npm ci && npm run build
-> node packages/metis-cli/dist/bin.js up
-> ```
+`METIS_ADMIN_SECRET` is not optional: the built-in default is published in this
+repository, so Metis refuses to serve on it unless you say
+`METIS_INSECURE_DEMO=true` and mean it.
+
+> **The npx route is not live yet.** Once the packages reach the registry the
+> two commands above become `npx @mindlynx/metis-cli init` and
+> `npx @mindlynx/metis-cli up`, with `npx @mindlynx/metis-cli run hello` to run
+> one workflow. Today those return a 404: nothing under `@mindlynx` is
+> published. Use the source path.
 
 ## What is Temporal, and why is it here?
 
@@ -78,7 +113,7 @@ reason your workflows are reliable.
 ## Your first workflow (no Temporal knowledge needed)
 
 1. Run `metis up` and open http://localhost:3000.
-2. Sign in (the scaffold creates an `admin` user; the password is `metis`).
+2. Sign in as `admin` with your `METIS_ADMIN_SECRET`.
 3. Click **Create your first workflow**.
 4. From the left rail, add a **Webhook Start** trigger, then a **Code** step.
 5. Click the code step and, in the panel on the right, set its code to
@@ -98,8 +133,8 @@ operations). Metis ships the top 100 most-popular integrations as definitions;
 seed them into your project with:
 
 ```
-npx @mindlynx/metis-cli connectors seed   # register the top-100 catalogue
-npx @mindlynx/metis-cli connectors list    # tier, priority and wired-op count
+metis connectors seed   # register the top-100 catalogue
+metis connectors list   # tier, priority and wired-op count
 ```
 
 The most-used connectors (Slack, GitHub, HubSpot, Notion, Stripe, and more) ship
@@ -147,21 +182,25 @@ you climb. The palette shows these as locked cards so you can see the path.
 
 ## AI tools (MCP)
 
-Metis ships an MCP server: `metis mcp` (or `npx @mindlynx/metis-cli mcp`)
-lets Claude and other MCP-capable tools browse the node catalogue (docs
-included), build workflows and run them against your instance. See
-[docs/mcp.md](docs/mcp.md).
+Metis ships an MCP server: `metis mcp` lets Claude and other MCP-capable tools
+browse the node catalogue (docs included), build workflows and run them against
+your instance. See [docs/mcp.md](docs/mcp.md).
 
 ## Development
 
 ```
-npm install
+npm ci
+npx playwright install chromium   # once, before the first e2e run
 npm run typecheck     # workspace-wide types
 npm run lint          # eslint, style and header checks
 npm test              # unit and integration suites (Vitest)
 npm run gates         # the six release gates
 npm run e2e           # editor end-to-end (Playwright)
 ```
+
+Playwright's browser is a separate ~150 MB download, so it is a documented step
+rather than a `postinstall`: everybody installing the workspace would pay for it,
+and almost nobody runs the e2e suite on their first afternoon.
 
 The data-gateway conformance suite runs against SQLite always and Postgres when
 `PG_URL` is set. The browser-driven full run and the real Temporal boot are

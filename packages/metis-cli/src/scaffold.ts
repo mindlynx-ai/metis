@@ -15,22 +15,32 @@
  */
 
 /**
- * Project scaffolding for `metis init`. Writes a
- * config, a .metis working directory, a .gitignore and a first
- * workflow that runs with no Temporal knowledge. Idempotent: existing
- * files are never overwritten.
+ * The project config, and the scaffolding that writes a first one. `metis init`
+ * lays down a config, a .metis working directory, a .gitignore and a first
+ * workflow that runs with no Temporal knowledge; it is idempotent, so existing
+ * files are never overwritten. Reading that config back is parseConfig, which
+ * lives here because it is defined against DEFAULT_CONFIG.
  */
 import { mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { z } from 'zod';
 
-export interface MetisConfig {
-  datastore: 'sqlite' | 'postgres';
-  ports: { editor: number; temporalGrpc: number; temporalUi: number };
-  paths: { data: string; database: string };
+/** One declaration of the config shape, so the validator and the type cannot
+ *  drift apart. */
+export const MetisConfigSchema = z.object({
+  datastore: z.enum(['sqlite', 'postgres']),
+  ports: z.object({
+    editor: z.number().int().positive(),
+    temporalGrpc: z.number().int().positive(),
+    temporalUi: z.number().int().positive(),
+  }),
+  paths: z.object({ data: z.string().min(1), database: z.string().min(1) }),
   /** How long Metis keeps execution history - the archive outlives
    *  Temporal's own (much shorter) visibility retention. */
-  retentionDays?: number;
-}
+  retentionDays: z.number().int().positive().optional(),
+});
+
+export type MetisConfig = z.infer<typeof MetisConfigSchema>;
 
 export const DEFAULT_CONFIG: MetisConfig = {
   datastore: 'sqlite',
@@ -38,6 +48,47 @@ export const DEFAULT_CONFIG: MetisConfig = {
   paths: { data: '.metis', database: '.metis/metis.db' },
   retentionDays: 90,
 };
+
+/** One level of the config, defaults underneath whatever the file says. A value
+ *  that is not an object at all is handed straight to the schema, so
+ *  `"ports": 3000` is named rather than silently replaced by the defaults. */
+function overlay<T extends object>(base: T, over: unknown): unknown {
+  if (over === undefined || over === null) return base;
+  if (typeof over !== 'object' || Array.isArray(over)) return over;
+  return { ...base, ...over };
+}
+
+/**
+ * Merge a config file over the defaults, then validate.
+ *
+ * The file is PARTIAL by design: moving a clashing port is the one thing an
+ * operator is told to write `metis.config.json` for, and nobody doing that
+ * should have to restate the datastore and both paths as well. Before this it
+ * was parsed and cast, so a ports-only file reached the runtime with no `paths`
+ * and boot died on "Cannot read properties of undefined (reading 'database')".
+ * The documented cure for a port clash bricked the product.
+ *
+ * Two levels deep is the whole shape, so the merge is written out rather than
+ * made generic.
+ */
+export function parseConfig(raw: unknown, source: string): MetisConfig {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error(`${source}: expected a JSON object`);
+  }
+  const partial = raw as Record<string, unknown>;
+  const parsed = MetisConfigSchema.safeParse({
+    ...DEFAULT_CONFIG,
+    ...partial,
+    ports: overlay(DEFAULT_CONFIG.ports, partial.ports),
+    paths: overlay(DEFAULT_CONFIG.paths, partial.paths),
+  });
+  if (parsed.success) return parsed.data;
+  // Name the offending key. A validation failure the operator cannot locate is
+  // barely better than the TypeError it replaces.
+  const issue = parsed.error.issues[0];
+  const where = issue.path.length > 0 ? issue.path.join('.') : 'config';
+  throw new Error(`${source}: ${where} is invalid (${issue.message.toLowerCase()})`);
+}
 
 const SAMPLE_WORKFLOW = {
   workflowId: 'hello',

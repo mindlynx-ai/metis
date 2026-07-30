@@ -14,11 +14,23 @@
  * limitations under the License.
  */
 import { describe, it, expect } from 'vitest';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+
+/** Every package that publishes, read off the tree rather than listed, so a new
+ *  one cannot slip past the manifest rules below. */
+const PUBLISHED = readdirSync(join(repoRoot, 'packages')).filter((name) =>
+  name.startsWith('metis-'),
+);
+
+const manifest = (name: string) =>
+  JSON.parse(readFileSync(join(repoRoot, 'packages', name, 'package.json'), 'utf8')) as Record<
+    string,
+    unknown
+  >;
 
 const EXPECTED_PACKAGES = [
   'metis-ports',
@@ -62,5 +74,25 @@ describe('workspace layout', () => {
   it('ships LICENSE and NOTICE at the root', () => {
     expect(readFileSync(join(repoRoot, 'LICENSE'), 'utf8')).toContain('Apache License');
     expect(readFileSync(join(repoRoot, 'NOTICE'), 'utf8')).toContain('Seillen');
+  });
+});
+
+describe('the declared Node floor', () => {
+  // 22.13 is where node:sqlite stopped needing --experimental-sqlite. The
+  // default datastore is node:sqlite, so on 22.12 the install succeeds and the
+  // boot throws. The root manifest is `private: true` and never published, so
+  // its floor protects nobody downstream on its own.
+  const root = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8')) as {
+    engines?: { node?: string };
+  };
+
+  it('is at least 22.13 at the root, where node:sqlite became stable', () => {
+    expect(root.engines?.node).toBe('>=22.13');
+  });
+
+  it.each(PUBLISHED)('%s declares the same floor, so npm can warn a consumer', (name) => {
+    expect((manifest(name).engines as { node?: string } | undefined)?.node).toBe(
+      root.engines?.node,
+    );
   });
 });

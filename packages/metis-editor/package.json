@@ -10,6 +10,9 @@
   },
   "homepage": "https://github.com/mindlynx-ai/metis#readme",
   "bugs": "https://github.com/mindlynx-ai/metis/issues",
+  "engines": {
+    "node": ">=22.13"
+  },
   "metis": {
     "edition": "open"
   },

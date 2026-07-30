@@ -1,7 +1,27 @@
 # Contributing to Metis
 
 Thanks for looking under the hood. Metis is a TypeScript monorepo; everything
-runs with Node (see `.nvmrc`) and `npm install` at the root.
+runs with `npm ci` at the root.
+
+Before that first install:
+
+- **Node 22.13 or newer** (`.nvmrc` pins what this is developed on). The floor
+  is 22.13 rather than 22.12 because the default datastore is `node:sqlite`,
+  which was behind `--experimental-sqlite` until then.
+- **A C++ toolchain, unless your platform has a prebuild.** `isolated-vm` (the
+  Code step's V8 sandbox) is a native addon. It ships prebuilt binaries for
+  Apple Silicon macOS, Linux x64 and arm64 (glibc and musl) and Windows x64 on
+  Node 22 and 24; anything else falls back to `node-gyp rebuild` and `npm ci`
+  fails without Python and a compiler. macOS: `xcode-select --install`.
+  Debian or Ubuntu: `apt install -y build-essential python3`.
+- **`npx playwright install chromium`**, once, before `npm run e2e`. It is not
+  a `postinstall`: the browser is a ~150 MB download that every contributor
+  would pay for and most do not need on day one.
+- **Docker**, only for the compose stack and the sample databases.
+
+Ports 3000 (editor and API), 7233 (Temporal gRPC) and 8233 (Temporal Web UI)
+have to be free; `metis.config.json` moves them, and it may hold only the keys
+you are changing.
 
 ## The quality bar (what CI runs)
 

@@ -26,10 +26,32 @@ describe('README quickstart', () => {
     expect(readme).toContain('docker compose -f compose/docker-compose.yml up');
   });
 
-  it('covers the npx developer loop with init, up and run', () => {
-    expect(readme).toContain('metis-cli init');
-    expect(readme).toContain('metis-cli up');
-    expect(readme).toContain('metis-cli run hello');
+  it('leads the developer loop with the path that works today', () => {
+    // The npx quickstart used to come first and returned a 404: nothing under
+    // @mindlynx is published. The source path is the one a stranger can follow,
+    // so it is the one in the code fence.
+    const loop = readme.slice(readme.indexOf('## Quickstart: from source'));
+    expect(loop.indexOf('node packages/metis-cli/dist/bin.js init')).toBeGreaterThan(-1);
+    expect(loop).toContain('node packages/metis-cli/dist/bin.js up');
+    expect(loop).toContain('node packages/metis-cli/dist/bin.js run hello');
+    expect(loop.indexOf('npm ci && npm run build')).toBeLessThan(
+      loop.indexOf('npx @mindlynx/metis-cli'),
+    );
+  });
+
+  it('marks the npx route as not yet published rather than offering it', () => {
+    const claim = readme.slice(readme.indexOf('npx @mindlynx/metis-cli') - 400);
+    expect(claim).toMatch(/not live yet|404|not published/i);
+  });
+
+  it('names the prerequisites that stop an install dead', () => {
+    const prereqs = readme.slice(
+      readme.indexOf('## Prerequisites'),
+      readme.indexOf('## Quickstart'),
+    );
+    expect(prereqs).toContain('22.13'); // node:sqlite, the default datastore
+    expect(prereqs).toContain('isolated-vm'); // needs a C++ toolchain
+    expect(prereqs).toContain('7233'); // the port the README never mentioned
   });
 
   it('explains Temporal in roughly 200 words', () => {

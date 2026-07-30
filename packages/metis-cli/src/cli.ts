@@ -22,8 +22,9 @@
  */
 import { cmdMcp } from './mcp.js';
 import { readFileSync, existsSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
-import { scaffoldProject, DEFAULT_CONFIG, type MetisConfig } from './scaffold.js';
+import { scaffoldProject, parseConfig, DEFAULT_CONFIG, type MetisConfig } from './scaffold.js';
 import { MetisRuntime } from './runtime.js';
 import { buildControlServer } from './control-server.js';
 import {
@@ -50,7 +51,8 @@ Usage:
   metis webhooks list    List the outbound webhooks in this project
   metis mcp              Serve the Model Context Protocol over stdio (AI tools
                          build + run workflows via METIS_URL, default :3000)
-  metis --help           Show this help
+  metis --help           Show this help (works after any command too)
+  metis --version        Print the version and exit
 
 Everything runs locally. The first time you run "metis up" the CLI
 downloads and manages the Temporal dev server for you, so you never
@@ -60,6 +62,12 @@ export interface CliContext {
   cwd: string;
   stdout: (line: string) => void;
   stderr: (line: string) => void;
+}
+
+/** The CLI's own manifest, one directory up from src/ and from dist/ alike. */
+function version(): string {
+  const manifest = createRequire(import.meta.url)('../package.json') as { version: string };
+  return manifest.version;
 }
 
 async function cmdInit(context: CliContext): Promise<number> {
@@ -78,8 +86,18 @@ async function cmdInit(context: CliContext): Promise<number> {
 export async function runCli(argv: string[], context: CliContext): Promise<number> {
   const command = argv[0];
 
-  if (command === undefined || command === '--help' || command === '-h' || command === 'help') {
+  // Asking about a command must never run it. `--help` was only honoured as the
+  // FIRST argument, and `up` ignored everything after it, so `metis up --help`
+  // downloaded and booted a Temporal dev server to answer a question. Scanning
+  // the whole of argv covers subcommands ("metis triggers add --help") for free;
+  // the cost is that a flag VALUE of "--help" is unreachable, which no flag here
+  // has any use for.
+  if (argv.length === 0 || argv.includes('--help') || argv.includes('-h') || command === 'help') {
     context.stdout(HELP_TEXT);
+    return 0;
+  }
+  if (argv.includes('--version') || argv.includes('-v')) {
+    context.stdout(`metis ${version()}`);
     return 0;
   }
 
@@ -105,10 +123,18 @@ export async function runCli(argv: string[], context: CliContext): Promise<numbe
   }
 }
 
-function loadConfig(cwd: string): MetisConfig {
+export function loadConfig(cwd: string): MetisConfig {
   const path = join(cwd, 'metis.config.json');
   if (!existsSync(path)) return DEFAULT_CONFIG;
-  return JSON.parse(readFileSync(path, 'utf8')) as MetisConfig;
+  let raw: unknown;
+  try {
+    raw = JSON.parse(readFileSync(path, 'utf8'));
+  } catch (error) {
+    throw new Error(
+      `metis.config.json is not valid JSON: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+  return parseConfig(raw, 'metis.config.json');
 }
 
 function editorDir(cwd: string): string | undefined {

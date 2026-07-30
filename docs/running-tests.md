@@ -1,13 +1,18 @@
 # Running the tests
 
 ```bash
-npm install            # once, at the root
-npm run typecheck      # tsc across all packages
-npm run lint           # eslint + style checks
-npm test               # full unit suite (vitest)
-npm run gates          # the six release gates
-npm run e2e            # Playwright editor suite (self-hosting dev harness)
+npm ci                            # once, at the root (needs Node >=22.13 and a C++ toolchain)
+npx playwright install chromium   # once, before the first e2e run
+npm run typecheck                 # tsc across all packages
+npm run lint                      # eslint + style checks
+npm test                          # full unit suite (vitest)
+npm run gates                     # the six release gates
+npm run e2e                       # Playwright editor suite (self-hosting dev harness)
 ```
+
+The browser download is a documented step rather than a `postinstall` because
+it is ~150 MB that every contributor would pay for and most do not need on day
+one. Without it `npm run e2e` fails at launch with "Executable doesn't exist".
 
 ## What runs where
 

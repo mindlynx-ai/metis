@@ -14,7 +14,6 @@
  * limitations under the License.
  */
 import {
-  resolveSecretTokens,
   cloudParkJobId,
   isCompleted,
   isUnimplemented,
@@ -27,7 +26,8 @@ import {
   type WorkflowEventName,
 } from '@mindlynx/metis-ports';
 import type { WorkflowStore } from '@mindlynx/metis-data-gateway';
-import { ApplicationFailure, Context } from '@temporalio/activity';
+import { ApplicationFailure } from '@temporalio/activity';
+import { activityAttempt, maybeHeartbeat, pollPause, resolveOrRefuse } from './activity-context.js';
 import { replaceConfigStateData } from '../substitution/state.js';
 import { checkSwitchCondition, partitionTargets, type SwitchConfig } from '../nodes/switch.js';
 import { logicBranch, type LogicConfig } from '../nodes/logic.js';
@@ -169,33 +169,16 @@ export interface EnginePorts {
 
 const CLOUD_POLL_MS = 2_000;
 
-/** Heartbeat when running inside a Temporal activity; no-op in unit tests. */
-function maybeHeartbeat(): void {
-  try {
-    Context.current().heartbeat();
-  } catch {
-    /* outside an activity context */
-  }
-}
-
-/** A poll pause that aborts promptly when the activity is cancelled. */
-async function pollPause(ms: number): Promise<void> {
-  let cancelled: Promise<never> | undefined;
-  try {
-    cancelled = Context.current().cancelled;
-  } catch {
-    /* outside an activity context */
-  }
-  const pause = new Promise<void>((resolve) => setTimeout(resolve, ms));
-  await (cancelled ? Promise.race([pause, cancelled]) : pause);
-}
-
 /**
  * Build the engine's activity surface from the ports.
  * Activities are the only place substrate is touched: the workflow
  * code stays deterministic and reaches everything through these.
  */
 export function createActivities(ports: EnginePorts): EngineActivities {
+  /** Every log row carries the attempt that wrote it (see activityAttempt). */
+  const appendLog = (log: Parameters<WorkflowStore['appendExecutionLog']>[0]) =>
+    ports.store.appendExecutionLog({ ...log, activityAttempt: activityAttempt() });
+
   const emit = (
     name: WorkflowEventName,
     request: { tenantId: string; workflowId?: string; executionId?: string },
@@ -264,7 +247,7 @@ export function createActivities(ports: EnginePorts): EngineActivities {
     async executeNode(request: ExecuteNodeRequest): Promise<ExecuteNodeResult> {
       const { tenantId, executionId, node, states, sequence } = request;
       emit('workflow.node.started', request, node.id);
-      await ports.store.appendExecutionLog({
+      await appendLog({
         tenantId,
         executionId,
         sequence: sequence * 10 + 1,
@@ -277,7 +260,7 @@ export function createActivities(ports: EnginePorts): EngineActivities {
       const substituted = replaceConfigStateData(executionId, tenantId, node.config ?? {}, {
         states,
       });
-      const resolved = await resolveSecretTokens(substituted, tenantId, ports.credentials);
+      const resolved = await resolveOrRefuse(substituted, tenantId, ports.credentials);
       const nodeType = node.type.toLowerCase();
 
       let result: DispatchResult;
@@ -341,7 +324,7 @@ export function createActivities(ports: EnginePorts): EngineActivities {
       };
       const eventName = eventByOutcome[result.outcome] ?? 'workflow.node.failed';
       emit(eventName, request, node.id);
-      await ports.store.appendExecutionLog({
+      await appendLog({
         tenantId,
         executionId,
         sequence: sequence * 10 + 2,
@@ -389,7 +372,7 @@ export function createActivities(ports: EnginePorts): EngineActivities {
         const eventName: WorkflowEventName =
           outcome === 'completed' ? 'workflow.node.completed' : 'workflow.node.failed';
         emit(eventName, request, nodeId);
-        await ports.store.appendExecutionLog({
+        await appendLog({
           tenantId,
           executionId,
           sequence: sequence * 10 + 2,
@@ -436,7 +419,7 @@ export function createActivities(ports: EnginePorts): EngineActivities {
         const substituted = replaceConfigStateData(request.executionId, request.tenantId, mapping, {
           states: request.states,
         });
-        const body = await resolveSecretTokens(substituted, request.tenantId, ports.credentials);
+        const body = await resolveOrRefuse(substituted, request.tenantId, ports.credentials);
         return { statusCode, body };
       }
       const responseNodeId = String(
@@ -450,7 +433,7 @@ export function createActivities(ports: EnginePorts): EngineActivities {
       for (const nodeId of request.nodeIds) {
         emit('workflow.node.orphaned', request, nodeId);
       }
-      await ports.store.appendExecutionLog({
+      await appendLog({
         tenantId: request.tenantId,
         executionId: request.executionId,
         sequence: request.sequence * 10 + 3,
@@ -466,7 +449,7 @@ export function createActivities(ports: EnginePorts): EngineActivities {
         until: request.until,
         details: request.details,
       });
-      await ports.store.appendExecutionLog({
+      await appendLog({
         tenantId: request.tenantId,
         executionId: request.executionId,
         // The park's own slot: started(+1)/completed(+2) must never overwrite

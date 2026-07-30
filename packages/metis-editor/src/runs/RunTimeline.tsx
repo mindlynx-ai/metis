@@ -61,13 +61,20 @@ export function RunTimeline({ logs }: { logs: RunLog[] }) {
       {/* Node-set rows (orphaned branches) have no single step to render. */}
       {logs.filter((log) => log.nodeId).map((log, index) => (
         <div
-          key={log.sequence ?? index}
+          // The attempt belongs in the key: a retried activity writes the same
+          // sequence again, so two genuine rows would collide on it.
+          key={`${log.sequence ?? index}-${log.activityAttempt ?? 1}`}
           className={`step${(log.event ?? '').includes('failed') ? ' failed' : ''}`}
         >
           <strong>{log.nodeId ?? 'run'}</strong> {log.event}{' '}
           <span className="mono">{log.at ?? ''}</span>
           {log.binding === 'local-degraded' && (
             <span className="step-tag">Ran here instead</span>
+          )}
+          {/* Named, because two rows for one step otherwise read as a bug in
+              the viewer rather than as the step having run twice. */}
+          {(log.activityAttempt ?? 1) > 1 && (
+            <span className="step-tag">Attempt {log.activityAttempt}</span>
           )}
           {(log.attempts ?? 1) > 1 && (
             <span className="step-attempts">{log.attempts} attempts</span>

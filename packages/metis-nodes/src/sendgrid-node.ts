@@ -24,6 +24,27 @@ import { stateEnvelope, type CredentialPort, type NodeHandler } from '@mindlynx/
 
 const SENDGRID_BASE_URL = 'https://api.sendgrid.com';
 
+/**
+ * The send's own ceiling, and the reason it has to exist.
+ *
+ * A mail send is one small POST, so 30 seconds is already generous (it matches
+ * the http node's default). What matters is that it is well INSIDE the activity
+ * budget: without it, an edge that accepts the connection and then stalls kept
+ * this promise open until Temporal's startToCloseTimeout expired, the activity
+ * was retried, and the retry posted the message again. The ceiling turns that
+ * into one failed step the run can show, with no second message.
+ *
+ * SendGrid has no idempotency mechanism to lean on instead: the v3 mail-send
+ * endpoint documents exactly two request headers (authorization and
+ * content-encoding) and no deduplication, which is their deliberate position -
+ * a dedup check would delay the send. So `ctx.idempotencyKey` has nowhere to go
+ * here, and sending an invented header would only look like protection. Bounded
+ * attempts plus this ceiling are the whole of the defence, and the residual is
+ * named: a send that succeeds at the provider after this ceiling has passed is
+ * reported failed, so re-running the workflow by hand can still send twice.
+ */
+const SEND_TIMEOUT_MS = 30_000;
+
 interface SendgridNodeConfig {
   connectorId?: string;
   /** The chosen connection instance id (material is resolved from this). */
@@ -37,6 +58,8 @@ interface SendgridNodeConfig {
 
 export interface SendgridNodeOptions {
   baseUrl?: string;
+  /** Overridden in tests so a stalled send can be proven in milliseconds. */
+  timeoutMs?: number;
 }
 
 export function createSendgridNodeHandler(
@@ -44,6 +67,7 @@ export function createSendgridNodeHandler(
   options: SendgridNodeOptions = {},
 ): NodeHandler {
   const baseUrl = options.baseUrl ?? SENDGRID_BASE_URL;
+  const timeoutMs = options.timeoutMs ?? SEND_TIMEOUT_MS;
   return async (ctx) => {
     const config = ctx.nodeRef.config as SendgridNodeConfig;
     const connectorId = String(config.connectorId ?? '');
@@ -85,6 +109,7 @@ export function createSendgridNodeHandler(
           subject: config.subject ?? '',
           content,
         }),
+        signal: AbortSignal.timeout(timeoutMs),
       });
       if (response.status >= 200 && response.status < 300) {
         return {

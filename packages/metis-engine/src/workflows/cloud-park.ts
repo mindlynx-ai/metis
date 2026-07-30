@@ -22,15 +22,30 @@
  * cancel signal races the poll and propagates a best-effort job cancel.
  */
 import { condition, proxyActivities } from '@temporalio/workflow';
+import { ENGINE_ACTIVITY_RETRY } from '../types.js';
 import type { EngineActivities, ExecuteNodeResult, HelixWorkflowInput } from '../types.js';
 
 const waitActivities = proxyActivities<Pick<EngineActivities, 'markNodeWaiting'>>({
   startToCloseTimeout: '2 minutes',
+  retry: ENGINE_ACTIVITY_RETRY,
 });
 
+/**
+ * The poll gets its own, larger bound rather than the engine default. Retrying
+ * here is the design: the heartbeat exists so a dead worker is noticed in
+ * minutes and the poll resumes on another, and a 24-hour job may outlive
+ * several workers. The poll also does nothing to the outside world beyond
+ * reading a job by id, so a repeat attempt costs a GET.
+ *
+ * It is bounded anyway, because unlimited attempts turn a gateway that is
+ * simply gone into a run that parks silently and for ever. Ten attempts of an
+ * instant failure, under Temporal's backoff, is roughly ten minutes before the
+ * node fails and says so.
+ */
 const cloudActivities = proxyActivities<Pick<EngineActivities, 'pollCloudJob' | 'cancelCloudJob'>>({
   startToCloseTimeout: '24 hours',
   heartbeatTimeout: '2 minutes',
+  retry: { maximumAttempts: 10 },
 });
 
 /** Park on the job until terminal or the run is cancelled. */

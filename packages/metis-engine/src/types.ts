@@ -100,6 +100,32 @@ export interface RuntimeNode extends WorkflowNode {
 export const SIGNAL_DEFAULT_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 /**
+ * The retry policy every workflow's activity proxy declares. Temporal's own
+ * default is `maximumAttempts: 0`, which means UNLIMITED, and executeNode
+ * dispatches side effects: a handler that outruns the activity's
+ * startToCloseTimeout is retried, and the second attempt sends the second
+ * email, for ever.
+ *
+ * Three attempts, because of what a retry here can and cannot fix. A handler's
+ * own failure never reaches this policy (the registry and the capability
+ * resolver both return a status instead of throwing), so what lands here is the
+ * substrate: a store write, a worker that died mid-activity, or the activity
+ * budget expiring. Two extra attempts ride out a restart or a write blip; a
+ * third learns nothing new and costs another dispatch of whatever the node
+ * does to the outside world.
+ *
+ * The named types are the failures that are configuration rather than weather:
+ * a definition that cannot start and a secret that is not in the vault read the
+ * same on the tenth attempt as on the first. Both are raised non-retryably at
+ * their throw site as well; naming them here is what holds if a future activity
+ * raises the same type as a plain error.
+ */
+export const ENGINE_ACTIVITY_RETRY = {
+  maximumAttempts: 3,
+  nonRetryableErrorTypes: ['InvalidDefinition', 'CredentialResolution'],
+};
+
+/**
  * How many times one node may park for an outside decision in a single run.
  * A park is meant to happen once, twice with an escalation; the cap is here
  * because a handler that parks on every dispatch would otherwise grow

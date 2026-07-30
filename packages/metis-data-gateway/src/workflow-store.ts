@@ -76,6 +76,12 @@ export interface ExecutionLogItem extends ItemRecord {
   tenantId: string;
   executionId: string;
   sequence: number;
+  /**
+   * Which attempt of the activity wrote this row (Temporal's own count, 1 on
+   * the first). Absent means one, which is what every row written before this
+   * field existed means too.
+   */
+  activityAttempt?: number;
 }
 
 export interface ListOptions {
@@ -93,7 +99,18 @@ const pad = (n: number): string => String(n).padStart(6, '0');
 const workflowPk = (tenantId: string, workflowId: string) => `WF#${tenantId}#${workflowId}`;
 const versionSk = (version: number, changeset: number) => `VER#${pad(version)}#${pad(changeset)}`;
 const executionPk = (tenantId: string, executionId: string) => `EXEC#${tenantId}#${executionId}`;
-const logSk = (sequence: number) => `LOG#${pad(sequence)}`;
+/**
+ * A log row's sort key. The sequence is derived from workflow history, so it is
+ * IDENTICAL on every retry of the same activity: without the attempt in the key
+ * the second attempt upserts over the first and the run shows one attempt of a
+ * node that ran twice. Attempt 1 keeps the bare key so existing rows keep both
+ * their key and their place; a later attempt sorts immediately after the row it
+ * would have replaced, which is also where it belongs in time.
+ */
+const logSk = (sequence: number, attempt = 1) =>
+  attempt > 1
+    ? `LOG#${pad(sequence)}#A${String(attempt).padStart(2, '0')}`
+    : `LOG#${pad(sequence)}`;
 
 export interface WorkflowStoreOptions {
   clock?: () => number;
@@ -295,7 +312,7 @@ export class WorkflowStore {
     await this.gateway.upsert(WORKFLOW_EXECUTIONS_TABLE.name, {
       ...log,
       PK: executionPk(log.tenantId, log.executionId),
-      SK: logSk(log.sequence),
+      SK: logSk(log.sequence, log.activityAttempt),
       ttl: this.ttl(),
     });
   }

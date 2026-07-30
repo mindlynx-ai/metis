@@ -39,6 +39,7 @@ import { awaitCloudJob } from './cloud-park.js';
 import { settleDecisions } from './decision-park.js';
 import { buildExecuteRequest } from './execute-request.js';
 import {
+  ENGINE_ACTIVITY_RETRY,
   SIGNAL_DEFAULT_TIMEOUT_MS,
   type EngineActivities,
   type ExecuteNodeResult,
@@ -54,6 +55,7 @@ import {
 
 const activities = proxyActivities<EngineActivities>({
   startToCloseTimeout: '2 minutes',
+  retry: ENGINE_ACTIVITY_RETRY,
 });
 
 

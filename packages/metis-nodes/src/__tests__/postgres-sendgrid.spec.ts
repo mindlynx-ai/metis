@@ -197,4 +197,32 @@ describe('sendgrid node', () => {
     expect(result.message).toMatch(/401/);
     rejecting.close();
   });
+
+  it('gives up on a send that stalls instead of holding the activity open', async () => {
+    const credentials = new FakeCredentialPort(
+      {},
+      { 't1/sendgrid-main': { name: 'sendgrid-main', connectorId: 'sendgrid', material: { apiKey: 'k' } } },
+    );
+    // The routine failure: the edge accepts the connection and then says
+    // nothing. Without a ceiling this promise stayed open until Temporal's
+    // activity budget expired, the activity was retried, and the retry sent the
+    // message a second time.
+    const sockets: import('node:net').Socket[] = [];
+    const stalling = createServer((req) => {
+      sockets.push(req.socket);
+    });
+    await new Promise<void>((resolve) => stalling.listen(0, '127.0.0.1', resolve));
+    const stallingUrl = `http://127.0.0.1:${(stalling.address() as AddressInfo).port}`;
+    const handler = createSendgridNodeHandler(credentials, {
+      baseUrl: stallingUrl,
+      timeoutMs: 150,
+    });
+    const result = await handler(
+      request('sendgrid', { connectorId: 'sendgrid-main', to: 'a@b.test', from: 'c@d.test', text: 't' }),
+    );
+    expect(result.status).toBe(502);
+    expect(result.message).toMatch(/abort|timeout|timed out/i);
+    for (const socket of sockets) socket.destroy();
+    stalling.close();
+  });
 });

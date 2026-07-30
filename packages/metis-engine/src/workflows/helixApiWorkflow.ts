@@ -23,6 +23,7 @@
 import { proxyActivities, sleep } from '@temporalio/workflow';
 import { getWaitTimeMs } from '../nodes/waituntil.js';
 import { getAvailableNodes, isDone, sourcesOf } from './graph.js';
+import { ENGINE_ACTIVITY_RETRY } from '../types.js';
 import type {
   EngineActivities,
   HelixApiWorkflowResult,
@@ -33,6 +34,7 @@ import type {
 
 const activities = proxyActivities<EngineActivities>({
   startToCloseTimeout: '2 minutes',
+  retry: ENGINE_ACTIVITY_RETRY,
 });
 
 const DEFAULT_DEADLINE_MS = 120_000;

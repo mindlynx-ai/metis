@@ -27,6 +27,7 @@
  */
 import { condition, proxyActivities } from '@temporalio/workflow';
 import {
+  ENGINE_ACTIVITY_RETRY,
   MAX_SIGNAL_PARKS,
   PARK_EXPIRED,
   SIGNAL_DEFAULT_TIMEOUT_MS,
@@ -36,8 +37,13 @@ import {
   type SignalParkRequest,
 } from '../types.js';
 
+// Bookkeeping only (the waiting row), so a retry re-writes one upsert and
+// touches nothing outside. It still needs the bound: the default is unlimited,
+// and a store that is refusing writes would otherwise hold the park open for
+// ever instead of failing the run where somebody can see it.
 const parkActivities = proxyActivities<Pick<EngineActivities, 'markNodeWaiting'>>({
   startToCloseTimeout: '2 minutes',
+  retry: ENGINE_ACTIVITY_RETRY,
 });
 
 export interface ExecutionIds {

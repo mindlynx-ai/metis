@@ -236,6 +236,10 @@ export interface RunLog {
   /** Attempts the policy retry loop used (present when a policy applied). */
   attempts?: number;
   sequence?: number;
+  /** Which attempt of the ACTIVITY wrote this line (Temporal's own count).
+   *  Absent or 1 = the first, so only a retried step carries a visible one. A
+   *  step that ran twice therefore has two rows, not one overwritten row. */
+  activityAttempt?: number;
   at?: string;
   /** Where the step actually ran ('local-degraded' = cloud chosen, ran here). */
   binding?: 'local' | 'cloud' | 'local-degraded';

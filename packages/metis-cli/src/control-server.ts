@@ -25,7 +25,7 @@
  */
 import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
-import { join, extname } from 'node:path';
+import { join, extname, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { attachSocketHub, handleWebhook, type TriggerService } from '@mindlynx/metis-orchestrator';
@@ -101,6 +101,17 @@ export async function registerWebhookRoute(
  * Extension-less paths still fall through to the shell, because those are the
  * client-side routes the editor owns.
  *
+ * CONTAINMENT IS THE POINT. This route is mounted on the root app, outside the
+ * bearer-gated scope, so whatever it returns it returns to anyone who can reach
+ * the port. `join` normalises `..` away rather than rejecting it, and Fastify's
+ * router hands us the path already percent-decoded (`%2f` arrives as `/`), so
+ * `/..%2f..%2f.metis%2fcredential.key` used to resolve to the encryption key
+ * sitting beside the credential vault, and `.key`/`.enc`/`.db` all carry an
+ * extension so none of them were rerouted to the shell. Every candidate is now
+ * resolved and required to sit under the resolved editor directory; the prefix
+ * test includes the separator so a sibling directory whose name merely starts
+ * with the same characters cannot pass.
+ *
  * Pure, with the existence check injected, so the rule can be tested without a
  * server or a filesystem.
  */
@@ -110,6 +121,9 @@ export function resolveStaticTarget(
   exists: (path: string) => boolean,
 ): { file: string; notFound?: false } | { notFound: true; file?: undefined } {
   const shell = join(editorDir, 'index.html');
+  const base = resolve(editorDir);
+  const contained = (candidate: string): boolean =>
+    candidate === base || candidate.startsWith(`${base}${sep}`);
   // An unmatched /api path is a missing endpoint, never a client route. Falling
   // through to the shell answered 200 text/html to a caller expecting JSON,
   // which reads as success: a client that does not check the content type sees
@@ -121,7 +135,11 @@ export function resolveStaticTarget(
   const path = url.startsWith('/') ? url.slice(1) : url;
   if (path === 'api' || path.startsWith('api/')) return { notFound: true };
   if (!url) return { file: shell };
-  const candidate = join(editorDir, url);
+  const candidate = resolve(editorDir, url);
+  // Checked before the extension test, so an escaping path is refused outright
+  // rather than falling through to the shell and answering 200 for a traversal
+  // attempt: a 404 tells a prober nothing about what is up there.
+  if (!contained(candidate)) return { notFound: true };
   if (!extname(candidate)) return { file: shell };
   return exists(candidate) ? { file: candidate } : { notFound: true };
 }

@@ -22,7 +22,12 @@
  * seam; almost all of helix-core stays behind.
  */
 import { randomUUID } from 'node:crypto';
-import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
+import Fastify, {
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+  type FastifyServerOptions,
+} from 'fastify';
 import { z } from 'zod';
 import type { IdentityPort, Session } from '@mindlynx/metis-ports';
 import type { AuditStore, WorkflowStore } from '@mindlynx/metis-data-gateway';
@@ -34,6 +39,7 @@ import type {
 } from '@mindlynx/metis-ports';
 import { getCatalogue, listAllConnectors } from '@mindlynx/metis-catalogue';
 import { EntitlementsShim } from './entitlements.js';
+import { registerErrorHandler } from './error-handler.js';
 import { registerWorkflowRoutes } from './workflow-routes.js';
 import { registerAuditRoutes } from './audit-routes.js';
 import { registerExecutionReadRoutes } from './execution-read-routes.js';
@@ -84,6 +90,11 @@ export interface CoreDependencies {
   /** The Helix uplift surface (offers/entitlements/account-connect).
    *  Absent = the kill switch: no account routes, static offers, no cloud. */
   uplift?: UpliftDeps;
+  /** Fastify logger options. The default writes warn and above to stdout, so an
+   *  internal failure has somewhere to land without turning the console into an
+   *  access log (request/response lines sit at info). METIS_LOG_LEVEL opens it
+   *  up; a host embedding metis-core can pass its own stream instead. */
+  logger?: FastifyServerOptions['logger'];
 }
 
 declare module 'fastify' {
@@ -95,7 +106,10 @@ declare module 'fastify' {
 const loginBody = z.object({ userId: z.string().min(1), secret: z.string().min(1) });
 
 export function buildCoreServer(deps: CoreDependencies): FastifyInstance {
-  const app = Fastify({ logger: false });
+  const app = Fastify({
+    logger: deps.logger ?? { level: process.env.METIS_LOG_LEVEL ?? 'warn' },
+  });
+  registerErrorHandler(app);
   const entitlements = deps.entitlements ?? new EntitlementsShim();
   (app as unknown as { metisIdentity: IdentityPort }).metisIdentity = deps.identity;
 

@@ -20,6 +20,8 @@ services:
     image: grafana/grafana:latest
     ports:
       - '9000:3000'
+      # A bind address that is not the loopback one publishes just the same.
+      - '0.0.0.0:6379:6379'
 
 networks:
   metis:

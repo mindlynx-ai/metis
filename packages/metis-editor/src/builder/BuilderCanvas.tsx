@@ -18,8 +18,11 @@
  * The builder canvas, a slim restyled port of the origin
  * BuilderCanvas: XYFlow with the single Metis node type, add via the
  * picker, connect by dragging handles, delete with the keyboard. The
- * flow store is the source of truth; the canvas mirrors it. The
- * origin's Companion, telemetry and UCL couplings are not ported.
+ * flow store is the source of truth; the canvas mirrors it. Three
+ * couplings the original carried are absent here: an assistant
+ * side-panel, analytics events on every interaction, and an external
+ * command bus that could drive the graph. This canvas talks to nothing
+ * but the flow store.
  */
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import {

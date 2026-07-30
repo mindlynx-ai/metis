@@ -1,0 +1,11 @@
+# A second compose file in the same directory. The gate used to open
+# docker-compose.yml and nothing else, so everything below was unread.
+name: metis-violation-extra
+
+services:
+  cache:
+    image: redis:7-alpine
+    ports:
+      # Every bind address publishes to the host. Only the loopback form
+      # was ever matched, so this one used to pass.
+      - '0.0.0.0:5432:5432'

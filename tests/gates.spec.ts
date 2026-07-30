@@ -115,6 +115,34 @@ describe('release gates', () => {
     expect(real).toEqual([]);
   });
 
+  it('gate 5 fails a compose file it cannot parse instead of reporting success', () => {
+    const planted = runStandaloneBootGate(join(fixtures, 'gate-5')) as Violation[];
+    // Four-space keys and a trailing comment on `services:` are valid compose
+    // the small reader cannot follow. It parsed to zero services, and zero
+    // services meant zero violations: a pass on a file nobody had read.
+    const unparsed = planted.filter((v) => v.rule === 'compose-unparsed');
+    expect(unparsed.map((v) => v.file)).toEqual(['compose/docker-compose.unreadable.yml']);
+  });
+
+  it('gate 5 catches a published port on any bind address', () => {
+    const planted = runStandaloneBootGate(join(fixtures, 'gate-5')) as Violation[];
+    // '0.0.0.0:6379:6379' reaches the host as surely as '127.0.0.1:6379:6379',
+    // but only the loopback spelling was matched.
+    const ports = planted.filter((v) => v.rule === 'unexpected-published-port');
+    expect(ports.some((v) => v.file === 'compose/docker-compose.yml' && v.detail?.includes('6379'))).toBe(true);
+  });
+
+  it('gate 5 reads every compose file in the directory, not just the hero one', () => {
+    const planted = runStandaloneBootGate(join(fixtures, 'gate-5')) as Violation[];
+    // The gate opened one hardcoded filename, so an overlay adding a database
+    // or republishing a port was never looked at.
+    expect([...new Set(planted.map((v) => v.file))].sort()).toEqual([
+      'compose/docker-compose.extra.yml',
+      'compose/docker-compose.unreadable.yml',
+      'compose/docker-compose.yml',
+    ]);
+  });
+
   it('gate 6 fails on a planted internal doc and a planted package note', () => {
     const planted = runDocAllowlistGate(join(fixtures, 'gate-6')) as Violation[];
     // Neither was reachable before: the walk skipped any directory called

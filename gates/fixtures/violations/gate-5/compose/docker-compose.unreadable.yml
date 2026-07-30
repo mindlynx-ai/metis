@@ -1,0 +1,10 @@
+# Valid compose the gate's small reader cannot follow: a trailing comment
+# on the services key and four-space indentation. It used to parse to zero
+# services, and zero services meant zero violations.
+name: metis-violation-unreadable
+
+services: # the whole file below was invisible
+    database:
+        image: postgres:16-alpine
+        ports:
+            - '5432:5432'

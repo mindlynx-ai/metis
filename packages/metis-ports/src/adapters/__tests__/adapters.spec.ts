@@ -13,11 +13,53 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import * as fs from 'node:fs';
 import { mkdtempSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
+
+/**
+ * A switch for one deliberately torn write, off for every other test here.
+ * `node:fs` exports are non-configurable, so a spy cannot reach them; the
+ * module has to be replaced, and the replacement passes straight through until
+ * a test asks for the failure.
+ */
+const fsFault = vi.hoisted(() => ({ tearWrites: false }));
+
+vi.mock('node:fs', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:fs')>();
+  return {
+    ...actual,
+    default: actual,
+    /**
+     * A truncating write that dies in the middle: what a full disk, an OOM kill
+     * or a power loss does to the target of a plain writeFileSync. Faithful to
+     * both shapes, so what it proves is the implementation and not the mock:
+     * given a path it truncates that path, given a descriptor it writes to that
+     * descriptor, and either way only half the bytes land.
+     */
+    writeFileSync: (target: number | fs.PathLike, data: string, options?: unknown) => {
+      if (!fsFault.tearWrites) {
+        return (actual.writeFileSync as (t: unknown, d: unknown, o?: unknown) => void)(
+          target,
+          data,
+          options,
+        );
+      }
+      const half = data.slice(0, Math.floor(data.length / 2));
+      if (typeof target === 'number') {
+        actual.writeSync(target, half);
+      } else {
+        const handle = actual.openSync(target, 'w');
+        actual.writeSync(handle, half);
+        actual.closeSync(handle);
+      }
+      throw new Error('ENOSPC: no space left on device');
+    },
+  };
+});
 import type { EventSink, NodeExecPort, IdentityPort, CredentialPort } from '../../index.js';
 import {
   StdoutEventSink,
@@ -142,6 +184,48 @@ describe('LocalFileCredentialStore (BYOK)', () => {
     expect(
       await reopened.resolveSecret({ tenantId: 't1', secretId: 'a0a0a0a0-1111-2222-3333-444444444444' }),
     ).toBe('super-plain-secret');
+  });
+
+  /** A vault holding one secret, plus the pieces needed to read it back. */
+  const seeded = async (name: string) => {
+    const dir = mkdtempSync(join(tmpdir(), `metis-${name}-`));
+    const filePath = join(dir, 'credentials.enc');
+    const key = randomBytes(32);
+    const store = new LocalFileCredentialStore(filePath, key);
+    const secretId = 'c0c0c0c0-1111-2222-3333-444444444444';
+    await store.setSecret('t1', secretId, 'the-only-copy');
+    return { dir, filePath, key, store, request: { tenantId: 't1', secretId } };
+  };
+
+  it('leaves nothing beside the vault, and the vault still 0600, after a save', async () => {
+    const { dir, filePath, store, request } = await seeded('creds-atomic');
+    await store.setSecret('t1', 'd0d0d0d0-1111-2222-3333-444444444444', 'second');
+    // The temp file is a means, not a leftover: a half-written copy of the
+    // vault must not sit beside it after a save that worked.
+    expect(fs.readdirSync(dir)).toEqual(['credentials.enc']);
+    // The rename carries the temp file's mode onto the target, so the mode has
+    // to be set at creation rather than after the ciphertext is on disk.
+    expect(fs.statSync(filePath).mode & 0o777).toBe(0o600);
+    expect(await store.resolveSecret(request)).toBe('the-only-copy');
+  });
+
+  it('a save that dies half way leaves the previous vault intact and readable', async () => {
+    const { dir, store, request } = await seeded('creds-torn');
+    fsFault.tearWrites = true;
+    try {
+      await expect(
+        store.setSecret('t1', 'e0e0e0e0-1111-2222-3333-444444444444', 'x'),
+      ).rejects.toThrow(/ENOSPC/);
+    } finally {
+      fsFault.tearWrites = false;
+    }
+
+    // The whole point: every other credential is still there. Read through a
+    // fresh store so it is the FILE being trusted, not anything cached.
+    const reopened = new LocalFileCredentialStore(join(dir, 'credentials.enc'), (store as unknown as { key: Buffer }).key);
+    expect(await reopened.resolveSecret(request)).toBe('the-only-copy');
+    // And the torn copy did not survive as litter next to the secrets.
+    expect(fs.readdirSync(dir)).toEqual(['credentials.enc']);
   });
 
   it('refuses to decrypt with the wrong key', async () => {

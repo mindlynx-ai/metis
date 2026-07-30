@@ -14,7 +14,17 @@
  * limitations under the License.
  */
 import { createCipheriv, createDecipheriv, randomBytes, randomUUID } from 'node:crypto';
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import {
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs';
 import { dirname } from 'node:path';
 import type {
   ConnectionRecord,
@@ -55,6 +65,51 @@ function projectConnection(stored: StoredConnection): Omit<ConnectionRecord, 'co
 }
 
 const ALGORITHM = 'aes-256-gcm';
+
+/**
+ * Publish the vault by writing beside it and renaming over it.
+ *
+ * Every save re-encrypts the WHOLE vault, and `writeFileSync` truncates the
+ * target before it writes: a kill, a container OOM, a full disk or a power loss
+ * inside that window left `credentials.enc` half-written, which is not one lost
+ * edit but every credential for every connector gone at once, surfacing as an
+ * opaque throw from resolveConnectorCredentials on the next dispatch. There is
+ * no backup and no partial recovery. The window is not rare either: account
+ * token rotation rewrites the whole vault roughly hourly.
+ *
+ * A rename over an existing path is atomic, so a reader sees the old file or the
+ * new one and never a partial one. Two details it depends on:
+ *
+ *   - the temp file lives in the SAME directory, because rename is only atomic
+ *     within one filesystem, and /tmp is frequently a different one;
+ *   - the mode is set when the temp file is CREATED, not afterwards, so the
+ *     ciphertext is never briefly readable by anyone else.
+ *
+ * The fsync is before the rename, and it is the file's, not the directory's.
+ * Before, because the rename is what publishes the bytes and a power loss must
+ * not publish a file whose contents never reached the disk. Not the directory's,
+ * because losing the rename loses this one save and leaves the previous vault
+ * intact and readable, which is the safe side of that trade; losing the contents
+ * is the failure this exists to prevent.
+ */
+function writeVaultAtomically(filePath: string, contents: string): void {
+  const tempPath = `${filePath}.${randomUUID()}.tmp`;
+  try {
+    const handle = openSync(tempPath, 'w', 0o600);
+    try {
+      writeFileSync(handle, contents);
+      fsyncSync(handle);
+    } finally {
+      closeSync(handle);
+    }
+    renameSync(tempPath, filePath);
+  } catch (error) {
+    // A half-written temp file is litter beside the secrets; it never becomes
+    // the vault, but it should not sit there either.
+    rmSync(tempPath, { force: true });
+    throw error;
+  }
+}
 
 /**
  * The open default CredentialPort: a local AES-256-GCM encrypted file,
@@ -101,7 +156,7 @@ export class LocalFileCredentialStore implements ConnectorCredentialStore {
       data: data.toString('base64'),
     };
     mkdirSync(dirname(this.filePath), { recursive: true });
-    writeFileSync(this.filePath, JSON.stringify(envelope), { mode: 0o600 });
+    writeVaultAtomically(this.filePath, JSON.stringify(envelope));
   }
 
   async setSecret(tenantId: string, secretId: string, value: string): Promise<void> {

@@ -65,17 +65,96 @@ export interface QueryResult {
 }
 
 /**
+ * The narrowing vocabulary a handle and a step share. These are deliberately the
+ * visual builder's OWN field names (`operator`, not `op`; `descending`, not
+ * `desc`), so a step's where/orderBy/columns arrays travel into a handle and back
+ * out again with no mapping layer in between - a mapping layer is a second place
+ * for the two to disagree about what a filter means.
+ *
+ * Declared here rather than beside the builder because a handle is a wire shape:
+ * the node composes one, and a warehouse-scale engine composes one too. The
+ * builder lives in metis-nodes, and metis-nodes imports metis-ports, never the
+ * other way round, so this is the only end of that edge both can reach.
+ */
+export interface NarrowColumn {
+  name: string;
+  alias?: string;
+}
+export interface NarrowWhere {
+  table?: string;
+  column: string;
+  operator: string;
+  value: unknown;
+}
+export interface NarrowOrderBy {
+  table?: string;
+  column: string;
+  direction?: 'ascending' | 'descending';
+}
+
+/** The narrowing a handle carries. Every field optional: absent means "no
+ *  narrowing", i.e. the whole table. */
+export interface DatasetNarrow {
+  columns?: NarrowColumn[];
+  where?: NarrowWhere[];
+  orderBy?: NarrowOrderBy[];
+  limit?: number;
+}
+
+/**
  * A pointer to data that lives at the source - handed downstream instead of the
  * rows themselves, so it never hits the payload ceiling and a later step can
  * materialise it on demand. This is also the shape warehouse-scale engines return.
+ *
+ * It comes in two forms, told apart by which field is set:
+ *
+ * - SPEC (`table` + optional `narrow`): the INGREDIENTS. A later step merges its
+ *   own filter into `narrow` and composes one flat SELECT.
+ * - RAW (`query`): a hand-written query, which is genuinely all that is known
+ *   about it - nobody named the table, the columns, or which predicate is the
+ *   filter. It can be opened, and narrowed LOCALLY by wrapping it as a derived
+ *   table.
+ *
+ * Why the spec form exists at all: an engine that has to prove every query it
+ * runs is scoped to one account cannot accept a derived table. A predicate in one
+ * branch is no proof a sibling branch is scoped, so counting predicates is
+ * unsound and any subquery is refused before predicates are even considered.
+ * That is an isolation invariant, not a limitation waiting to be lifted, so a
+ * handle bound for such an engine carries ingredients and every reader composes
+ * ONE flat statement from them.
  */
 export interface DatasetRef {
   kind: 'dataset';
+  /** Empty on a handle a cloud engine produced: the account supplies the
+   *  warehouse, so there is no connection to name. */
   connectionId: string;
   engine: string;
   table?: string;
+  narrow?: DatasetNarrow;
   query?: string;
   schema?: DataColumn[];
+}
+
+/** The narrowing a STEP asks for, in the builder's own shape - its columns hang
+ *  off the first table rather than sitting at the top level. */
+export interface StepNarrowing {
+  where?: NarrowWhere[];
+  orderBy?: NarrowOrderBy[];
+  limit?: number;
+  tables?: { columns?: NarrowColumn[] }[];
+}
+
+/** True when a step asks for anything narrower than the whole handle. Lives here
+ *  for the same reason as asDatasetRef: the cloud-bind guard has to read "does
+ *  this step filter" exactly as the node does, or it would refuse a different set
+ *  of steps than the ones that cannot work. */
+export function narrowsHandle(config: StepNarrowing): boolean {
+  return Boolean(
+    (config.where && config.where.length > 0) ||
+      (config.orderBy && config.orderBy.length > 0) ||
+      (typeof config.limit === 'number' && config.limit > 0) ||
+      ((config.tables ?? [])[0]?.columns ?? []).length > 0,
+  );
 }
 
 /** Coerce a config value into a DatasetRef, whether it came through as an object

@@ -25,8 +25,13 @@
  * Its second rule is NO OTHER DATA SOURCE: the cloud reads its own warehouse,
  * so a step that names any other connection is refused rather than bound, and
  * the user is told which connection and what to do about it.
+ *
+ * Its third rule is NO SILENTLY UNFILTERED ROWS: a step that asks the cloud for
+ * something the cloud cannot express - filtering a hand-written reference, which
+ * would have to wrap the query - is refused too, rather than dispatched to fail
+ * obscurely or run without the filter.
  */
-import { asDatasetRef } from '../data-source-port.js';
+import { asDatasetRef, narrowsHandle, type StepNarrowing } from '../data-source-port.js';
 import {
   isCompleted,
   stateEnvelope,
@@ -124,6 +129,44 @@ function foreignConnectionRefusal(nodeRef: NodeRef): NodeExecutionResult | undef
   };
 }
 
+/**
+ * The refusal a cloud-bound step earns by trying to FILTER a hand-written dataset
+ * reference, else undefined.
+ *
+ * A raw handle carries its SQL, not the ingredients, so narrowing it means
+ * wrapping it: SELECT ... FROM (<the handle's query>) AS "source" WHERE ... The
+ * cloud cannot run that shape at all. Every query it runs has to be provably
+ * scoped to the account, and a subquery defeats the proof - a predicate in one
+ * branch is no evidence a sibling branch is scoped - so any derived table is
+ * refused before predicates are even looked at. An isolation invariant, not a
+ * limitation waiting to be lifted.
+ *
+ * Dispatching anyway would earn a rejection the person who built the step cannot
+ * read, and dropping the filter would hand on every row while looking filtered,
+ * which is the exact failure this file exists to prevent. So it is refused here,
+ * naming the two things that do work.
+ *
+ * Only the raw form: a spec handle (`table` + `narrow`) composes one flat
+ * statement and needs no wrapping, which is why it exists. A handle carrying both
+ * is read as spec, exactly as the Data node reads it.
+ */
+function unfilterableReferenceRefusal(nodeRef: NodeRef): NodeExecutionResult | undefined {
+  const config = nodeRef.config ?? {};
+  const ref = asDatasetRef(config.sourceRef);
+  if (!ref?.query || ref.table) return undefined;
+  if (!narrowsHandle(config as StepNarrowing)) return undefined;
+  return {
+    status: 400,
+    message:
+      'this step is set to run in the cloud and filters a dataset reference that came from a ' +
+      'hand-written query. The cloud can open that reference but cannot filter it: filtering ' +
+      'wraps the query, and the cloud only runs a query it can prove reads your account alone, ' +
+      'which a wrapped query cannot be. Filter it at the step that made the reference, or build ' +
+      'that step with "Build a query" instead of SQL and this filter is pushed down into it.',
+    nodeData: { code: 'cloud-reference-filter' },
+  };
+}
+
 /** The park signal a 'park'-mode cloud dispatch returns via nodeAction. */
 export const CLOUD_PARK_ACTION = { type: 'cloud', action: 'park' } as const;
 
@@ -149,9 +192,10 @@ export class CapabilityResolver implements NodeExecPort {
       return this.options.local.execute(ctx);
     }
     // Cloud is chosen: the step's own connection has to be one the cloud can
-    // read, or nothing runs at all. Never a quiet fall back to local either -
-    // the run would then read the right rows while the choice was ignored.
-    const refusal = foreignConnectionRefusal(ctx.nodeRef);
+    // read, and anything it asks for has to be something the cloud can honour,
+    // or nothing runs at all. Never a quiet fall back to local either - the run
+    // would then read the right rows while the choice was ignored.
+    const refusal = foreignConnectionRefusal(ctx.nodeRef) ?? unfilterableReferenceRefusal(ctx.nodeRef);
     if (refusal) return refusal;
     try {
       return await this.runCloud(entry as Required<CapabilityEntry>, ctx);

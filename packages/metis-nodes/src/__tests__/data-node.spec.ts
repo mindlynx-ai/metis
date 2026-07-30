@@ -175,3 +175,146 @@ describe('filtering a dataset handle pushes down instead of pulling back', () =>
     expect(result.status).toBe(400);
   });
 });
+
+describe('a builder-authored reference travels as ingredients, not as SQL', () => {
+  const BUILT = { connectorId: 'conn1', engine: 'postgres', operation: 'select', output: 'reference' };
+
+  it('emits the spec form (table + narrowing) for a visually built step', async () => {
+    const { handler, seen } = build();
+    const result = await handler(
+      nodeCtx('data', {
+        ...BUILT,
+        tables: [{ name: 'orders', columns: [{ name: 'id' }] }],
+        where: [{ column: 'status', operator: '=', value: 'paid' }],
+        limit: 100,
+      }),
+    );
+    expect(result.status).toBe(200);
+    expect(nodeOutput(result)).toEqual({
+      dataset: {
+        kind: 'dataset',
+        connectionId: 'conn1',
+        engine: 'postgres',
+        table: 'orders',
+        narrow: {
+          columns: [{ name: 'id' }],
+          where: [{ column: 'status', operator: '=', value: 'paid' }],
+          limit: 100,
+        },
+      },
+    });
+    expect(seen.sql).toBeUndefined();
+  });
+
+  it('leaves `narrow` off entirely when the step reads the whole table', async () => {
+    const { handler } = build();
+    const result = await handler(nodeCtx('data', { ...BUILT, tables: [{ name: 'orders' }] }));
+    expect(nodeOutput(result)).toEqual({
+      dataset: { kind: 'dataset', connectionId: 'conn1', engine: 'postgres', table: 'orders' },
+    });
+  });
+
+  it('keeps the raw form for hand-written SQL, because the query is all we know', async () => {
+    const { handler } = build();
+    const result = await handler(
+      nodeCtx('data', { connectorId: 'conn1', engine: 'postgres', query: 'select * from orders o join returns r on 1=1', output: 'reference' }),
+    );
+    expect(nodeOutput(result)).toMatchObject({
+      dataset: { query: 'select * from orders o join returns r on 1=1' },
+    });
+    expect((nodeOutput(result) as { dataset: { table?: string } }).dataset.table).toBeUndefined();
+  });
+
+  it('keeps the raw form when the step names a schema, which `table` cannot carry', async () => {
+    // A spec handle would resolve to public.orders instead: a different table,
+    // and no error to say so.
+    const { handler } = build();
+    const result = await handler(
+      nodeCtx('data', { ...BUILT, schema: 'analytics', tables: [{ name: 'orders' }] }),
+    );
+    expect(nodeOutput(result)).toMatchObject({
+      dataset: { query: 'SELECT * FROM "analytics"."orders"' },
+    });
+  });
+});
+
+describe('opening a spec handle composes ONE flat statement', () => {
+  const SPEC = {
+    kind: 'dataset',
+    connectionId: 'conn1',
+    engine: 'postgres',
+    table: 'gold_orders',
+    narrow: { where: [{ column: 'status', operator: '=', value: 'paid' }], limit: 100 },
+  };
+  const run = async (config: Record<string, unknown>, ref: unknown = SPEC) => {
+    const { handler, seen } = build();
+    const result = await handler(nodeCtx('data', { connectorId: 'conn1', sourceRef: ref, ...config }));
+    return { result, seen };
+  };
+
+  it('opens the handle from its ingredients when the step narrows nothing', async () => {
+    const { result, seen } = await run({});
+    expect(result.status).toBe(200);
+    expect(seen.sql).toBe(
+      'SELECT * FROM "public"."gold_orders" WHERE "gold_orders"."status" = $1 LIMIT 100',
+    );
+    expect(seen.params).toEqual(['paid']);
+  });
+
+  it('never wraps: a narrowed spec handle has no subquery in it at all', async () => {
+    const { seen } = await run({
+      tables: [{ name: 'ignored', columns: [{ name: 'id' }, { name: 'total' }] }],
+      where: [{ column: 'total', operator: '>', value: 500 }],
+    });
+    // The whole point: an engine that must prove a query reads one account only
+    // refuses any derived table, so this shape has to stay flat.
+    expect(String(seen.sql)).not.toContain('(SELECT');
+    expect(String(seen.sql)).not.toContain('(select');
+    expect(seen.sql).toBe(
+      'SELECT "gold_orders"."id", "gold_orders"."total" FROM "public"."gold_orders" ' +
+        'WHERE "gold_orders"."status" = $1 AND "gold_orders"."total" > $2 LIMIT 100',
+    );
+  });
+
+  it('keeps both sets of predicates with their values still bound in reading order', async () => {
+    const { seen } = await run({ where: [{ column: 'region', operator: '=', value: 'eu' }] });
+    expect(seen.params).toEqual(['paid', 'eu']);
+  });
+
+  it('takes the tighter cap and the step\'s own order', async () => {
+    const { seen } = await run({ limit: 10, orderBy: [{ column: 'total', direction: 'descending' }] });
+    expect(seen.sql).toBe(
+      'SELECT * FROM "public"."gold_orders" WHERE "gold_orders"."status" = $1 ' +
+        'ORDER BY "gold_orders"."total" DESC LIMIT 10',
+    );
+  });
+
+  it('opens a spec handle that narrows nothing of its own', async () => {
+    const { seen } = await run({}, { kind: 'dataset', connectionId: 'conn1', engine: 'postgres', table: 'gold_orders' });
+    expect(seen.sql).toBe('SELECT * FROM "public"."gold_orders"');
+  });
+
+  it('refuses a handle that names no connection rather than borrowing the step\'s own', async () => {
+    // A cloud step's handle names no connection (the account supplies the
+    // warehouse). Falling back to conn1 would run the warehouse's table name
+    // against the user's own database: different rows, status 200.
+    const { result, seen } = await run({}, { ...SPEC, connectionId: '' });
+    expect(result.status).toBe(400);
+    expect(result.message).toMatch(/ran in the cloud/i);
+    expect(seen.sql).toBeUndefined();
+  });
+
+  it('still refuses to write through a handle', async () => {
+    const { result, seen } = await run({ operation: 'delete', where: [{ column: 'id', operator: '=', value: 1 }] });
+    expect(result.status).toBe(400);
+    expect(result.message).toMatch(/only be read from/i);
+    expect(seen.sql).toBeUndefined();
+  });
+
+  it('still refuses hand-written SQL alongside a handle', async () => {
+    const { result, seen } = await run({ query: 'select * from gold_orders' });
+    expect(result.status).toBe(400);
+    expect(result.message).toMatch(/cannot also run/i);
+    expect(seen.sql).toBeUndefined();
+  });
+});

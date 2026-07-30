@@ -193,6 +193,67 @@ describe('a cloud bind never silently swaps the data source', () => {
   });
 });
 
+describe('a cloud bind never quietly drops a filter it cannot honour', () => {
+  // A handle the cloud itself produced from hand-written SQL: no connection to
+  // name, so the foreign-connection rule has nothing to say about it.
+  const RAW = { kind: 'dataset', connectionId: '', engine: CLOUD_DATA_ENGINE, query: 'select * from gold_orders' };
+  const SPEC = { kind: 'dataset', connectionId: '', engine: CLOUD_DATA_ENGINE, table: 'gold_orders' };
+  const FILTER = [{ column: 'status', operator: '=', value: 'paid' }];
+
+  it.each([
+    ['a where clause', { where: FILTER }],
+    ['a cap', { limit: 10 }],
+    ['an order', { orderBy: [{ column: 'total', direction: 'descending' }] }],
+    ['a column list', { tables: [{ name: 'ignored', columns: [{ name: 'id' }] }] }],
+  ])('refuses %s over a hand-written reference, and dispatches nothing', async (_name, narrowing) => {
+    const stub = await stubbed();
+    const result = await resolverFor(stub).execute(
+      contextFor({ ...CONSENTED, nodeMode: 'cloud' }, { sourceRef: RAW, ...narrowing }),
+    );
+    expect(result.status).toBe(400);
+    // Actionable from the run log alone: it says which step to change and how.
+    expect(result.message).toContain('hand-written query');
+    expect(result.message).toContain('Build a query');
+    expect(result.nodeData).toMatchObject({ code: 'cloud-reference-filter' });
+    expect(stub.requests['/v1/capabilities/data/invoke']).toBeUndefined();
+  });
+
+  it('allows OPENING a hand-written reference: a flat query needs no wrapping', async () => {
+    const stub = await stubbed();
+    const result = await resolverFor(stub).execute(contextFor({ ...CONSENTED, nodeMode: 'cloud' }, { sourceRef: RAW }));
+    expect(result.status).toBe(200);
+    expect(result.binding).toBe('cloud');
+  });
+
+  it('allows filtering a spec reference, which composes flat instead of wrapping', async () => {
+    const stub = await stubbed();
+    const result = await resolverFor(stub).execute(
+      contextFor({ ...CONSENTED, nodeMode: 'cloud' }, { sourceRef: SPEC, where: FILTER }),
+    );
+    expect(result.status).toBe(200);
+    expect(result.binding).toBe('cloud');
+  });
+
+  it('reads a handle templated in as JSON text, exactly as the node does', async () => {
+    const stub = await stubbed();
+    const result = await resolverFor(stub).execute(
+      contextFor({ ...CONSENTED, nodeMode: 'cloud' }, { sourceRef: JSON.stringify(RAW), where: FILTER }),
+    );
+    expect(result.status).toBe(400);
+    expect(result.nodeData).toMatchObject({ code: 'cloud-reference-filter' });
+  });
+
+  it('leaves a LOCAL bind alone: wrapping the query works perfectly well here', async () => {
+    const stub = await stubbed();
+    const result = await resolverFor(stub).execute(
+      contextFor({ ...CONSENTED, nodeMode: 'local' }, { sourceRef: RAW, where: FILTER }),
+    );
+    expect(result.status).toBe(200);
+    expect(result.message).toBe('ran locally');
+    expect(result.binding).toBeUndefined();
+  });
+});
+
 describe('degraded bind (UPL-REQ-10)', () => {
   it.each([
     ['gateway unreachable', async () => ({ url: 'http://127.0.0.1:1' })],

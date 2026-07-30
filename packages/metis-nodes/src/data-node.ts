@@ -24,14 +24,16 @@
  */
 import {
   asDatasetRef,
+  narrowsHandle,
   stateEnvelope,
   type CredentialPort,
+  type DatasetNarrow,
   type DatasetRef,
   type DataSourceRegistry,
   type NodeHandler,
   type QueryResult,
 } from '@mindlynx/metis-ports';
-import { buildQuery, dialectFor, type PgBuilderConfig } from './postgres-query.js';
+import { buildQuery, dialectFor, type BuiltQuery, type PgBuilderConfig } from './postgres-query.js';
 
 interface DataNodeConfig extends PgBuilderConfig {
   /** The chosen connection instance id (material is resolved from this). */
@@ -68,24 +70,62 @@ type SqlPlan = { sql: string; params: unknown[] } | { error: { status: number; m
 /** What a step handed a handle addresses the upstream rows by. */
 const SOURCE_ALIAS = 'source';
 
-/** True when the step asks for anything narrower than the whole handle. */
-function narrows(config: DataNodeConfig): boolean {
-  return Boolean(
-    (config.where && config.where.length > 0) ||
-      (config.orderBy && config.orderBy.length > 0) ||
-      (typeof config.limit === 'number' && config.limit > 0) ||
-      ((config.tables ?? [])[0]?.columns ?? []).length > 0,
-  );
+/** Run the builder, turning its "this config cannot mean one thing" throw into
+ *  the 400 the step reports. */
+function compose(build: () => BuiltQuery): SqlPlan {
+  try {
+    const built = build();
+    return { sql: built.query, params: built.params };
+  } catch (error) {
+    return { error: { status: 400, message: error instanceof Error ? error.message : String(error) } };
+  }
+}
+
+/**
+ * The handle's narrowing plus this step's, as one builder config. The narrower of
+ * the two wins throughout, because a step opening a handle can only ever ask for
+ * LESS than the handle already describes:
+ *
+ * - columns: the step's list REPLACES the handle's (a union would return more
+ *   than the step asked for, which is not narrowing).
+ * - where: both, ANDed, the handle's first so params bind in reading order.
+ * - orderBy: the step's replaces the handle's - it is the outer sort.
+ * - limit: the tighter of the two.
+ *
+ * One deliberate difference from the derived-table path: a flat statement filters
+ * the table and then caps, where a wrapped query would have capped first and
+ * filtered those rows. A flat SELECT cannot express "the first N rows, then
+ * filtered", and a flat SELECT is the only shape a tenant-scoping engine accepts,
+ * so the merged reading is "the filtered rows, capped at N".
+ */
+function mergedSpec(ref: DatasetRef, config: DataNodeConfig): PgBuilderConfig {
+  const narrow = ref.narrow ?? {};
+  const stepColumns = (config.tables ?? [])[0]?.columns;
+  const caps = [narrow.limit, config.limit].filter((cap): cap is number => typeof cap === 'number' && cap > 0);
+  const stepOrder = config.orderBy && config.orderBy.length > 0 ? config.orderBy : undefined;
+  return {
+    operation: 'select',
+    tables: [{ name: String(ref.table), columns: stepColumns ?? narrow.columns }],
+    where: [...(narrow.where ?? []), ...(config.where ?? [])],
+    orderBy: stepOrder ?? narrow.orderBy,
+    limit: caps.length > 0 ? Math.min(...caps) : undefined,
+  };
 }
 
 /**
  * Reading a dataset handle, optionally narrowed. Search and filter push DOWN
- * into the upstream query rather than pulling every row back to compare here:
- * the point of a handle is that the rows never had to travel.
+ * into the source rather than pulling every row back to compare here: the point
+ * of a handle is that the rows never had to travel.
+ *
+ * Which shape that push-down takes is the handle's form (see DatasetRef). A SPEC
+ * handle composes ONE flat statement from the merged ingredients - never a
+ * derived table, because the same handle has to be readable by an engine that
+ * refuses subqueries outright to keep every query provably account-scoped. A RAW
+ * handle has only its SQL, so narrowing it means wrapping it, which works here
+ * and is refused before a cloud dispatch rather than silently unfiltered.
  */
 function resolveFromHandle(ref: DatasetRef, config: DataNodeConfig, engine: string): SqlPlan {
-  if (!ref.query) return { error: { status: 400, message: 'the dataset reference has no query to run' } };
-  // Checked before anything else, because both paths below would swallow it:
+  // Checked before anything else, because every path below would swallow it:
   // defaulting the operation to select turns a delete into a read, and a write
   // with no filter looks like "narrows nothing" and just opens the handle.
   if (WRITE_OPS.has((config.operation ?? '').toLowerCase())) {
@@ -107,16 +147,60 @@ function resolveFromHandle(ref: DatasetRef, config: DataNodeConfig, engine: stri
       },
     };
   }
-  if (!narrows(config)) return { sql: ref.query, params: [] };
-  try {
-    const built = buildQuery({ ...config, operation: config.operation ?? 'select' }, dialectFor(engine), {
-      sql: ref.query,
+  if (ref.table) return compose(() => buildQuery(mergedSpec(ref, config), dialectFor(engine)));
+  const upstream = ref.query;
+  if (!upstream) return { error: { status: 400, message: 'the dataset reference has no query to run' } };
+  if (!narrowsHandle(config)) return { sql: upstream, params: [] };
+  return compose(() =>
+    buildQuery({ ...config, operation: config.operation ?? 'select' }, dialectFor(engine), {
+      sql: upstream,
       alias: SOURCE_ALIAS,
-    });
-    return { sql: built.query, params: built.params };
-  } catch (error) {
-    return { error: { status: 400, message: error instanceof Error ? error.message : String(error) } };
-  }
+    }),
+  );
+}
+
+/** The step's own narrowing, as a handle carries it. Undefined when the step asks
+ *  for the whole table, because an absent `narrow` is what "no narrowing" means. */
+function narrowFor(config: DataNodeConfig): DatasetNarrow | undefined {
+  if (!narrowsHandle(config)) return undefined;
+  const columns = (config.tables ?? [])[0]?.columns;
+  return {
+    ...(columns && columns.length > 0 ? { columns } : {}),
+    ...(config.where && config.where.length > 0 ? { where: config.where } : {}),
+    ...(config.orderBy && config.orderBy.length > 0 ? { orderBy: config.orderBy } : {}),
+    ...(typeof config.limit === 'number' && config.limit > 0 ? { limit: config.limit } : {}),
+  };
+}
+
+/**
+ * The handle to hand on, in whichever of the two forms is honest about what this
+ * step actually knows (see DatasetRef for the forms).
+ *
+ * SPEC whenever the step was authored with the visual builder: the ingredients,
+ * not the SQL. Only that form can be narrowed by a later step everywhere, because
+ * narrowing SQL means wrapping it, and an engine that has to prove every query is
+ * account-scoped refuses a subquery outright.
+ *
+ * RAW for hand-written SQL, because the query IS all we know about it.
+ *
+ * A qualified name keeps it RAW as well: `table` carries no database or schema,
+ * so a spec handle for a step naming either would resolve to the default schema's
+ * table of that name - a different table, no error. The composed SQL already has
+ * the qualified name in it, so the raw form loses nothing but the filtering.
+ */
+function datasetFor(connectionId: string, engine: string, config: DataNodeConfig, sql: string): DatasetRef {
+  const tables = config.tables ?? [];
+  const table = tables[0]?.name;
+  const authoredVisually =
+    Boolean(config.operation) &&
+    tables.length === 1 &&
+    table !== undefined &&
+    (config.query ?? '').trim() === '' &&
+    config.database === undefined &&
+    config.schema === undefined;
+  if (!authoredVisually) return { kind: 'dataset', connectionId, engine, query: sql };
+  const narrow = narrowFor(config);
+  return { kind: 'dataset', connectionId, engine, table, ...(narrow ? { narrow } : {}) };
 }
 
 /**
@@ -155,7 +239,24 @@ export function createDataNodeHandler(
     const ref = asDatasetRef(config.sourceRef);
 
     const connectionId = String(ref?.connectionId ?? config.connectorId ?? config.connectionId ?? '');
-    if (!connectionId) return { status: 400, message: 'the data step needs a connection' };
+    if (!connectionId) {
+      // A handle naming no connection came from a step that ran in the cloud,
+      // where the account supplies the warehouse and there is nothing to name.
+      // It deliberately does NOT fall back to this step's own connection: the
+      // warehouse's table name run against the user's own database would read a
+      // different table and never say so.
+      if (ref) {
+        return {
+          status: 400,
+          message:
+            'this dataset reference came from a step that ran in the cloud, so it carries no ' +
+            'connection to open it with, and this step\'s own connection is a different data ' +
+            'source. Set "Where it runs" on this step to the cloud as well.',
+          nodeData: { code: 'reference-connection' },
+        };
+      }
+      return { status: 400, message: 'the data step needs a connection' };
+    }
 
     // A node named after an engine IS that engine, exactly as a connector
     // node's type names its connector. The generic `data`/`sql` types carry no
@@ -182,7 +283,10 @@ export function createDataNodeHandler(
       if (WRITE_OPS.has((config.operation ?? '').toLowerCase())) {
         return { status: 400, message: 'a dataset reference can only be made for a read (select) query' };
       }
-      const dataset: DatasetRef = { kind: 'dataset', connectionId, engine, query: sql };
+      // The SQL above is composed even for a spec handle, and then thrown away:
+      // it is how a builder config that cannot mean one thing still fails here,
+      // at the step that wrote it, rather than at whichever step opens it later.
+      const dataset = datasetFor(connectionId, engine, config, sql);
       return {
         status: 200,
         message: 'ok',

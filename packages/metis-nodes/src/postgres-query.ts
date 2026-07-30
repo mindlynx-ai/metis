@@ -28,6 +28,7 @@
  * A dialect supplies the quote character, the placeholder style and the default
  * schema. Hand-written SQL is never rewritten - that stays the author's dialect.
  */
+import type { NarrowColumn, NarrowOrderBy, NarrowWhere } from '@mindlynx/metis-ports';
 
 /** What differs between engines in generated SQL. */
 export interface SqlDialect {
@@ -82,27 +83,23 @@ export function dialectFor(engine: string): SqlDialect {
   return DIALECTS[engine] ?? POSTGRES_DIALECT;
 }
 
-export interface PgColumn {
-  name: string;
-  alias?: string;
+/**
+ * The narrowing half of the builder's vocabulary is the dataset handle's, not a
+ * copy of it: a handle carries a step's own where/orderBy/columns arrays onward,
+ * and two structurally identical declarations would eventually stop being
+ * identical. A column adds `value` here, which only a write uses and a handle
+ * therefore has no business carrying.
+ */
+export interface PgColumn extends NarrowColumn {
   value?: unknown;
 }
+export type PgWhere = NarrowWhere;
+export type PgOrderBy = NarrowOrderBy;
 export interface PgTable {
   name: string;
   alias?: string;
   columns?: PgColumn[];
   values?: Record<string, unknown>;
-}
-export interface PgWhere {
-  table?: string;
-  column: string;
-  operator: string;
-  value: unknown;
-}
-export interface PgOrderBy {
-  table?: string;
-  column: string;
-  direction?: 'ascending' | 'descending';
 }
 export interface PgBuilderConfig {
   database?: string;

@@ -155,6 +155,23 @@ describe('capability gateway client', () => {
     expect((error as Error).message).toBe(refusal);
   });
 
+  it('does not outlive its own ceiling while the bearer resolve hangs', async () => {
+    // The bearer used to be awaited BEFORE the fetch, outside the
+    // AbortSignal.timeout the client applies, and resolving one can itself
+    // reach the identity server. So a hung identity server hung every gateway
+    // call for ever, despite the ceiling the code appeared to have.
+    stub = await startHelixStub();
+    const client = new CapabilityGatewayClient({
+      baseUrl: stub.url,
+      getBearer: () => new Promise<string>(() => undefined),
+      timeoutMs: 200,
+    });
+    const started = Date.now();
+    const error = await client.invoke('data', {}).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(GatewayUnreachableError);
+    expect(Date.now() - started).toBeLessThan(2_000);
+  });
+
   it('propagates cancel to the job', async () => {
     stub = await startHelixStub({ jobDelayMs: 60_000 });
     const client = gateway(stub.url, stub.issueToken());

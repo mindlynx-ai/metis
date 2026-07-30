@@ -163,6 +163,15 @@ function extractItems(data: unknown, itemsPath?: string): unknown[] {
 
 const OUTBOUND_TIMEOUT_MS = 10_000;
 
+/**
+ * Ceiling on the Temporal dev-server download. Deliberately generous, because
+ * this is tens of megabytes and the ceiling is here to end a stalled CDN, not to
+ * police a slow line. Without it `metis up` hung at boot with no progress and
+ * nothing to read, which is the worst place in the product to hang: it is the
+ * first thing a new person runs.
+ */
+const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+
 /** POST an outbound webhook to an operator-registered URL, with a timeout. */
 async function httpDeliver(
   url: string,
@@ -258,7 +267,9 @@ export class MetisRuntime {
       fetchArchive:
         downloadDeps?.fetchArchive ??
         (async (url) => {
-          const response = await fetch(url);
+          const response = await fetch(url, {
+            signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
+          });
           if (!response.ok) throw new Error(`download failed (${response.status})`);
           return new Uint8Array(await response.arrayBuffer());
         }),

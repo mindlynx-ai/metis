@@ -127,7 +127,21 @@ export interface S3RequestOptions {
   contentType?: string;
   /** Fixed in tests so a signed request is reproducible. */
   date?: Date;
+  /** Overrides S3_TIMEOUT_MS, for a caller that knows its object is slower. */
+  timeoutMs?: number;
 }
+
+/**
+ * Ceiling on one S3 request, body included, because the signal covers the
+ * stream and not just the connect.
+ *
+ * Chosen to sit UNDER the engine's two-minute activity budget: a request that
+ * outlived that was going to be killed by Temporal anyway, and being killed
+ * there means the activity is retried and the PUT happens again, while failing
+ * here is one clean error the run can show. Generous for what the node moves:
+ * it caps a transfer at 25 MB and a listing at 1000 keys.
+ */
+const S3_TIMEOUT_MS = 90_000;
 
 /** Sign and send one S3 request. The response is returned unread: a caller
  *  that wants bytes decides its own ceiling before it takes any. */
@@ -152,6 +166,7 @@ export async function s3Request(target: S3Target, options: S3RequestOptions): Pr
     method: options.method,
     headers,
     body: options.body ? Buffer.from(options.body) : undefined,
+    signal: AbortSignal.timeout(options.timeoutMs ?? S3_TIMEOUT_MS),
   });
 }
 

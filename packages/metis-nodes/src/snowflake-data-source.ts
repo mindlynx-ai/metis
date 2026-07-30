@@ -48,6 +48,18 @@ const TOKEN_SKEW_SECONDS = 60;
 /** How long to keep collecting an asynchronous statement before giving up. */
 const POLL_TIMEOUT_MS = 90_000;
 const POLL_INTERVAL_MS = 1_000;
+/**
+ * Ceiling on the statement request itself. The body asks the warehouse for 60
+ * seconds, and a statement that outruns that comes back as a 202 to collect
+ * rather than a stall, so this only has to cover that window plus the round
+ * trip. It exists because a connection that opens and then says nothing had no
+ * ceiling at all: the step held its activity to the two-minute budget, and was
+ * then retried, which for a write statement means running it again.
+ */
+const STATEMENT_TIMEOUT_MS = 75_000;
+/** Ceiling on one collect poll. It reads a status, so it is quick or it is
+ *  broken, and the loop above it already gives up at POLL_TIMEOUT_MS. */
+const POLL_REQUEST_TIMEOUT_MS = 30_000;
 
 interface CachedToken {
   token: string;
@@ -194,6 +206,7 @@ export class SnowflakeDataSource implements DataSource {
         'user-agent': 'metis',
       },
       body: init.body === undefined ? undefined : JSON.stringify(init.body),
+      signal: AbortSignal.timeout(STATEMENT_TIMEOUT_MS),
     });
     const text = await res.text();
     let parsed: StatementResponse = {};
@@ -232,6 +245,7 @@ export class SnowflakeDataSource implements DataSource {
             accept: 'application/json',
             'user-agent': 'metis',
           },
+          signal: AbortSignal.timeout(POLL_REQUEST_TIMEOUT_MS),
         },
       );
       if (res.status === 202) continue;

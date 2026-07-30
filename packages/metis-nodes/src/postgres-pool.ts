@@ -23,6 +23,25 @@ import pg from 'pg';
 
 const pools = new Map<string, pg.Pool>();
 
+/**
+ * How long a caller may wait for a client. pg's own default is 0, which means
+ * WAIT FOR EVER, and it covers queueing as well as connecting: with five
+ * clients in the pool, a sixth parallel branch waited indefinitely and reported
+ * nothing at all. Ten seconds is longer than a healthy connect and shorter than
+ * anybody's patience.
+ */
+const CONNECT_TIMEOUT_MS = 10_000;
+
+/**
+ * Server-side ceiling on one statement, which pg passes to Postgres as
+ * statement_timeout. Under the engine's two-minute activity budget on purpose:
+ * a query that outran that was killed by Temporal instead, which retries the
+ * activity and runs the query again, so an accidental full table scan became a
+ * repeating one. Here it comes back as an error naming the timeout, and the
+ * connection is not left holding a query nobody is waiting for.
+ */
+const STATEMENT_TIMEOUT_MS = 90_000;
+
 export async function closePostgresPools(): Promise<void> {
   await Promise.all([...pools.values()].map((pool) => pool.end()));
   pools.clear();
@@ -40,7 +59,13 @@ export function poolFor(key: string, material: Record<string, string>): pg.Pool 
         user: material.user,
         password: material.password,
       };
-  const pool = new pg.Pool({ ...options, max: 5, idleTimeoutMillis: 5 * 60 * 1000 });
+  const pool = new pg.Pool({
+    ...options,
+    max: 5,
+    idleTimeoutMillis: 5 * 60 * 1000,
+    connectionTimeoutMillis: CONNECT_TIMEOUT_MS,
+    statement_timeout: STATEMENT_TIMEOUT_MS,
+  });
   pools.set(key, pool);
   return pool;
 }

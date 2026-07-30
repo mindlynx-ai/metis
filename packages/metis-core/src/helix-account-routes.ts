@@ -181,6 +181,14 @@ interface TokenResponse {
   id_token?: string;
 }
 
+/**
+ * Ceiling on the code exchange. Somebody is sitting on a redirect back from the
+ * identity server waiting for this, so a long wait is no better to them than a
+ * clean failure they can retry; and this runs inside an inbound request, which
+ * had nothing bounding it at all.
+ */
+const EXCHANGE_TIMEOUT_MS = 10_000;
+
 /** Swap the code at the DISCOVERED token endpoint; undefined = failed. */
 async function exchangeCode(
   deps: UpliftDeps,
@@ -199,6 +207,7 @@ async function exchangeCode(
         client_id: clientIdFor(deps),
         code_verifier: verifier,
       }).toString(),
+      signal: AbortSignal.timeout(EXCHANGE_TIMEOUT_MS),
     });
     if (!response.ok) return undefined;
     return (await response.json()) as TokenResponse;

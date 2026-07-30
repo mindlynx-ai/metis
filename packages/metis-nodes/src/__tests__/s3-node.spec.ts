@@ -27,6 +27,7 @@ import { createServer, type IncomingMessage, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { FakeCredentialPort, nodeCtx, nodeOutput } from '@mindlynx/metis-ports';
 import { createS3NodeHandler } from '../s3-node.js';
+import { resolveTarget, s3Request, type S3Target } from '../s3-client.js';
 
 const SECRET = 'stub-secret-access-key';
 const BUCKET = 'metis-sample';
@@ -379,5 +380,32 @@ describe('the guards around a connection', () => {
     const result = await run({ operation: 'delete', key: 'k' });
     expect(result.status).toBe(400);
     expect(result.message).toMatch(/unknown object store operation/);
+  });
+});
+
+describe('the wire ceiling', () => {
+  it('gives up on a store that accepts the connection and then says nothing', async () => {
+    // Stands for the whole class the review found: an outbound call with no
+    // timeout does not fail, it holds the activity to Temporal's budget and is
+    // then retried, which for a PUT means storing the object again. The ceiling
+    // is passed to fetch as a signal, so it covers the body and not just the
+    // connect; the value is overridable here purely so the proof is fast.
+    const sockets: import('node:net').Socket[] = [];
+    const stalling = createServer((req) => {
+      sockets.push(req.socket);
+    });
+    await new Promise<void>((resolve) => stalling.listen(0, '127.0.0.1', resolve));
+    const target = resolveTarget({
+      accessKeyId: 'AKIDEXAMPLE',
+      secretAccessKey: SECRET,
+      region: 'eu-west-1',
+      bucket: BUCKET,
+      endpoint: `http://127.0.0.1:${(stalling.address() as AddressInfo).port}`,
+    }) as S3Target;
+    await expect(
+      s3Request(target, { method: 'GET', key: 'notes/order.json', timeoutMs: 150 }),
+    ).rejects.toThrow(/abort|timeout|timed out/i);
+    for (const socket of sockets) socket.destroy();
+    stalling.close();
   });
 });

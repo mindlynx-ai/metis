@@ -42,6 +42,16 @@ export interface OidcDiscoveryDocument {
 const discoveryCache = new Map<string, Promise<OidcDiscoveryDocument>>();
 
 /**
+ * Ceiling on the two calls to the identity server (discovery, and the refresh
+ * exchange). Both are small round trips to a service that either answers
+ * promptly or is not answering, and both sit under something a person is
+ * waiting on: a browser mid-redirect, or a bearer the gateway needs before it
+ * can make its own call. Ten seconds is the same ceiling the gateway gives
+ * itself, deliberately, because a hung identity server used to be indefinite.
+ */
+const IDENTITY_TIMEOUT_MS = 10_000;
+
+/**
  * Fetch (once per issuer, cached) the OIDC discovery document. Endpoints
  * must ALWAYS come from here - real Keycloak lives under
  * /realms/<realm>/protocol/openid-connect/*, so paths are never assumed.
@@ -50,7 +60,9 @@ export function discoverOidc(identityUrl: string): Promise<OidcDiscoveryDocument
   const cached = discoveryCache.get(identityUrl);
   if (cached) return cached;
   const pending = (async () => {
-    const response = await fetch(`${identityUrl}/.well-known/openid-configuration`);
+    const response = await fetch(`${identityUrl}/.well-known/openid-configuration`, {
+      signal: AbortSignal.timeout(IDENTITY_TIMEOUT_MS),
+    });
     if (!response.ok) throw new Error(`discovery responded ${response.status}`);
     return (await response.json()) as OidcDiscoveryDocument;
   })();
@@ -113,6 +125,7 @@ export function helixAccountBearer(
           refresh_token: refreshToken,
           client_id: bearerOptions.clientId ?? 'metis',
         }).toString(),
+        signal: AbortSignal.timeout(IDENTITY_TIMEOUT_MS),
       });
     } catch {
       return undefined; // transient: keep the connection, fail closed for now
@@ -295,6 +308,39 @@ interface BearerOptions {
   timeoutMs?: number;
 }
 
+/** Every call this file makes to the cloud, bearer resolution included. */
+const CLOUD_TIMEOUT_MS = 10_000;
+
+/**
+ * Resolve the bearer INSIDE a deadline.
+ *
+ * Both clients used to await getBearer before the fetch, OUTSIDE the
+ * AbortSignal.timeout they otherwise apply, and resolving a bearer can itself
+ * reach the identity server (it rotates a near-expiry token). So a hung
+ * identity server hung every gateway call and every entitlements read
+ * indefinitely, despite the ceiling this file appears to have everywhere.
+ *
+ * The bound is per phase rather than one budget for the whole call, so a slow
+ * pair costs two ceilings. Two ceilings is a number; the previous behaviour was
+ * not. It fails as unreachable, which is what both callers already handle: the
+ * capability resolver degrades to the local backend, and the entitlements cache
+ * falls closed to the empty set.
+ */
+async function bearerWithin(
+  options: BearerOptions,
+  forceRefresh?: boolean,
+): Promise<string | undefined> {
+  const deadline = AbortSignal.timeout(options.timeoutMs ?? CLOUD_TIMEOUT_MS);
+  return await Promise.race([
+    options.getBearer(forceRefresh),
+    new Promise<never>((_resolve, reject) => {
+      deadline.addEventListener('abort', () =>
+        reject(new GatewayUnreachableError(new Error('resolving the cloud bearer timed out'))),
+      );
+    }),
+  ]);
+}
+
 /**
  * The capability gateway client (spec section 4.4): invoke returns an
  * accepted job handle; job() polls it to terminal; cancel() is best-effort.
@@ -332,7 +378,7 @@ export class CapabilityGatewayClient {
           ...(init?.body ? { 'content-type': 'application/json' } : {}),
           ...(bearer ? { authorization: `Bearer ${bearer}` } : {}),
         },
-        signal: AbortSignal.timeout(this.options.timeoutMs ?? 10_000),
+        signal: AbortSignal.timeout(this.options.timeoutMs ?? CLOUD_TIMEOUT_MS),
       });
     } catch (error) {
       throw new GatewayUnreachableError(error);
@@ -340,12 +386,12 @@ export class CapabilityGatewayClient {
   }
 
   private async request(path: string, init?: { method?: string; body?: string }): Promise<Response> {
-    const bearer = await this.options.getBearer();
+    const bearer = await bearerWithin(this.options);
     let response = await this.attempt(path, init, bearer);
     // 401 with a bearer attached: force ONE refresh and retry once. A 403
     // is an entitlement gap a refresh cannot fix, so it never retries.
     if (response.status === 401 && bearer) {
-      const refreshed = await this.options.getBearer(true);
+      const refreshed = await bearerWithin(this.options, true);
       if (refreshed) response = await this.attempt(path, init, refreshed);
     }
     const contract = response.headers.get('x-helix-contract');
@@ -431,7 +477,7 @@ export class CloudEntitlementsClient {
     const ttl = this.options.ttlMs ?? 60_000;
     if (this.cache && Date.now() - this.cache.at < ttl) return this.cache;
     try {
-      const bearer = await this.options.getBearer();
+      const bearer = await bearerWithin(this.options);
       if (!bearer) {
         this.cache = { at: Date.now(), capabilities: new Set() };
         return this.cache;
@@ -440,7 +486,7 @@ export class CloudEntitlementsClient {
       // 401 with a bearer attached: force ONE refresh, retry once, then
       // fall through to the fail-closed catch as today.
       if (response.status === 401) {
-        const refreshed = await this.options.getBearer(true);
+        const refreshed = await bearerWithin(this.options, true);
         if (refreshed) response = await this.fetchEntitlements(refreshed);
       }
       if (!response.ok) throw new Error(`entitlements responded ${response.status}`);

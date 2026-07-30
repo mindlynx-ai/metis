@@ -83,7 +83,11 @@ export async function registerWebhookRoute(
       );
       return reply
         .code(result.status)
-        .send(result.executionId ? { executionId: result.executionId } : { error: result.error });
+        .send(
+          result.executionId
+            ? { executionId: result.executionId, ...(result.duplicate ? { duplicate: true } : {}) }
+            : { error: result.error },
+        );
     });
   });
 }

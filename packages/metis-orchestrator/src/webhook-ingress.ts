@@ -152,7 +152,25 @@ export interface WebhookArgs {
 export interface WebhookResult {
   status: 202 | 400 | 401 | 404;
   executionId?: string;
+  /** The delivery had already been run under this id; nothing new was started. */
+  duplicate?: boolean;
   error?: string;
+}
+
+/**
+ * The execution id for a delivery that carries an id of its own. Stable, so a
+ * sender retrying the same delivery lands on the same Temporal workflow id and
+ * is refused instead of running the graph a second time: GitHub, Stripe and
+ * Resend all retry a delivery whose response was slow or non-2xx, and this
+ * handler answers only after start() has round-tripped to Temporal, which on a
+ * cold worker is easily past the sender's timeout.
+ *
+ * Namespaced by trigger (senders do not coordinate ids across endpoints) and
+ * restricted to characters that are safe in both a Temporal workflow id and a
+ * store sort key. The length cap is well inside Temporal's own limit.
+ */
+export function deliveryExecutionId(triggerId: string, deliveryId: string): string {
+  return `hook_${triggerId}_${deliveryId.replace(/[^\w.-]/g, '_').slice(0, 128)}`;
 }
 
 /** Resolve, verify, normalise and start. Returns a status the route mirrors. */
@@ -176,14 +194,25 @@ export async function handleWebhook(deps: WebhookDeps, args: WebhookArgs): Promi
   if (!published) {
     return { status: 404, error: `workflow "${trigger.workflowId}" has no published version` };
   }
-  const executionId = deps.newExecutionId();
-  await deps.executions.start({
+  const envelope = normaliseEnvelope(trigger, args.headers, body, deps.now());
+  // A sender that identifies its delivery gets at-most-once; one that does not
+  // keeps the previous behaviour, because a fresh id is the only honest answer
+  // when there is nothing to recognise a repeat by.
+  const executionId = envelope.deliveryId
+    ? deliveryExecutionId(trigger.triggerId, envelope.deliveryId)
+    : deps.newExecutionId();
+  const started = await deps.executions.start({
     tenantId: deps.tenantId,
     workflowId: trigger.workflowId,
     executionId,
     workflowType: 'helixWorkflow',
     definition: published.definition as unknown as WorkflowDefinition,
-    input: normaliseEnvelope(trigger, args.headers, body, deps.now()),
+    input: envelope,
+    rejectDuplicate: envelope.deliveryId !== undefined,
   } as never);
-  return { status: 202, executionId };
+  // A refused duplicate is a success: the run the sender asked for exists.
+  // Answering anything else would only make it retry again.
+  return started.alreadyStarted
+    ? { status: 202, executionId, duplicate: true }
+    : { status: 202, executionId };
 }

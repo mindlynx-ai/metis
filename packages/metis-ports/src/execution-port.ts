@@ -30,6 +30,14 @@ export interface StartExecutionRequest {
   executionId: string;
   workflowType: WorkflowType;
   input?: Record<string, unknown>;
+  /**
+   * Treat the executionId as a deduplication key: a second start under it is
+   * refused rather than run. For a caller that derives the id from something a
+   * sender can repeat (a webhook delivery id), where the default of allowing a
+   * duplicate once the first run has CLOSED is the retry that ships the order
+   * twice. Callers minting a fresh UUID have nothing to deduplicate.
+   */
+  rejectDuplicate?: boolean;
 }
 
 /**
@@ -59,7 +67,13 @@ export interface ApiRunResult {
 }
 
 export interface ExecutionPort {
-  start(request: StartExecutionRequest): Promise<{ executionId: string; runId?: string }>;
+  /**
+   * `alreadyStarted` is the answer to a `rejectDuplicate` start whose id is
+   * already taken: not an error, the point. The run the caller wanted exists.
+   */
+  start(
+    request: StartExecutionRequest,
+  ): Promise<{ executionId: string; runId?: string; alreadyStarted?: boolean }>;
   /**
    * Start a synchronous api workflow (apiconfig -> ... -> apiend) and await its
    * response, bounded by waitMs. Optional: only Temporal-backed deployments and

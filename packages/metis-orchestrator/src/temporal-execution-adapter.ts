@@ -21,7 +21,7 @@
  * the engine's cooperative helixCancelSignal, mirroring the origin,
  * so runs finalise their own state as cancelled.
  */
-import { Client, Connection } from '@temporalio/client';
+import { Client, Connection, WorkflowExecutionAlreadyStartedError } from '@temporalio/client';
 import type {
   ApiRunResult,
   ExecutionPort,
@@ -76,16 +76,30 @@ export class TemporalExecutionAdapter implements ExecutionPort {
 
   async start(
     request: StartExecutionRequest & Record<string, unknown>,
-  ): Promise<{ executionId: string; runId?: string }> {
-    const runId = await this.holder.withSelfHeal(async (client) => {
-      const handle = await client.workflow.start(request.workflowType, {
-        args: [request],
-        workflowId: request.executionId,
-        taskQueue: this.taskQueue,
+  ): Promise<{ executionId: string; runId?: string; alreadyStarted?: boolean }> {
+    try {
+      const runId = await this.holder.withSelfHeal(async (client) => {
+        const handle = await client.workflow.start(request.workflowType, {
+          args: [request],
+          workflowId: request.executionId,
+          taskQueue: this.taskQueue,
+          // Temporal's default is ALLOW_DUPLICATE, which only refuses a start
+          // while the first run is still OPEN. A webhook sender retries a
+          // delivery whose response was slow, by which time the first run has
+          // usually closed, so the id alone would not have deduplicated
+          // anything. REJECT_DUPLICATE is what makes the id a dedup key.
+          ...(request.rejectDuplicate ? { workflowIdReusePolicy: 'REJECT_DUPLICATE' as const } : {}),
+        });
+        return handle.firstExecutionRunId;
       });
-      return handle.firstExecutionRunId;
-    });
-    return { executionId: request.executionId, runId };
+      return { executionId: request.executionId, runId };
+    } catch (error) {
+      if (!request.rejectDuplicate || !(error instanceof WorkflowExecutionAlreadyStartedError)) {
+        throw error;
+      }
+      // The caller asked for at-most-once under this id and got it.
+      return { executionId: request.executionId, alreadyStarted: true };
+    }
   }
 
   /**

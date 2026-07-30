@@ -46,6 +46,23 @@ export interface PutOptions {
   condition?: 'must-exist' | 'must-not-exist';
 }
 
+export interface PatchOptions {
+  /**
+   * Attribute values that must STILL hold when the write lands, compared with
+   * strict equality (scalars only; a nested object is never equal to itself
+   * across a round trip).
+   *
+   * The question is not "did the row change since patch read it" - patch reads
+   * microseconds before it writes. It is "is the row still what the CALLER's
+   * decision was based on", and that read can be much older: the status
+   * reconciler lists running rows, then asks Temporal about each one over the
+   * network, and by the time it writes the engine may have recorded the real
+   * outcome. Without this the reconciler's stale answer lands last and a failed
+   * run reads as completed.
+   */
+  ifMatches?: ItemRecord;
+}
+
 export interface QueryRequest {
   table: string;
   index?: string;
@@ -69,11 +86,37 @@ export class ConditionFailedError extends Error {
   }
 }
 
+/**
+ * Evaluate PatchOptions.ifMatches against the item as read. Shared by every
+ * adapter so the rule has one definition rather than four that drift.
+ */
+export function assertMatches(existing: ItemRecord, expected: ItemRecord | undefined): void {
+  for (const [name, value] of Object.entries(expected ?? {})) {
+    if (existing[name] !== value) {
+      throw new ConditionFailedError(
+        `"${name}" is ${JSON.stringify(existing[name])}, not ${JSON.stringify(value)}`,
+      );
+    }
+  }
+}
+
 export interface DataStore {
   registerTable(definition: TableDefinition): void;
   get(table: string, key: ItemKey): Promise<ItemRecord | undefined>;
   put(table: string, item: ItemRecord, options?: PutOptions): Promise<void>;
-  patch(table: string, key: ItemKey, changes: ItemRecord): Promise<void>;
+  /**
+   * Merge attributes into an existing item. The merge base is read inside the
+   * call and the write is conditional on that base still being current, so a
+   * write that raced this one makes patch FAIL rather than silently discarding
+   * it. `options.ifMatches` extends the same guarantee to the caller's own
+   * older read.
+   */
+  patch(
+    table: string,
+    key: ItemKey,
+    changes: ItemRecord,
+    options?: PatchOptions,
+  ): Promise<void>;
   deleteItem(table: string, key: ItemKey): Promise<void>;
   query(request: QueryRequest): Promise<QueryPage>;
 }

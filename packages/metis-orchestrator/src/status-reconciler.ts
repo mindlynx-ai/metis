@@ -23,7 +23,14 @@
  * The reconciler closes that gap and emits the matching execution event so
  * connected UIs update live.
  */
-import type { EventSink, ExecutionPort, ExecutionStatusValue, WorkflowEventName } from '@mindlynx/metis-ports';
+import {
+  ConditionFailedError,
+  type EventSink,
+  type ExecutionPort,
+  type ExecutionStatusValue,
+  type ItemRecord,
+  type WorkflowEventName,
+} from '@mindlynx/metis-ports';
 import type { WorkflowStore } from '@mindlynx/metis-data-gateway';
 
 export interface StatusReconcilerDeps {
@@ -40,6 +47,44 @@ const EVENT_BY_STATUS: Partial<Record<ExecutionStatusValue, WorkflowEventName>> 
   cancelled: 'workflow.execution.cancelled',
   terminated: 'workflow.execution.failed',
 };
+
+/**
+ * Write the reconciled outcome, conditional on the row still being the one that
+ * was listed. The listing happened before the queryStatus round trip and the
+ * engine writes the real outcome from its own process, so an unconditional
+ * write here is exactly how a failed run came to be displayed as completed:
+ * Temporal reports a Metis-failed run as COMPLETED, because the workflow
+ * function returns cleanly.
+ *
+ * Returns false when a fresher writer won.
+ */
+async function applyReconciledStatus(
+  deps: StatusReconcilerDeps,
+  executionId: string,
+  truth: ExecutionStatusValue,
+): Promise<boolean> {
+  const changes: ItemRecord = {
+    status: truth === 'terminated' ? 'terminated' : truth,
+    endTime: new Date().toISOString(),
+  };
+  // Only a terminate has a reason WE know. Setting the field unconditionally
+  // wrote undefined over whatever the engine had recorded, so every reconciled
+  // failure lost the sentence that explained it.
+  if (truth === 'terminated') {
+    changes.failureReason = 'terminated outside the engine (reconciled from Temporal)';
+  }
+  try {
+    await deps.store.updateExecutionMeta(deps.tenantId, executionId, changes, {
+      ifMatches: { status: 'running' },
+    });
+    return true;
+  } catch (error) {
+    if (!(error instanceof ConditionFailedError)) throw error;
+    // Retrying would only re-apply the same stale answer. Leave the row.
+    deps.log?.(`skipped ${executionId}: the row moved on while Temporal was asked`);
+    return false;
+  }
+}
 
 /** One reconcile pass. Exported pure-ish so tests (and callers) can run it directly. */
 export async function reconcileExecutionStatuses(
@@ -58,12 +103,7 @@ export async function reconcileExecutionStatuses(
       continue;
     }
     if (truth === 'running') continue;
-    await deps.store.updateExecutionMeta(deps.tenantId, executionId, {
-      status: truth === 'terminated' ? 'terminated' : truth,
-      endTime: new Date().toISOString(),
-      failureReason:
-        truth === 'terminated' ? 'terminated outside the engine (reconciled from Temporal)' : undefined,
-    });
+    if (!(await applyReconciledStatus(deps, executionId, truth))) continue;
     deps.events?.emit({
       name: EVENT_BY_STATUS[truth] ?? 'workflow.execution.failed',
       tenantId: deps.tenantId,

@@ -226,6 +226,28 @@ describe('definition CRUD with publish validation', () => {
     expect((await call('DELETE', '/api/workflows/wf_nope')).statusCode).toBe(404);
   });
 
+  // Two editors on one workflow both compute changeset latest + 1. The second
+  // used to overwrite the first and both were answered 200, so the save that
+  // was thrown away looked exactly like the one that was kept.
+  it('answers 409 rather than discarding a concurrent save', async () => {
+    const { id } = (await create('contested', bareDefinition)).json() as { id: string };
+    const readLatest = store.getLatestVersion.bind(store);
+    // The second editor's read, taken before the first editor saves.
+    const stale = await readLatest('t1', id);
+
+    expect((await call('PATCH', `/api/workflows/${id}`, { name: 'first editor' })).statusCode).toBe(
+      200,
+    );
+
+    store.getLatestVersion = async () => stale;
+    const second = await call('PATCH', `/api/workflows/${id}`, { name: 'second editor' });
+    store.getLatestVersion = readLatest;
+
+    expect(second.statusCode).toBe(409);
+    const kept = await call('GET', `/api/workflows/${id}`);
+    expect((kept.json() as { name: string }).name).toBe('first editor');
+  });
+
   it('rejects an update whose body is not a workflow', async () => {
     const { id } = (await create('validated', bareDefinition)).json() as { id: string };
     const bad = await call('PATCH', `/api/workflows/${id}`, { name: '', nodes: [] });

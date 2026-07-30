@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
+import { ConditionFailedError } from '@mindlynx/metis-ports';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -52,6 +53,22 @@ describe('WorkflowStore: the workflow method set over SQLite', () => {
     expect(item?.version).toBe(1);
     expect(item?.changeset).toBe(2);
     expect(await store.getWorkflowVersion('t1', 'wf1', 9, 9)).toBeUndefined();
+  });
+
+  it('mustBeNew refuses to write over a changeset another editor already saved', async () => {
+    await store.putWorkflowVersion(version(1, 0));
+    // Both editors read changeset 0 and both mint 1.
+    await store.putWorkflowVersion(version(1, 1, { name: 'first editor' }), { mustBeNew: true });
+    await expect(
+      store.putWorkflowVersion(version(1, 1, { name: 'second editor' }), { mustBeNew: true }),
+    ).rejects.toThrow(ConditionFailedError);
+    expect((await store.getWorkflowVersion('t1', 'wf1', 1, 1))?.name).toBe('first editor');
+  });
+
+  it('publish still rewrites the row it read (mustBeNew is opt-in)', async () => {
+    await store.putWorkflowVersion(version(1, 0));
+    await store.putWorkflowVersion(version(1, 0, { status: 'published' }));
+    expect((await store.getWorkflowVersion('t1', 'wf1', 1, 0))?.status).toBe('published');
   });
 
   it('getLatestPublished returns the highest published version, numerically not lexically', async () => {

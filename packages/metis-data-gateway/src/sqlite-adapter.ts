@@ -25,10 +25,12 @@ const { DatabaseSync } = requireBuiltin('node:sqlite') as {
   DatabaseSync: typeof DatabaseSyncType;
 };
 import {
+  assertMatches,
   ConditionFailedError,
   type DataStore,
   type ItemKey,
   type ItemRecord,
+  type PatchOptions,
   type PutOptions,
   type QueryPage,
   type QueryRequest,
@@ -141,6 +143,15 @@ export class SqliteAdapter implements DataStore {
       : [key.partitionKey];
   }
 
+  /** The promoted (indexed) column values for an item, in promotedAttributes order. */
+  private promotedValues(definition: TableDefinition, item: ItemRecord): (string | null)[] {
+    return this.promotedAttributes(definition).map((name) => {
+      const value = item[name];
+      if (name === definition.sortAttribute) return String(value ?? '');
+      return value === undefined ? null : String(value);
+    });
+  }
+
   async get(table: string, key: ItemKey): Promise<ItemRecord | undefined> {
     const definition = this.definitionOf(table);
     const row = this.db
@@ -155,11 +166,7 @@ export class SqliteAdapter implements DataStore {
       throw new Error(`item is missing partition attribute "${definition.partitionAttribute}"`);
     }
     const promoted = this.promotedAttributes(definition);
-    const values = promoted.map((name) => {
-      const value = item[name];
-      if (name === definition.sortAttribute) return String(value ?? '');
-      return value === undefined ? null : String(value);
-    });
+    const values = this.promotedValues(definition, item);
     const columnSql = [...promoted.map(quote), '"item"'].join(', ');
     const placeholders = [...promoted.map(() => '?'), '?'].join(', ');
     const parameters = [...values, JSON.stringify(item)];
@@ -190,10 +197,51 @@ export class SqliteAdapter implements DataStore {
       .run(...parameters);
   }
 
-  async patch(table: string, key: ItemKey, changes: ItemRecord): Promise<void> {
-    const existing = await this.get(table, key);
-    if (!existing) throw new ConditionFailedError('item does not exist');
-    await this.put(table, { ...existing, ...changes });
+  /**
+   * Read-merge-write, made safe two ways. The read is synchronous, so nothing
+   * in THIS process can interleave with it; and the write is conditional on the
+   * stored text still being what was read, so a second connection (the CLI, a
+   * worker, WAL allows several) makes the update match no row instead of
+   * overwriting a change it never saw.
+   *
+   * The comparison is the raw stored text rather than a re-serialisation of the
+   * parsed item: JSON.parse followed by JSON.stringify does not preserve key
+   * order for array-index-like keys, and items carry arbitrary JSON (a webhook
+   * body, an audit detail), so a re-serialisation could differ from the text it
+   * came from and fail a patch that should have landed.
+   */
+  async patch(
+    table: string,
+    key: ItemKey,
+    changes: ItemRecord,
+    options?: PatchOptions,
+  ): Promise<void> {
+    const definition = this.definitionOf(table);
+    const row = this.db
+      .prepare(`SELECT "item" FROM ${quote(table)} WHERE ${this.keyWhere(definition)}`)
+      .get(...this.keyValues(definition, key)) as { item?: string } | undefined;
+    if (row?.item === undefined) throw new ConditionFailedError('item does not exist');
+    const base = JSON.parse(row.item) as ItemRecord;
+    assertMatches(base, options?.ifMatches);
+    const merged = { ...base, ...changes };
+    const assignments = [
+      ...this.promotedAttributes(definition).map((name) => `${quote(name)} = ?`),
+      '"item" = ?',
+    ].join(', ');
+    const result = this.db
+      .prepare(
+        `UPDATE ${quote(table)} SET ${assignments} ` +
+          `WHERE ${this.keyWhere(definition)} AND "item" = ?`,
+      )
+      .run(
+        ...this.promotedValues(definition, merged),
+        JSON.stringify(merged),
+        ...this.keyValues(definition, key),
+        row.item,
+      );
+    if (Number(result.changes) === 0) {
+      throw new ConditionFailedError('item changed between the read and the write');
+    }
   }
 
   async deleteItem(table: string, key: ItemKey): Promise<void> {

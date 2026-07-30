@@ -22,7 +22,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import type { FastifyInstance, FastifyReply } from 'fastify';
-import type { Session } from '@mindlynx/metis-ports';
+import { ConditionFailedError, type Session } from '@mindlynx/metis-ports';
 import type { AuditStore, WorkflowStore } from '@mindlynx/metis-data-gateway';
 import { validateDefinition, type WorkflowDefinition } from '@mindlynx/metis-engine';
 import { requireAction } from './auth-gate.js';
@@ -214,19 +214,33 @@ export function registerWorkflowRoutes(
       } else if (parsed.data.cloudRouting !== undefined) {
         definition = { ...stored, cloudRouting: parsed.data.cloudRouting };
       }
-      await store.putWorkflowVersion({
-        ...latest,
-        name: parsed.data.name ?? latest.name,
-        description: parsed.data.description ?? latest.description,
-        definition,
-        // Re-infer when the graph changed (adding/removing an API Start flips it).
-        type:
-          parsed.data.nodes !== undefined
-            ? inferType(parsed.data.nodes, latest.type)
-            : latest.type,
-        status: 'draft',
-        changeset,
-      });
+      // mustBeNew because the changeset number was computed from the read
+      // above: two editors saving at once both arrive at latest + 1, and an
+      // upsert would let the second silently replace the first while both were
+      // told they had saved. The loser is told to reload instead.
+      try {
+        await store.putWorkflowVersion(
+          {
+            ...latest,
+            name: parsed.data.name ?? latest.name,
+            description: parsed.data.description ?? latest.description,
+            definition,
+            // Re-infer when the graph changed (adding/removing an API Start flips it).
+            type:
+              parsed.data.nodes !== undefined
+                ? inferType(parsed.data.nodes, latest.type)
+                : latest.type,
+            status: 'draft',
+            changeset,
+          },
+          { mustBeNew: true },
+        );
+      } catch (error) {
+        if (!(error instanceof ConditionFailedError)) throw error;
+        return reply
+          .code(409)
+          .send({ error: 'the workflow changed since it was loaded; reload and reapply' });
+      }
       // The edit that changed what a published workflow does is exactly the
       // entry an auditor works backwards from, and without this the trail
       // jumped from created straight to published with the graph rewritten

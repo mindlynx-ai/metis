@@ -17,6 +17,7 @@ import type {
   DataStore,
   ItemKey,
   ItemRecord,
+  PatchOptions,
   QueryPage,
   QueryRequest,
   TableDefinition,
@@ -71,9 +72,14 @@ export class DataGateway {
     return this.adapter.get(table, key);
   }
 
-  async update(table: string, key: ItemKey, changes: ItemRecord): Promise<void> {
+  async update(
+    table: string,
+    key: ItemKey,
+    changes: ItemRecord,
+    options?: PatchOptions,
+  ): Promise<void> {
     this.definitionOf(table);
-    await this.adapter.patch(table, key, changes);
+    await this.adapter.patch(table, key, changes, options);
   }
 
   async remove(table: string, key: ItemKey): Promise<void> {

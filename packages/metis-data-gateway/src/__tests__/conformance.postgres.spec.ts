@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 import { describe, it, expect } from 'vitest';
+import { ConditionFailedError, type ItemKey } from '@mindlynx/metis-ports';
 import { runDataStoreConformance } from '../conformance.js';
 import { PostgresAdapter } from '../postgres-adapter.js';
 
@@ -30,6 +31,43 @@ if (!pgUrl) {
 }
 
 if (pgUrl) {
+  // The one adapter whose patch reads over a network, so a competing write can
+  // genuinely land between its read and its write. SQLite reads synchronously
+  // and cannot be interleaved from inside one process; this leg is where the
+  // conditional write is exercised for real.
+  describe('PostgresAdapter patch under a competing write', () => {
+    it('fails instead of overwriting a write that landed inside its read', async () => {
+      const adapter = new PostgresAdapter(pgUrl, { schema: `metis_patch_race_${process.pid}` });
+      adapter.registerTable({ name: 'races', partitionAttribute: 'PK', sortAttribute: 'SK' });
+      await adapter.ready();
+      await adapter.put('races', { PK: 'p1', SK: 'META', status: 'running' });
+
+      // Land the competing write in the window patch already has, rather than
+      // hoping to win a race: the engine records the real outcome while the
+      // reconciler's merge base is still in flight.
+      const read = adapter.get.bind(adapter);
+      let landed = false;
+      adapter.get = async (table: string, key: ItemKey) => {
+        const item = await read(table, key);
+        if (!landed) {
+          landed = true;
+          await adapter.put('races', { PK: 'p1', SK: 'META', status: 'failed', why: 'node 3 threw' });
+        }
+        return item;
+      };
+      await expect(
+        adapter.patch('races', { partitionKey: 'p1', sortKey: 'META' }, { status: 'completed' }),
+      ).rejects.toThrow(ConditionFailedError);
+
+      adapter.get = read;
+      const item = await adapter.get('races', { partitionKey: 'p1', sortKey: 'META' });
+      expect(item?.status).toBe('failed');
+      expect(item?.why).toBe('node 3 threw');
+      await adapter.dropSchema();
+      await adapter.close();
+    });
+  });
+
   let schemaCounter = 0;
   runDataStoreConformance('postgres', async () => {
     schemaCounter += 1;

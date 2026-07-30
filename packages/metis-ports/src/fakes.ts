@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 import {
+  assertMatches,
   ConditionFailedError,
   type DataStore,
   type ItemKey,
   type ItemRecord,
+  type PatchOptions,
   type PutOptions,
   type QueryPage,
   type QueryRequest,
@@ -98,9 +100,15 @@ export class FakeDataStore implements DataStore {
     return Promise.resolve();
   }
 
-  async patch(table: string, key: ItemKey, changes: ItemRecord): Promise<void> {
+  async patch(
+    table: string,
+    key: ItemKey,
+    changes: ItemRecord,
+    options?: PatchOptions,
+  ): Promise<void> {
     const existing = await this.get(table, key);
     if (!existing) throw new ConditionFailedError('item does not exist');
+    assertMatches(existing, options?.ifMatches);
     this.rows.get(table)?.set(compositeKey(key), { ...existing, ...changes });
   }
 

@@ -98,6 +98,37 @@ export function runDataStoreConformance(name: string, factory: ConformanceFactor
       ).rejects.toThrow(ConditionFailedError);
     });
 
+    it('refuses a patch whose caller read is stale, and leaves the row alone', async () => {
+      await adapter.put(TABLE, { PK: 'p1', SK: 's1', status: 'running' });
+      // What the status reconciler does: it listed this row as running, went
+      // away to ask Temporal, and by now the engine has recorded the truth.
+      await adapter.put(TABLE, { PK: 'p1', SK: 's1', status: 'failed', why: 'node 3 threw' });
+      await expect(
+        adapter.patch(
+          TABLE,
+          { partitionKey: 'p1', sortKey: 's1' },
+          { status: 'completed' },
+          { ifMatches: { status: 'running' } },
+        ),
+      ).rejects.toThrow(ConditionFailedError);
+      const item = await adapter.get(TABLE, { partitionKey: 'p1', sortKey: 's1' });
+      expect(item?.status).toBe('failed');
+      expect(item?.why).toBe('node 3 threw');
+    });
+
+    it('applies a patch whose caller read still holds', async () => {
+      await adapter.put(TABLE, { PK: 'p1', SK: 's1', status: 'running' });
+      await adapter.patch(
+        TABLE,
+        { partitionKey: 'p1', sortKey: 's1' },
+        { status: 'completed' },
+        { ifMatches: { status: 'running' } },
+      );
+      expect((await adapter.get(TABLE, { partitionKey: 'p1', sortKey: 's1' }))?.status).toBe(
+        'completed',
+      );
+    });
+
     it('deletes by key and tolerates deleting a missing item', async () => {
       await adapter.put(TABLE, { PK: 'p1', SK: 's1' });
       await adapter.deleteItem(TABLE, { partitionKey: 'p1', sortKey: 's1' });

@@ -74,6 +74,62 @@ describe('status reconciler (the stale-running-row fix)', () => {
     expect(names).toContain('workflow.execution.failed');
   });
 
+  // Temporal reports a Metis-failed run as COMPLETED (the workflow function
+  // returns cleanly), so an unconditional write here is how a failed run came
+  // to be displayed as completed with nothing left to say why.
+  it('leaves the row alone when the engine records the outcome mid-pass', async () => {
+    const store = buildStore();
+    const events = new CapturingEventSink();
+    await store.writeExecutionMeta({
+      tenantId: TENANT,
+      executionId: 'exec-racing',
+      workflowId: 'wf-1',
+      status: 'running',
+      startTime: '2026-07-10T10:00:00.000Z',
+    });
+    const executions: ExecutionPort = {
+      ...portAnswering({}),
+      queryStatus: async (executionId: string) => {
+        // The engine finishes the run while the reconciler is on the wire.
+        await store.updateExecutionMeta(TENANT, executionId, {
+          status: 'failed',
+          failureReason: 'node 3 threw',
+        });
+        return 'completed';
+      },
+    };
+
+    const result = await reconcileExecutionStatuses({ store, events, tenantId: TENANT, executions });
+
+    expect(result).toEqual({ checked: 1, fixed: 0 });
+    const row = await store.getExecution(TENANT, 'exec-racing');
+    expect(row?.meta?.status).toBe('failed');
+    expect(row?.meta?.failureReason).toBe('node 3 threw');
+    // No event either: nothing was reconciled, so nothing happened to announce.
+    expect(events.events).toEqual([]);
+  });
+
+  it('keeps the failure reason the engine wrote when it reconciles a failure', async () => {
+    const store = buildStore();
+    await store.writeExecutionMeta({
+      tenantId: TENANT,
+      executionId: 'exec-failed',
+      workflowId: 'wf-1',
+      status: 'running',
+      startTime: '2026-07-10T10:00:00.000Z',
+      failureReason: 'sendgrid refused the recipient',
+    });
+    const result = await reconcileExecutionStatuses({
+      store,
+      tenantId: TENANT,
+      executions: portAnswering({ 'exec-failed': 'failed' }),
+    });
+    expect(result).toEqual({ checked: 1, fixed: 1 });
+    const row = await store.getExecution(TENANT, 'exec-failed');
+    expect(row?.meta?.status).toBe('failed');
+    expect(row?.meta?.failureReason).toBe('sendgrid refused the recipient');
+  });
+
   it('a Temporal error leaves the row for the next pass (no false terminal)', async () => {
     const store = buildStore();
     await store.writeExecutionMeta({

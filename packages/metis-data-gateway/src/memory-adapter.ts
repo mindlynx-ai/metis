@@ -14,10 +14,12 @@
  * limitations under the License.
  */
 import {
+  assertMatches,
   ConditionFailedError,
   type DataStore,
   type ItemKey,
   type ItemRecord,
+  type PatchOptions,
   type PutOptions,
   type QueryPage,
   type QueryRequest,
@@ -94,11 +96,23 @@ export class MemoryAdapter implements DataStore {
     bucket.set(key, structuredClone(item));
   }
 
-  async patch(table: string, key: ItemKey, changes: ItemRecord): Promise<void> {
+  /**
+   * The SQL adapters make the write conditional on the merge base still being
+   * current; here the whole body is synchronous, so nothing can interleave
+   * between the read and the write and there is no base to compare against.
+   * `ifMatches` still applies - the caller's read is older than this one.
+   */
+  async patch(
+    table: string,
+    key: ItemKey,
+    changes: ItemRecord,
+    options?: PatchOptions,
+  ): Promise<void> {
     this.definitionOf(table);
     const composite = `${key.partitionKey} ${key.sortKey ?? ''}`;
     const existing = this.rows.get(table)?.get(composite);
     if (!existing) throw new ConditionFailedError('item does not exist');
+    assertMatches(existing, options?.ifMatches);
     this.rows.get(table)?.set(composite, { ...existing, ...structuredClone(changes) });
   }
 

@@ -15,10 +15,12 @@
  */
 import pg from 'pg';
 import {
+  assertMatches,
   ConditionFailedError,
   type DataStore,
   type ItemKey,
   type ItemRecord,
+  type PatchOptions,
   type PutOptions,
   type QueryPage,
   type QueryRequest,
@@ -137,6 +139,15 @@ export class PostgresAdapter implements DataStore {
     return definition.sortAttribute ? [key.partitionKey, key.sortKey ?? ''] : [key.partitionKey];
   }
 
+  /** The promoted (indexed) column values for an item, in promotedAttributes order. */
+  private promotedValues(definition: TableDefinition, item: ItemRecord): (string | null)[] {
+    return this.promotedAttributes(definition).map((name) => {
+      const value = item[name];
+      if (name === definition.sortAttribute) return String(value ?? '');
+      return value === undefined ? null : String(value);
+    });
+  }
+
   private static itemOf(row: { item: unknown }): ItemRecord {
     return (typeof row.item === 'string' ? JSON.parse(row.item) : row.item) as ItemRecord;
   }
@@ -159,11 +170,7 @@ export class PostgresAdapter implements DataStore {
       throw new Error(`item is missing partition attribute "${definition.partitionAttribute}"`);
     }
     const promoted = this.promotedAttributes(definition);
-    const values = promoted.map((name) => {
-      const value = item[name];
-      if (name === definition.sortAttribute) return String(value ?? '');
-      return value === undefined ? null : String(value);
-    });
+    const values = this.promotedValues(definition, item);
     const columnSql = [...promoted.map(quote), '"item"'].join(', ');
     const placeholders = [...promoted, 'item'].map((_, i) => `$${i + 1}`).join(', ');
     const parameters = [...values, JSON.stringify(item)];
@@ -198,10 +205,45 @@ export class PostgresAdapter implements DataStore {
     );
   }
 
-  async patch(table: string, key: ItemKey, changes: ItemRecord): Promise<void> {
+  /**
+   * Read-merge-write with the write conditional on the merge base. Unlike
+   * SQLite the read here is a network round trip, so another writer really can
+   * land inside it; comparing the stored item against the one this call read
+   * turns that into a failed update rather than a silent overwrite.
+   *
+   * Compared as jsonb, which is value equality: key order and whitespace do not
+   * survive a jsonb round trip and must not be part of the condition.
+   */
+  async patch(
+    table: string,
+    key: ItemKey,
+    changes: ItemRecord,
+    options?: PatchOptions,
+  ): Promise<void> {
+    const definition = this.definitionOf(table);
     const existing = await this.get(table, key);
     if (!existing) throw new ConditionFailedError('item does not exist');
-    await this.put(table, { ...existing, ...changes });
+    assertMatches(existing, options?.ifMatches);
+    const merged = { ...existing, ...changes };
+    const parameters: unknown[] = [...this.promotedValues(definition, merged), JSON.stringify(merged)];
+    const assignments = [
+      ...this.promotedAttributes(definition).map((name, i) => `${quote(name)} = $${i + 1}`),
+      `"item" = $${parameters.length}`,
+    ].join(', ');
+    const where = [`${quote(definition.partitionAttribute)} = $${parameters.length + 1}`];
+    if (definition.sortAttribute) {
+      where.push(`${quote(definition.sortAttribute)} = $${parameters.length + 2}`);
+    }
+    parameters.push(...this.keyValues(definition, key));
+    parameters.push(JSON.stringify(existing));
+    where.push(`"item" = $${parameters.length}::jsonb`);
+    const result = await this.pool.query(
+      `UPDATE ${this.tableRef(table)} SET ${assignments} WHERE ${where.join(' AND ')}`,
+      parameters,
+    );
+    if (result.rowCount === 0) {
+      throw new ConditionFailedError('item changed between the read and the write');
+    }
   }
 
   async deleteItem(table: string, key: ItemKey): Promise<void> {

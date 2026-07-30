@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import type { ItemRecord, TableDefinition } from '@mindlynx/metis-ports';
+import type { ItemRecord, PatchOptions, TableDefinition } from '@mindlynx/metis-ports';
 import type { DataGateway } from './gateway.js';
 
 /**
@@ -142,7 +142,17 @@ export class WorkflowStore {
     return Math.floor(this.clock() / 1000) + this.executionTtlDays * 24 * 60 * 60;
   }
 
-  async putWorkflowVersion(item: WorkflowVersionItem): Promise<void> {
+  /**
+   * `options.mustBeNew` refuses to write over an existing changeset. The write
+   * is an upsert by default because publish rewrites the row it read; but a
+   * caller that MINTED the changeset number from a read (latest + 1) has a lost
+   * update waiting in it - two editors both compute changeset 6, the second
+   * overwrites the first and both are told they saved.
+   */
+  async putWorkflowVersion(
+    item: WorkflowVersionItem,
+    options?: { mustBeNew?: boolean },
+  ): Promise<void> {
     const pk = workflowPk(item.tenantId, item.workflowId);
     const sk = versionSk(item.version, item.changeset);
     const newest = await this.gateway.query({
@@ -165,7 +175,11 @@ export class WorkflowStore {
       gsi1pk: isNewest ? `TENANT#${item.tenantId}` : null,
       gsi2pk: isNewest ? `TENANT#${item.tenantId}#STATUS#${item.status}` : null,
     };
-    await this.gateway.upsert(WORKFLOWS_TABLE.name, record);
+    if (options?.mustBeNew) {
+      await this.gateway.create(WORKFLOWS_TABLE.name, record);
+    } else {
+      await this.gateway.upsert(WORKFLOWS_TABLE.name, record);
+    }
 
     if (isNewest && currentNewest && String(currentNewest.SK) !== sk) {
       await this.gateway.update(
@@ -292,10 +306,16 @@ export class WorkflowStore {
     });
   }
 
+  /**
+   * `options.ifMatches` is for a caller whose read is older than this write:
+   * pass what the row was when the decision was made and a row that has moved
+   * on since raises ConditionFailedError instead of being overwritten.
+   */
   async updateExecutionMeta(
     tenantId: string,
     executionId: string,
     patch: ItemRecord,
+    options?: PatchOptions,
   ): Promise<void> {
     const changes: ItemRecord = { ...patch };
     if (typeof patch.status === 'string') {
@@ -305,6 +325,7 @@ export class WorkflowStore {
       WORKFLOW_EXECUTIONS_TABLE.name,
       { partitionKey: executionPk(tenantId, executionId), sortKey: 'META' },
       changes,
+      options,
     );
   }
 

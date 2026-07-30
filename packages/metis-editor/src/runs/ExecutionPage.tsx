@@ -26,6 +26,7 @@ import { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { api, type ExecutionDetail, type ExecutionInsight } from '../api.js';
 import { Icon } from '../ui/Icon.js';
+import { DegradedText } from '../builder/CloudControls.js';
 import { RunTimeline } from './RunTimeline.js';
 
 const when = (iso?: string) => (iso ? new Date(iso).toLocaleString() : undefined);
@@ -195,10 +196,7 @@ export function ExecutionPage() {
       {meta.degraded && (
         <div className="degraded-banner static" role="status">
           <Icon name="cloud-off" size={16} />
-          <span>
-            <b>The cloud wasn&apos;t reachable</b>, so one step ran on your computer instead. The
-            run still completed.
-          </span>
+          <DegradedText why={logs.find((log) => log.binding === 'local-degraded')?.degradedReason} />
           <Link
             className="btn btn-sm"
             to={`/workflows/${encodeURIComponent(String(meta.workflowId))}/edit?run=${encodeURIComponent(meta.executionId)}`}

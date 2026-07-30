@@ -239,6 +239,10 @@ export interface RunLog {
   at?: string;
   /** Where the step actually ran ('local-degraded' = cloud chosen, ran here). */
   binding?: 'local' | 'cloud' | 'local-degraded';
+  /** Why the cloud did not take the step, in the words of whatever refused it.
+   *  Written with a 'local-degraded' binding only, and absent on runs from
+   *  before it was carried. */
+  degradedReason?: string;
   /** The consent receipt line (event 'workflow.cloud.routing') carries these. */
   decision?: 'allowed' | 'kept-local';
   consentAt?: string;

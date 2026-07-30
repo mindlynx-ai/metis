@@ -66,22 +66,47 @@ export function CloudWorkflowModal({ onClose }: { onClose(): void }) {
   );
 }
 
-/** "The cloud wasn't reachable" - informative, never alarming; the run stayed
- *  green and amber is only the modifier. */
+/**
+ * What a degraded run says: the reason the run recorded, else the sentence that
+ * was always here. The reason leads because it is frequently actionable - the
+ * cloud can refuse a step over its connection or its filter, and that is a
+ * thing the person can change - whereas the network story sends them to their
+ * router. The fallback stays because a transport failure genuinely IS an
+ * unreachable cloud, and a run from before the reason was carried stored none.
+ *
+ * Shared with the run detail page so the two banners cannot drift apart.
+ */
+export function DegradedText({ why }: { why?: string }) {
+  if (why) {
+    return (
+      <span>
+        <b>One step ran on your computer instead:</b> {why}
+      </span>
+    );
+  }
+  return (
+    <span>
+      <b>The cloud wasn&apos;t reachable</b>, so one step ran on your computer instead. The run
+      still completed.
+    </span>
+  );
+}
+
+/** The degraded banner - informative, never alarming; the run stayed green and
+ *  amber is only the modifier. */
 export function DegradedBanner({
   belowReplay,
+  why,
   onSeeStep,
 }: {
   belowReplay: boolean;
+  why?: string;
   onSeeStep(): void;
 }) {
   return (
     <div className={`degraded-banner${belowReplay ? ' below-replay' : ''}`} role="status">
       <Icon name="cloud-off" size={16} />
-      <span>
-        <b>The cloud wasn&apos;t reachable</b>, so one step ran on your computer instead. The run
-        still completed.
-      </span>
+      <DegradedText why={why} />
       <button type="button" className="btn btn-sm" onClick={onSeeStep}>
         See which step
       </button>

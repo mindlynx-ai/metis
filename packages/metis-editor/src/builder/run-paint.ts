@@ -33,16 +33,19 @@ function statusFromLog(log: RunLog): NodeRunStatus | undefined {
 }
 
 /** A whole run's logs -> per-node states + loop iteration badges + the steps
- *  that degraded to this computer. Orphaned rows carry a nodeIds ARRAY (the
- *  losing branch is marked as a set). */
+ *  that degraded to this computer, each with the reason the run recorded.
+ *  The entry is an object rather than `true` so a degraded step with no
+ *  recorded reason (any run from before it was carried) still reads as
+ *  degraded - an empty string would silently un-mark it. Orphaned rows carry a
+ *  nodeIds ARRAY (the losing branch is marked as a set). */
 export function statesFromLogs(logs: RunLog[]): {
   states: Record<string, NodeRunStatus>;
   badges: Record<string, string>;
-  degraded: Record<string, boolean>;
+  degraded: Record<string, { why?: string }>;
 } {
   const states: Record<string, NodeRunStatus> = {};
   const badges: Record<string, string> = {};
-  const degraded: Record<string, boolean> = {};
+  const degraded: Record<string, { why?: string }> = {};
   for (const log of logs) {
     const event = log.event ?? '';
     if (event.endsWith('orphaned')) {
@@ -54,7 +57,7 @@ export function statesFromLogs(logs: RunLog[]): {
     if (!log.nodeId) continue;
     const status = statusFromLog(log);
     if (status) states[log.nodeId] = status;
-    if (log.binding === 'local-degraded') degraded[log.nodeId] = true;
+    if (log.binding === 'local-degraded') degraded[log.nodeId] = { why: log.degradedReason };
     const iterations = (log.output as { iterations?: number } | undefined)?.iterations;
     if (event.endsWith('completed') && typeof iterations === 'number') {
       badges[log.nodeId] = `x${iterations}`;

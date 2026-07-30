@@ -113,8 +113,9 @@ export function BuilderCanvas({
   onAddAfter?: (nodeId: string) => void;
   runStates?: Record<string, 'running' | 'completed' | 'failed' | 'orphaned'>;
   runBadges?: Record<string, string>;
-  /** Steps the last run routed to the cloud but ran here instead. */
-  runDegraded?: Record<string, boolean>;
+  /** Steps the last run routed to the cloud but ran here instead, with the
+   *  reason that run recorded. */
+  runDegraded?: Record<string, { why?: string }>;
 }) {
   const flow = useFlow();
   // Routing chips only render when the workflow's cloud toggle is on: with

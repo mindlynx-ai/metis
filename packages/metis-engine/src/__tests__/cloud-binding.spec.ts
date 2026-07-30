@@ -46,7 +46,7 @@ afterAll(async () => {
   await Promise.all(stubs.map((stub) => stub.close()));
 });
 
-async function harness(gatewayUrl?: string) {
+async function harness(gatewayUrl?: string, bearer = 'bearer') {
   const dir = mkdtempSync(join(tmpdir(), 'metis-binding-'));
   const gateway = new DataGateway(new SqliteAdapter(join(dir, 'binding.db')));
   registerWorkflowTables(gateway);
@@ -62,7 +62,7 @@ async function harness(gatewayUrl?: string) {
         entitlements: async () => new Set(['cap.data']),
         gateway: new CapabilityGatewayClient({
           baseUrl: gatewayUrl,
-          getBearer: async () => 'bearer',
+          getBearer: async () => bearer,
           timeoutMs: 1_000,
         }),
       })
@@ -110,6 +110,31 @@ describe('executeNode cloud binding', () => {
     const execution = await store.getExecution('t1', 'exec_bind');
     const done = execution?.logs.find((log) => log.event === 'workflow.node.completed');
     expect(done?.binding).toBe('local-degraded');
+    expect(done?.degradedReason).toContain('the cloud was not reachable');
+    expect(execution?.meta.degraded).toBe(true);
+  });
+
+  /**
+   * The hop this closes: a degraded run COMPLETES, so the log row's error field
+   * is rightly empty and the message was dropped with it - the gateway's own
+   * sentence about the step reached the resolver's result and stopped there,
+   * leaving the canvas nothing to say but "the cloud wasn't reachable".
+   */
+  it('a refused step lands its REASON on the log row, in the gateway own words', async () => {
+    const refusal =
+      'the cloud can open that reference but cannot filter it: filter it at the step that '
+      + 'made the reference';
+    const stub = await startHelixStub({ refuseInvoke: refusal });
+    stubs.push(stub);
+    const { activities, store } = await harness(stub.url, stub.issueToken());
+    const result = await activities.executeNode(requestFor(CHOSEN));
+    expect(result.outcome).toBe('completed');
+    const execution = await store.getExecution('t1', 'exec_bind');
+    const done = execution?.logs.find((log) => log.event === 'workflow.node.completed');
+    expect(done?.binding).toBe('local-degraded');
+    expect(done?.degradedReason).toContain(refusal);
+    // The bug: the network took the blame for something about the step.
+    expect(String(done?.degradedReason)).not.toContain('not reachable');
     expect(execution?.meta.degraded).toBe(true);
   });
 
@@ -161,7 +186,10 @@ describe('executeNode cloud binding', () => {
     const result = await activities.executeNode(requestFor(undefined));
     expect(result.outcome).toBe('completed');
     const execution = await store.getExecution('t1', 'exec_bind');
-    expect(execution?.logs.find((log) => log.event === 'workflow.node.completed')?.binding).toBeUndefined();
+    const done = execution?.logs.find((log) => log.event === 'workflow.node.completed');
+    expect(done?.binding).toBeUndefined();
+    // Nothing degraded, so nothing to explain: the row is exactly as it was.
+    expect(done?.degradedReason).toBeUndefined();
     expect(execution?.meta.degraded).toBeUndefined();
   });
 });

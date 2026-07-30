@@ -359,6 +359,31 @@ test('a degraded run stays green: banner + "Ran here instead" on the canvas', as
   await expect(page.locator('.inspector')).toBeVisible();
 });
 
+// The unreachable-cloud run above proves the fallback wording, which is what a
+// transport failure and every run stored before the reason was carried get.
+// This one proves the hop that used to stop at the worker's log: the gateway
+// refused the step, and its sentence - the one naming what to change - is what
+// the banner and the step's chip now say.
+test('a refused step degrades under the gateway own words, not a network story', async ({ page }) => {
+  await login(page);
+  await page.goto('http://127.0.0.1:4180/workflows/wf-degraded-demo/edit?run=exec_seeded_refused');
+  const banner = page.locator('.degraded-banner');
+  await expect(banner).toContainText('One step ran on your computer instead:');
+  await expect(banner).toContainText('filter it at the step that made the reference');
+  await expect(banner).not.toContainText("wasn't reachable");
+
+  const dataNode = page.locator('.metis-node', { hasText: 'Ran here instead' });
+  await expect(dataNode.locator('.cloud-chip.degraded')).toHaveAttribute(
+    'title',
+    /filter it at the step that made the reference/,
+  );
+
+  await page.goto('http://127.0.0.1:4180/executions/exec_seeded_refused');
+  const staticBanner = page.locator('.degraded-banner.static');
+  await expect(staticBanner).toContainText('filter it at the step that made the reference');
+  await expect(staticBanner).not.toContainText("wasn't reachable");
+});
+
 test('the run detail page carries the degraded banner and the audit receipt', async ({ page }) => {
   await login(page);
   await page.goto('http://127.0.0.1:4180/executions/exec_seeded_degraded');

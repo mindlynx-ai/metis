@@ -44,8 +44,9 @@ export function BuilderPage() {
   // Live per-node run state, shown on the canvas so a Run never leaves the builder.
   const [runStates, setRunStates] = useState<Record<string, NodeRunStatus>>({});
   const [runBadges, setRunBadges] = useState<Record<string, string>>({});
-  // Steps that were routed to the cloud but ran here instead + the run flag.
-  const [runDegraded, setRunDegraded] = useState<Record<string, boolean>>({});
+  // Steps that were routed to the cloud but ran here instead (with why, when
+  // the run recorded one) + the run flag.
+  const [runDegraded, setRunDegraded] = useState<Record<string, { why?: string }>>({});
   const [degradedRun, setDegradedRun] = useState(false);
   // Run replay: ?run=<executionId> paints a FINISHED run's path onto the
   // canvas - taken steps coloured by outcome, orphaned branches greyed.
@@ -402,6 +403,7 @@ export function BuilderPage() {
           {degradedRun && !running && (
             <DegradedBanner
               belowReplay={Boolean(replayRun)}
+              why={Object.values(runDegraded)[0]?.why}
               onSeeStep={() => { const nodeId = Object.keys(runDegraded)[0]; if (nodeId) flow.select(nodeId); }}
             />
           )}

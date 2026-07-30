@@ -491,6 +491,50 @@ await store.appendExecutionLog({
   at: '2026-07-10T09:14:03.200Z',
 });
 
+// The same degrade for a different reason: the gateway ANSWERED, refusing this
+// step with a sentence about the step itself. That sentence is what the run
+// views have to show - a story about the network sends the person to their
+// router instead of to the filter. Same workflow, so the canvas replay paints
+// the same two steps.
+const REFUSAL =
+  'this step is set to run in the cloud and filters a dataset reference that came from a '
+  + 'hand-written query. The cloud can open that reference but cannot filter it: filter it at '
+  + 'the step that made the reference.';
+await store.writeExecutionMeta({
+  tenantId: 't1',
+  executionId: 'exec_seeded_refused',
+  workflowId: 'wf-degraded-demo',
+  status: 'completed',
+  startTime: '2026-07-11T10:02:00.000Z',
+  endTime: '2026-07-11T10:02:02.000Z',
+  degraded: true,
+  definitionVersion: 1,
+  definitionChangeset: 0,
+});
+await store.appendExecutionLog({
+  tenantId: 't1',
+  executionId: 'exec_seeded_refused',
+  sequence: 11,
+  nodeId: 'node-deg-start',
+  nodeType: 'webhookconfig',
+  event: 'workflow.node.completed',
+  outcome: 'completed',
+  binding: 'local',
+  at: '2026-07-11T10:02:00.400Z',
+});
+await store.appendExecutionLog({
+  tenantId: 't1',
+  executionId: 'exec_seeded_refused',
+  sequence: 21,
+  nodeId: 'node-deg-data',
+  nodeType: 'data',
+  event: 'workflow.node.completed',
+  outcome: 'completed',
+  binding: 'local-degraded',
+  degradedReason: REFUSAL,
+  at: '2026-07-11T10:02:01.200Z',
+});
+
 // A run whose consent receipt reads "kept local" (the mirror line).
 await store.writeExecutionMeta({
   tenantId: 't1',

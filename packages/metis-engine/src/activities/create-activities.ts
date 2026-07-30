@@ -62,7 +62,13 @@ const MAX_ATTEMPTS = 10;
 type DispatchResult = Pick<
   ExecuteNodeResult,
   'outcome' | 'output' | 'error' | 'attempts' | 'jobId' | 'park'
-> & { binding?: 'local' | 'cloud' | 'local-degraded' };
+> & {
+  binding?: 'local' | 'cloud' | 'local-degraded';
+  /** The dispatch's own message. A failure's already travels as `error`; this
+   *  keeps a COMPLETED one, which a degraded bind needs: the sentence saying
+   *  why the cloud did not take the step exists nowhere else. */
+  message?: string;
+};
 
 /**
  * Dispatch a handler node through the port under its policy: a bounded
@@ -130,6 +136,7 @@ async function executeHandlerWithPolicy(
     error: outcome === 'failed' ? { message: exec.message } : undefined,
     attempts,
     binding: exec.binding,
+    message: exec.message,
   };
 }
 
@@ -346,6 +353,12 @@ export function createActivities(ports: EnginePorts): EngineActivities {
         error: result.error,
         attempts: result.attempts,
         binding: result.binding,
+        // Only the degraded bind stores its message: a completed step's "ok"
+        // says nothing, but a degraded one's names what the cloud would not do
+        // and what to change instead. The outcome is 'completed', so `error` is
+        // rightly empty and this is the only field the run views can read it
+        // from - without it the canvas can only blame the network.
+        degradedReason: result.binding === 'local-degraded' ? result.message : undefined,
         at: new Date().toISOString(),
       });
 

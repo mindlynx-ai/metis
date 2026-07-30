@@ -38,19 +38,24 @@ export interface MetisNodeData extends Record<string, unknown> {
   runBadge?: string;
   /** Where this step is set to run ('cloud' | 'auto'); absent = this computer. */
   cloudMode?: 'cloud' | 'auto';
-  /** The last run chose the cloud but this step ran here instead. */
-  runDegraded?: boolean;
+  /** The last run chose the cloud but this step ran here instead; `why` is the
+   *  reason that run recorded, absent on a run from before it was carried. */
+  runDegraded?: { why?: string };
   onAddAfter?: (nodeId: string, sourceHandle?: string) => void;
 }
 
 /** The routing chip: filled = cloud, outlined + A = automatic, cloud-off =
  *  degraded ("Ran here instead"). Hidden below ~0.6 zoom - at that height
  *  the workflow's shape matters, not per-step routing. */
-function CloudChip({ mode, degraded }: { mode?: 'cloud' | 'auto'; degraded?: boolean }) {
+function CloudChip({ mode, degraded }: { mode?: 'cloud' | 'auto'; degraded?: { why?: string } }) {
   const zoom = useStore((state) => state.transform[2]);
   if (zoom < 0.6) return null;
   if (degraded) {
-    const label = "The cloud wasn't reachable; this step ran on this computer";
+    // The run's own reason when it recorded one: a refused step's sentence names
+    // what to change, which the network story sends the wrong way. The network
+    // story stays the fallback because for a transport failure it is exactly
+    // true, and a run from before the reason was carried has nothing else.
+    const label = degraded.why ?? "The cloud wasn't reachable; this step ran on this computer";
     return (
       <span className="cloud-chip degraded" role="img" aria-label={label} title={label}>
         <Icon name="cloud-off" size={15} />

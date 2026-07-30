@@ -210,7 +210,16 @@ export class CapabilityResolver implements NodeExecPort {
       // own message, not a story about the network.
       if (entry?.execution === 'both') {
         const local = await this.options.local.execute(ctx);
-        return { ...local, binding: 'local-degraded', message: `${degradeReason(error)}; ${local.message}` };
+        // Both messages only when the fallback ALSO failed: that string travels
+        // on as the failure's error.message, so dropping the local backend's own
+        // reason would hide the second failure behind the first. When the fallback
+        // worked, the reason stands alone - appending a success message ("ok" is
+        // what a handler says) reads to the person as a truncation bug on the end
+        // of a sentence that was telling them exactly what to change.
+        const message = isCompleted(local.status)
+          ? degradeReason(error)
+          : `${degradeReason(error)}; ${local.message}`;
+        return { ...local, binding: 'local-degraded', message };
       }
       return { status: 500, message: degradeReason(error), binding: 'cloud' };
     }

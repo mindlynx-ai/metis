@@ -318,6 +318,66 @@ describe('a refused step degrades under the gateway own words', () => {
   });
 });
 
+/**
+ * The sentence a person actually reads. The degrade reason and the local
+ * backend's own message were always joined with "; ", so a step that degraded
+ * and then ran locally FINE ended "...filter it at the step that made the
+ * reference; ok" - the handler's success message hung off the end of the
+ * refusal, in the node chip's tooltip and the degraded banner, reading as a
+ * truncation bug on the one sentence telling the person what to change.
+ *
+ * Both messages still matter when the fallback ALSO failed: there the combined
+ * string is what travels as the failure's error.message, and dropping the local
+ * reason would hide the second failure behind the first.
+ */
+describe('the degraded message a person reads', () => {
+  const REFUSAL =
+    'the cloud can open that reference but cannot filter it: filter it at the step that '
+    + 'made the reference';
+  /** What the real data node says on success (data-node.ts): 'ok'. */
+  const okLocal: NodeExecPort = {
+    canExecute: () => true,
+    execute: async () => ({ status: 200, message: 'ok', nodeData: { data: { ranIn: 'local' } } }),
+  };
+  const failedLocal: NodeExecPort = {
+    canExecute: () => true,
+    execute: async () => ({
+      status: 500,
+      message: 'could not resolve credentials for connection "conn_1"',
+    }),
+  };
+
+  it('a fallback that WORKED carries the gateway reason alone, with no "; ok" tail', async () => {
+    const stub = await stubbed({ refuseInvoke: REFUSAL });
+    const result = await resolverFor(stub, { local: okLocal }).execute(
+      contextFor({ ...CONSENTED, nodeMode: 'cloud' }),
+    );
+    expect(result.status).toBe(200);
+    expect(result.binding).toBe('local-degraded'); // still visibly degraded
+    expect(result.message).toBe(REFUSAL);
+    expect(result.message).not.toMatch(/;\s*ok$/);
+  });
+
+  it('a fallback that ALSO FAILED keeps both, or the local failure is invisible', async () => {
+    const stub = await stubbed({ refuseInvoke: REFUSAL });
+    const result = await resolverFor(stub, { local: failedLocal }).execute(
+      contextFor({ ...CONSENTED, nodeMode: 'cloud' }),
+    );
+    expect(result.status).toBe(500);
+    expect(result.binding).toBe('local-degraded');
+    expect(result.message).toContain(REFUSAL);
+    expect(result.message).toContain('could not resolve credentials for connection "conn_1"');
+  });
+
+  it('an unreachable cloud reads the same way: the reason, not the reason plus "ok"', async () => {
+    const result = await resolverFor({ url: 'http://127.0.0.1:1' }, { local: okLocal }).execute(
+      contextFor({ ...CONSENTED, nodeMode: 'cloud' }),
+    );
+    expect(result.binding).toBe('local-degraded');
+    expect(result.message).toBe('the cloud was not reachable');
+  });
+});
+
 describe('canExecute', () => {
   it('covers local handlers, cloud/both entries, and nothing else', () => {
     const resolver = new CapabilityResolver({

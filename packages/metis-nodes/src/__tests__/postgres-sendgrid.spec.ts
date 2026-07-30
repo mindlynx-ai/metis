@@ -16,7 +16,7 @@
 import { describe, it, expect, afterAll, beforeAll } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { FakeCredentialPort, nodeCtx, nodeOutput } from '@mindlynx/metis-ports';
+import { DEFAULT_MAX_ROWS, FakeCredentialPort, nodeCtx, nodeOutput } from '@mindlynx/metis-ports';
 import { createPostgresNodeHandler } from '../postgres-node.js';
 import { closePostgresPools } from '../postgres-pool.js';
 import { createSendgridNodeHandler } from '../sendgrid-node.js';
@@ -52,6 +52,43 @@ if (pgUrl) {
       const output = nodeOutput(result) as { rows: Record<string, unknown>[]; rowCount: number };
       expect(output.rows).toEqual([{ n: 7, label: 'metis' }]);
       expect(output.rowCount).toBe(1);
+    });
+
+    // `SELECT * FROM orders` is the first query anyone types, and the whole
+    // result set used to ride into the workflow payload unbounded.
+    it('caps a large result set at the shared DataSource ceiling', async () => {
+      const result = await handler(
+        request('postgres', {
+          connectorId: 'pg-main',
+          query: `SELECT generate_series(1, ${DEFAULT_MAX_ROWS + 500}) AS n`,
+        }),
+      );
+      expect(result.status).toBe(200);
+      const output = nodeOutput(result) as {
+        rows: Record<string, unknown>[];
+        rowCount: number;
+        truncated?: boolean;
+        totalRows?: number;
+      };
+      expect(output.rows).toHaveLength(DEFAULT_MAX_ROWS);
+      expect(output.rowCount).toBe(DEFAULT_MAX_ROWS);
+      expect(output.truncated).toBe(true);
+      expect(output.totalRows).toBe(DEFAULT_MAX_ROWS + 500);
+    });
+
+    it('leaves a write alone: rowCount stays rows affected, nothing is truncated', async () => {
+      const table = `metis_cap_${Date.now()}`;
+      await handler(request('postgres', { connectorId: 'pg-main', query: `CREATE TABLE ${table} (id int)` }));
+      const inserted = await handler(
+        request('postgres', {
+          connectorId: 'pg-main',
+          query: `INSERT INTO ${table} SELECT generate_series(1, ${DEFAULT_MAX_ROWS + 500})`,
+        }),
+      );
+      const output = nodeOutput(inserted) as { rowCount: number; truncated?: boolean };
+      expect(output.rowCount).toBe(DEFAULT_MAX_ROWS + 500);
+      expect(output.truncated).toBeUndefined();
+      await handler(request('postgres', { connectorId: 'pg-main', query: `DROP TABLE ${table}` }));
     });
 
     it('fails cleanly on SQL errors without leaking credentials', async () => {

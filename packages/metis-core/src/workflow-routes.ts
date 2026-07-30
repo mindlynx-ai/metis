@@ -85,7 +85,14 @@ export function registerWorkflowRoutes(
     const existing = (await triggers.list()).filter(
       (t) => t.workflowId === workflowId && t.kind === 'schedule',
     );
-    if (wanted && existing.length === 1 && existing[0].cron === wanted) return 'live';
+    // Rebound on every publish, even when the cron has not moved. A Temporal
+    // Schedule's action is written ONCE and replayed at every tick, with the
+    // published definition resolved at creation time, so leaving an unchanged
+    // cron alone left the 2am run executing the graph the editor no longer
+    // shows. There is no update path; recreating is the one that exists.
+    // ponytail: a schedule an operator had PAUSED comes back live, and a fire
+    // due in the gap between remove and create is missed. Preserving pause
+    // means reading the schedule's state back, which needs a port of its own.
     for (const stale of existing) await triggers.remove(String(stale.triggerId));
     if (!wanted) return existing.length > 0 ? 'removed' : undefined;
     await triggers.create({ workflowId, kind: 'schedule', cron: wanted });

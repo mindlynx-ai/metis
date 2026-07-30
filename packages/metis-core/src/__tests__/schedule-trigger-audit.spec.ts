@@ -139,6 +139,38 @@ describe('the levers that silence a workflow are on the trail', () => {
     });
   });
 
+  // The CLI already refused all three; the HTTP API the editor uses refused
+  // only the missing cron, so the editor could arm a trigger that either
+  // re-fires the whole result set every 30 seconds or can never fire at all.
+  it('refuses a poll trigger that is missing what makes it work, naming the field', async () => {
+    const armed = created.length;
+    const cases: [Record<string, unknown>, RegExp][] = [
+      [{ operation: 'listContacts', cursorField: 'createdAt' }, /connectorId/],
+      [{ connectorId: 'hubspot', cursorField: 'createdAt' }, /operation/],
+      [{ connectorId: 'hubspot', operation: 'listContacts' }, /cursorField/],
+    ];
+    for (const [body, message] of cases) {
+      const response = await call('POST', '/api/triggers', {
+        workflowId: 'wf-poll',
+        kind: 'poll',
+        ...body,
+      });
+      expect(response.statusCode).toBe(400);
+      expect((response.json() as { error: string }).error).toMatch(message);
+    }
+    // Nothing reached the trigger port, so nothing sits in the list looking armed.
+    expect(created).toHaveLength(armed);
+
+    const complete = await call('POST', '/api/triggers', {
+      workflowId: 'wf-poll',
+      kind: 'poll',
+      connectorId: 'hubspot',
+      operation: 'listContacts',
+      cursorField: 'createdAt',
+    });
+    expect(complete.statusCode).toBe(201);
+  });
+
   it('records who changed a webhook lock, and nothing at all about the lock', async () => {
     const secret = 'whsec-should-never-be-logged';
     const response = await call('PUT', '/api/triggers/trg-lock/secret', { secret });

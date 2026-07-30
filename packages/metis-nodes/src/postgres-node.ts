@@ -21,7 +21,7 @@
  * the CredentialPort boundary and never echoed into results or logs.
  */
 import { poolFor } from './postgres-pool.js';
-import { stateEnvelope, type CredentialPort, type NodeHandler } from '@mindlynx/metis-ports';
+import { capRows, stateEnvelope, type CredentialPort, type NodeHandler } from '@mindlynx/metis-ports';
 import { buildQuery, type PgBuilderConfig } from './postgres-query.js';
 
 // Two modes: a raw parameterised `query` + `params`, or the visual query-
@@ -33,6 +33,23 @@ interface PostgresNodeConfig extends PgBuilderConfig {
   connectionId?: string;
   query?: string;
   params?: unknown[];
+}
+
+/**
+ * The node's output for one pg result. Capped at the shared DataSource ceiling
+ * rather than a second one invented here: `SELECT * FROM orders` is the first
+ * query anyone types, and the whole result set used to ride into the workflow
+ * payload unbounded.
+ */
+function toOutput(result: { rows: unknown[]; rowCount: number | null }): Record<string, unknown> {
+  const capped = capRows(result.rows as Record<string, unknown>[]);
+  return {
+    rows: capped.rows,
+    // A write returns no rows and pg reports rows AFFECTED in rowCount, which
+    // the cap has nothing to say about.
+    rowCount: result.rows.length > 0 ? capped.rowCount : (result.rowCount ?? 0),
+    ...(capped.truncated ? { truncated: true, totalRows: result.rows.length } : {}),
+  };
 }
 
 export function createPostgresNodeHandler(credentials: CredentialPort): NodeHandler {
@@ -75,7 +92,7 @@ export function createPostgresNodeHandler(credentials: CredentialPort): NodeHand
     try {
       const pool = poolFor(`${ctx.tenantId}/${connectionId}`, material);
       const result = await pool.query(built.query, built.params);
-      const output = { rows: result.rows, rowCount: result.rowCount ?? result.rows.length };
+      const output = toOutput(result);
       return { status: 200, message: 'ok', nodeData: stateEnvelope(ctx.nodeRef.id, ctx.nodeRef.type, output) };
     } catch (error) {
       return { status: 500, message: error instanceof Error ? error.message : String(error) };

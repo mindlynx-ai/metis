@@ -53,6 +53,32 @@ const createTriggerBody = z.object({
   pollParams: z.record(z.string(), z.unknown()).optional(),
 });
 
+/**
+ * What a kind needs before it can do anything, named in the message.
+ *
+ * The CLI already refused all of these (metis-cli triggers.ts) and the HTTP API
+ * the editor uses refused only the missing cron, so a poll trigger could be
+ * created with no cursor field: connector-poller then treats every item as
+ * fresh on every 30-second tick, and 20 items becomes 57,600 runs a day.
+ * Omitting the connector or the operation is the mirror case, and quieter: the
+ * poll fetcher returns nothing without them, so the trigger sits in the list
+ * looking armed and can never fire.
+ */
+function missingRequirement(input: z.infer<typeof createTriggerBody>): string | undefined {
+  if (input.kind === 'schedule' && !input.cron) {
+    return 'a schedule trigger needs a cron expression';
+  }
+  if (input.kind !== 'poll') return undefined;
+  if (!input.connectorId) return 'a poll trigger needs a connectorId: there is nothing to poll without one';
+  if (!input.operation) {
+    return 'a poll trigger needs an operation: without one the poll fetches nothing and the trigger can never fire';
+  }
+  if (!input.cursorField) {
+    return 'a poll trigger needs a cursorField: without it every item looks new on every tick and the whole result set re-runs every 30 seconds';
+  }
+  return undefined;
+}
+
 export function registerTriggerMgmtRoutes(
   app: FastifyInstance,
   triggers: TriggersPort,
@@ -88,9 +114,8 @@ export function registerTriggerMgmtRoutes(
     if (!parsed.success) {
       return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'invalid body' });
     }
-    if (parsed.data.kind === 'schedule' && !parsed.data.cron) {
-      return reply.code(400).send({ error: 'a schedule trigger needs a cron expression' });
-    }
+    const missing = missingRequirement(parsed.data);
+    if (missing) return reply.code(400).send({ error: missing });
     try {
       const record = await triggers.create(parsed.data);
       // Disarming a workflow was trailed and arming one was not, which is

@@ -312,11 +312,20 @@ describe('definition CRUD with publish validation', () => {
 describe('publish-time schedule sync (a Schedule node IS the trigger declaration)', () => {
   let app: FastifyInstance;
   let token: string;
+  let scheduleStore: WorkflowStore;
+  let minted = 0;
   const bound: Record<string, unknown>[] = [];
   const triggers = {
     list: async () => bound,
     create: async (input: Record<string, unknown>) => {
-      const record = { ...input, triggerId: `trg_${bound.length + 1}` };
+      minted += 1;
+      // What ScheduleService.create does: resolve the published definition NOW
+      // and bake it into the Temporal Schedule action, which is written once
+      // and replayed at every tick. Recording it here is how this suite can see
+      // which graph the 2am run would actually execute.
+      const published = await scheduleStore.getLatestPublished('t1', String(input.workflowId));
+      const nodes = (published?.definition as { nodes?: { id: string }[] } | undefined)?.nodes ?? [];
+      const record = { ...input, triggerId: `trg_${minted}`, bakedNodes: nodes.map((n) => n.id) };
       bound.push(record);
       return record;
     },
@@ -336,11 +345,11 @@ describe('publish-time schedule sync (a Schedule node IS the trigger declaration
     const dir = mkdtempSync(join(tmpdir(), 'metis-schedsync-'));
     const gateway = new DataGateway(new SqliteAdapter(join(dir, 'schedsync.db')));
     registerWorkflowTables(gateway);
-    const store = new WorkflowStore(gateway);
+    scheduleStore = new WorkflowStore(gateway);
     const identity = await SingleTenantIdentity.create('t1', [
       { userId: 'jeremy', secret: 'pw', role: 'admin' },
     ]);
-    app = buildCoreServer({ identity, store, triggers });
+    app = buildCoreServer({ identity, store: scheduleStore, triggers });
     await app.ready();
     const login = await app.inject({
       method: 'POST',
@@ -384,6 +393,23 @@ describe('publish-time schedule sync (a Schedule node IS the trigger declaration
     // Republish unchanged: idempotent, still exactly one binding.
     await inject('POST', `/api/workflows/${id}/publish`);
     expect(bound).toHaveLength(1);
+
+    // Edit the graph, keep the cron, republish. The Schedule's action carries
+    // the definition resolved when it was created, so an unchanged cron used to
+    // leave the 2am run executing a graph the editor no longer shows.
+    const edited = await inject('PATCH', `/api/workflows/${id}`, {
+      nodes: [
+        node('sched', 'scheduleconfig', { cron: '0 3 * * *', timezone: 'UTC' }),
+        node(WORK, 'echo', { v: 2 }),
+        node(SIG, 'echo', { v: 3 }),
+      ],
+      edges: [edge('sched', WORK), edge(WORK, SIG)],
+    });
+    expect(edited.statusCode).toBe(200);
+    await inject('POST', `/api/workflows/${id}/publish`);
+    expect(bound).toHaveLength(1);
+    expect(bound[0].cron).toBe('0 3 * * *');
+    expect(bound[0].bakedNodes).toEqual(['sched', WORK, SIG]);
 
     // Remove the schedule node (keep a valid trigger entry) and republish:
     // the binding goes away.

@@ -1018,7 +1018,7 @@
           "output": {
             "type": "string",
             "title": "Output",
-            "description": "Rows: the result set, inline (capped). Reference: a small handle a later step can open on demand - it never hits the payload limit and is how big data flows on Tachyon.",
+            "description": "Rows: the result set, inline (capped). Reference: a small handle a later step can open on demand - it never hits the payload limit and is how big data flows through a warehouse-scale engine.",
             "enum": [
               "rows",
               "reference"

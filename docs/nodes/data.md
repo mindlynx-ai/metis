@@ -19,7 +19,7 @@ Pick a connection (the connection IS the engine - Postgres in the open edition).
 
 - `connectorId` - The data source connection to run against.
 - `query` - A SQL query, or build one visually. Its rows become this step's output. Use $1, $2 for parameter values.
-- `output` - Rows: the result set, inline (capped). Reference: a small handle a later step can open on demand - it never hits the payload limit and is how big data flows on Tachyon.
+- `output` - Rows: the result set, inline (capped). Reference: a small handle a later step can open on demand - it never hits the payload limit and is how big data flows through a warehouse-scale engine.
 - `sourceRef` - Materialise a dataset an earlier step handed on. Reference its dataset output, e.g. {{step.data.dataset}}.
 
 ## Output fields

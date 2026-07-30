@@ -42,6 +42,7 @@ import {
 } from '../node-exec-port.js';
 import {
   ContractMismatchError,
+  GatewayRefusedError,
   GatewayUnreachableError,
   UnentitledError,
   type CapabilityGatewayClient,
@@ -200,9 +201,13 @@ export class CapabilityResolver implements NodeExecPort {
     try {
       return await this.runCloud(entry as Required<CapabilityEntry>, ctx);
     } catch (error) {
-      // Only pre-acceptance failures land here (unreachable, unentitled,
-      // contract mismatch): the job never started, so the local backend can
-      // safely take the dispatch. A degraded bind is visible, never silent.
+      // Only pre-acceptance failures land here (refused, unreachable,
+      // unentitled, contract mismatch): the job never started, so the local
+      // backend can safely take the dispatch. A degraded bind is visible, never
+      // silent. A refusal degrades exactly like the rest, and correctly so -
+      // the local backend can do the thing the cloud refused, and a step that
+      // can still run should still run - but it degrades under the gateway's
+      // own message, not a story about the network.
       if (entry?.execution === 'both') {
         const local = await this.options.local.execute(ctx);
         return { ...local, binding: 'local-degraded', message: `${degradeReason(error)}; ${local.message}` };
@@ -282,6 +287,10 @@ export class CapabilityResolver implements NodeExecPort {
 }
 
 function degradeReason(error: unknown): string {
+  // The gateway's own words: a refusal already says what about this step the
+  // cloud cannot do and what to change instead, which is the whole of its
+  // value. Nothing here can put it better than the service that refused it.
+  if (error instanceof GatewayRefusedError) return error.message;
   if (error instanceof UnentitledError) return error.offer ? `not in your plan (${error.offer.title})` : error.message;
   if (error instanceof ContractMismatchError) return error.message;
   if (error instanceof GatewayUnreachableError) return 'the cloud was not reachable';

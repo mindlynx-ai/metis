@@ -89,6 +89,12 @@ export interface HelixStubOptions {
   contractVersion?: string;
   /** Complete every job as 'failed' instead of 'done'. */
   failJobs?: boolean;
+  /**
+   * Refuse every invoke with this message and a 400, starting no job: the real
+   * gateway's answer when the step asks for something the cloud cannot express.
+   * Distinct from failJobs, where the work was accepted and then went wrong.
+   */
+  refuseInvoke?: string;
   /** The account email the OIDC flow reports. */
   email?: string;
   /** expires_in on token responses. Default 3600. */
@@ -212,6 +218,9 @@ export async function startHelixStub(options: HelixStubOptions = {}, port = 0): 
         offer: STUB_OFFERS.find((offer) => offer.id === capabilityId),
       });
     }
+    // Entitlement first, then the config: a refusal is about the step, so it is
+    // only ever reached by an account allowed to ask (the real order too).
+    if (options.refuseInvoke) return json(response, 400, { error: options.refuseInvoke });
     let body = '';
     request.on('data', (chunk) => (body += chunk));
     request.on('end', () => {

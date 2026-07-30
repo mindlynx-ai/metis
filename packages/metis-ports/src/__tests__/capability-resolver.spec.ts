@@ -273,6 +273,49 @@ describe('degraded bind (UPL-REQ-10)', () => {
     expect(result.status).toBe(500);
     expect(result.binding).toBe('cloud');
   });
+
+  it('a transport failure says the cloud was not reachable, because it was not', async () => {
+    const result = await resolverFor({ url: 'http://127.0.0.1:1' }).execute(
+      contextFor({ ...CONSENTED, nodeMode: 'cloud' }),
+    );
+    expect(result.message).toContain('the cloud was not reachable');
+  });
+});
+
+/**
+ * The gateway's own refusal (a 400): the cloud answered, and its answer names
+ * what about this step it cannot do. Degrading is right - the local backend can
+ * filter a raw handle, and a step that can still run should still run - but the
+ * degrade used to be reported as "the cloud was not reachable", which sent the
+ * person to their network instead of to the step, and the real sentence survived
+ * only in the gateway's logs.
+ */
+describe('a refused step degrades under the gateway own words', () => {
+  const REFUSAL =
+    'the dataset reference came from a hand-written query, so the cloud can open it but not '
+    + 'filter it: filter it at the step that made the reference';
+
+  it('a both-node runs locally, says the refusal, and stays visibly degraded', async () => {
+    const stub = await stubbed({ refuseInvoke: REFUSAL });
+    const result = await resolverFor(stub).execute(contextFor({ ...CONSENTED, nodeMode: 'cloud' }));
+    expect(result.status).toBe(200);
+    expect(result.binding).toBe('local-degraded');
+    expect(result.nodeData?.data).toMatchObject({ ranIn: 'local' });
+    expect(result.message).toContain(REFUSAL);
+    // The bug this closes: the network took the blame for a config problem.
+    expect(result.message).not.toContain('not reachable');
+  });
+
+  it('a cloud-only capability surfaces the refusal too, with nowhere to fall back to', async () => {
+    const stub = await stubbed({ refuseInvoke: REFUSAL, entitled: ['cap.memory'] });
+    const resolver = resolverFor(stub, {
+      entryFor: () => ({ execution: 'cloud', entitlement: 'cap.memory' }),
+    });
+    const result = await resolver.execute(contextFor({ ...CONSENTED, nodeMode: 'cloud' }));
+    expect(result.status).toBe(500);
+    expect(result.binding).toBe('cloud');
+    expect(result.message).toBe(REFUSAL);
+  });
 });
 
 describe('canExecute', () => {

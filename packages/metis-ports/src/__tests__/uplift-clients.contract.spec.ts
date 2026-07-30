@@ -26,6 +26,7 @@ import {
   CapabilityGatewayClient,
   CloudEntitlementsClient,
   ContractMismatchError,
+  GatewayRefusedError,
   GatewayUnreachableError,
   OffersClient,
   UnentitledError,
@@ -138,6 +139,20 @@ describe('capability gateway client', () => {
   it('raises GatewayUnreachableError when nothing is listening', async () => {
     const client = gateway('http://127.0.0.1:1', 'any');
     await expect(client.invoke('data', {})).rejects.toBeInstanceOf(GatewayUnreachableError);
+  });
+
+  it('keeps a refusal SEPARATE from unreachable, carrying the gateway own words', async () => {
+    // A 400 says the step asked for something the cloud cannot do, and the
+    // message is written for whoever has to change it. It used to be mapped to
+    // GatewayUnreachableError with every word thrown away, so a precise refusal
+    // reached the person as a network problem.
+    const refusal = 'the dataset reference came from a hand-written query, so the cloud cannot filter it';
+    stub = await startHelixStub({ refuseInvoke: refusal });
+    const client = gateway(stub.url, stub.issueToken());
+    const error = await client.invoke('data', {}).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(GatewayRefusedError);
+    expect(error).not.toBeInstanceOf(GatewayUnreachableError);
+    expect((error as Error).message).toBe(refusal);
   });
 
   it('propagates cancel to the job', async () => {

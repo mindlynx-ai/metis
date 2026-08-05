@@ -95,8 +95,12 @@ node packages/metis-cli/dist/bin.js run hello
 repository, so Metis refuses to serve on it unless you say
 `METIS_INSECURE_DEMO=true` and mean it.
 
-> **The npx route is not live yet.** Once the packages reach the registry the
-> two commands above become `npx @mindlynx/metis-cli init` and
+The rest of this page writes CLI commands as plain `metis ...`. From a source
+checkout that is `npx metis ...` at the repository root - `npm run build` links
+the workspace binary, so npx finds it without a global install.
+
+> **The npx-from-the-registry route is not live yet.** Once the packages reach
+> npm the two commands above become `npx @mindlynx/metis-cli init` and
 > `npx @mindlynx/metis-cli up`, with `npx @mindlynx/metis-cli run hello` to run
 > one workflow. Today those return a 404: nothing under `@mindlynx` is
 > published. Use the source path.

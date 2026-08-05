@@ -57,7 +57,14 @@ extra_css:
   - assets/extra.css
 markdown_extensions:
   - admonition
-  - pymdownx.superfences
+  # The mermaid custom fence is what makes ```mermaid a DIAGRAM rather than a
+  # code block. Material bundles mermaid.js and wires it to `class: mermaid`;
+  # without this block the architecture diagrams render as their own source.
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
   - pymdownx.highlight
   - toc:
       permalink: true

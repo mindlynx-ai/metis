@@ -104,8 +104,20 @@ export function registerTriggerMgmtRoutes(
       detail,
     });
 
-  app.get('/api/triggers', async (_request, reply) => {
-    return reply.send({ items: await triggers.list() });
+  // Everything about a trigger EXCEPT the shared secret a webhook one carries.
+  // The stored row is returned as-is otherwise: which workflow fires, how, and
+  // whether it is armed is the whole point of the list. The secret is not part
+  // of that, and nothing needs it read back - rotation takes a new one and the
+  // trail below records that it changed and nothing else - so the read simply
+  // does not carry it. The guard matches its siblings; it is the projection
+  // that makes this safe, since a secret handed to any caller is a secret out.
+  app.get('/api/triggers', { preHandler: requireAction('edit') }, async (_request, reply) => {
+    const items = (await triggers.list()).map((record) => {
+      const shown = { ...record };
+      delete shown.secret;
+      return shown;
+    });
+    return reply.send({ items });
   });
 
   app.post('/api/triggers', { preHandler: requireAction('edit') }, async (request, reply) => {

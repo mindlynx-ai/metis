@@ -18,8 +18,10 @@
  * Connection routes: a connection is a NAMED INSTANCE of a connector type
  * (name + type + its own auth), so a node can call it. A connector type can
  * have several connections. Material is write-only (stored encrypted, never
- * read back or logged); list and health return metadata only. Reads are open;
- * writes require edit.
+ * read back or logged); list and health return metadata only. The metadata
+ * list is open, because a viewer opening a workflow needs a connection's name
+ * to make sense of the node using it; everything that touches material, read
+ * or write, requires edit.
  */
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -91,8 +93,9 @@ export function registerConnectionRoutes(
 
   // One connection, with its NON-SECRET credential values for the edit form
   // (host, port, publishable key, ...). Secret-flagged fields are NEVER
-  // returned - they stay write-only.
-  app.get('/api/connections/:id', async (request, reply) => {
+  // returned - they stay write-only. This is the form's own endpoint, so it
+  // wants the same 'edit' as the form's save.
+  app.get('/api/connections/:id', { preHandler: requireAction('edit') }, async (request, reply) => {
     const session = request.session as Session;
     const { id } = request.params as { id: string };
     const connection = (await credentials.listConnections(session.tenantId)).find(
@@ -100,11 +103,20 @@ export function registerConnectionRoutes(
     );
     if (!connection) return reply.code(404).send({ error: 'connection not found' });
     const schema = credentialSchemaFor(connection.connectorId, connection.authScheme);
-    const secretKeys = new Set(schema.filter((f) => f.secret).map((f) => f.key));
+    // Named non-secret fields only, NOT "everything not named secret". The
+    // schema is the catalogue's, and it does not describe every connection:
+    // it falls back to the auth scheme's generic set and to nothing at all for
+    // a scheme it has no entry for. Filtering a deny-list out of the stored
+    // material therefore returned the whole of it whenever the schema came
+    // back short - the Helix account link stores accessToken/refreshToken
+    // under a bearer scheme whose only named field is 'token', so both tokens
+    // were echoed. Read as an allow-list, an unknown schema fills no fields
+    // instead of emptying the vault, and a blank field keeps its stored value.
+    const shown = new Set(schema.filter((f) => !f.secret).map((f) => f.key));
     const material = await credentials.resolveConnectorCredentials(session.tenantId, id);
     const values: Record<string, string> = {};
     for (const [key, value] of Object.entries(material)) {
-      if (!secretKeys.has(key)) values[key] = value;
+      if (shown.has(key)) values[key] = value;
     }
     return reply.send({ connection, values });
   });

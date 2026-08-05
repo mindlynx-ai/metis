@@ -29,8 +29,10 @@ const BANNED_PATTERNS = [
 ];
 
 /**
- * Internal product names, checked only in text somebody reads: markdown and
- * the catalogue, whose strings render in the editor's inspector and Guide tab.
+ * Internal product names, checked only in text somebody reads: markdown, the
+ * catalogue (whose strings render in the editor's inspector and Guide tab),
+ * and rendered SVG diagrams (every label is stored as literal text inside the
+ * file, so a diagram leaks a name exactly as the prose beside it does).
  * A leak here shipped once, in the Data step's `output` description.
  *
  * They are deliberately NOT checked in source, where the same words are the
@@ -59,6 +61,11 @@ const TEXT_EXTENSIONS = new Set([
   '.sql',
   '.pem',
   '.example',
+  // A rendered diagram is text: mermaid-cli writes every node label into the
+  // SVG verbatim. docs/diagrams/*.svg ships to GitHub and the docs site, so an
+  // internal host or product name drawn into a box would have gone out
+  // unscanned - the same extension-shaped blind spot as .env below.
+  '.svg',
 ]);
 // Extension is the wrong question for the files most likely to hold a key.
 // `.env` sat in the extension set for months and matched nothing, because
@@ -82,7 +89,7 @@ function isScannable(name) {
 }
 
 function isProse(rel, name) {
-  if (/^nodeTypes.*\.json$/.test(name)) return true;
+  if (/^nodeTypes.*\.json$/.test(name) || name.endsWith('.svg')) return true;
   return name.endsWith('.md') && !rel.startsWith(`${INTERNAL_DOCS_PREFIX}/`);
 }
 

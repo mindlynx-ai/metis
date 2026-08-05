@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="120" viewBox="0 0 420 120">
+  <!-- Fixture. A rendered diagram embeds every word of its own labels, so it
+       leaks exactly like the markdown beside it - and the gate walked past it
+       because .svg was not in the extension set. Both a host and an internal
+       product name are planted here. -->
+  <text x="10" y="30">control plane</text>
+  <text x="10" y="60">bastion 10.60.4.19</text>
+  <text x="10" y="90">events flow on Tachyon</text>
+</svg>

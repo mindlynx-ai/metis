@@ -90,10 +90,24 @@ describe('release gates', () => {
     expect(byFile.get('deploy/aws/.state')).toBe('internal-vpc-address');
   });
 
+  it('gate 4 scans a rendered SVG, which carries every label as literal text', () => {
+    const planted = runIdentifierScanGate(join(fixtures, 'gate-4')) as Violation[];
+    // docs/diagrams/*.svg ships to GitHub and the docs site. mermaid-cli
+    // writes each node label into the file verbatim, so a host or an internal
+    // product name drawn into a box leaks exactly as the prose beside it does
+    // - and '.svg' was not in the extension set, so nothing read it at all.
+    const svg = planted.filter((v) => v.file === 'docs/diagrams/leak.svg');
+    expect(svg.map((v) => v.detail).sort()).toEqual([
+      'internal-product-name',
+      'internal-vpc-address',
+    ]);
+  });
+
   it('gate 4 knows the internal product names, in prose and not in source', () => {
     const planted = runIdentifierScanGate(join(fixtures, 'gate-4')) as Violation[];
     const named = planted.filter((v) => v.detail === 'internal-product-name').map((v) => v.file);
     expect(named.sort()).toEqual([
+      'docs/diagrams/leak.svg',
       'docs/leak.md',
       'packages/metis-catalogue/src/nodeTypes.v1.json',
     ]);

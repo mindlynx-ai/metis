@@ -19,9 +19,12 @@ plane - point it at `metis up`, docker compose, or a remote deployment.
 }
 ```
 
-Auth: set `METIS_TOKEN`, or `METIS_USER`/`METIS_SECRET` (defaults to the
-local dev seed `admin`/`metis`). The server logs in lazily and re-logs-in on
-401, and never writes anything except protocol frames to stdout.
+Auth: set `METIS_TOKEN`, or `METIS_USER`/`METIS_SECRET`. These default to
+`admin`/`metis`, which only works against an instance deliberately started
+with `METIS_INSECURE_DEMO=true` - otherwise Metis refuses to serve on that
+secret at all, so set `METIS_SECRET` to whatever `METIS_ADMIN_SECRET` the
+instance was given. The server logs in lazily and re-logs-in on 401, and never
+writes anything except protocol frames to stdout.
 
 ## Tools
 

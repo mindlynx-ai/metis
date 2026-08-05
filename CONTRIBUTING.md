@@ -25,7 +25,16 @@ you are changing.
 
 ## The quality bar (what CI runs)
 
-Every change must keep this green - it is exactly what `.github/workflows/ci.yml` runs:
+Every change must keep this green:
+
+```bash
+npm run release-audit # gates + headers + lint + typecheck + the full unit suite
+npm run e2e           # editor end-to-end (Playwright)
+```
+
+`release-audit` is one command because it is one command in CI - it runs the
+five checks in order and stops at the first finding. Run them individually
+while you are working if you prefer:
 
 ```bash
 npm run typecheck     # tsc across all packages
@@ -33,11 +42,15 @@ npm run lint          # eslint + style checks (no em dash, no deferred-work mark
 npm run check:headers # Apache-2.0 header on every source file
 npm run gates         # the six release gates (see below)
 npm test              # the full unit suite (vitest)
-npm run release-audit # pre-release leak sweep
 ```
 
-CI also boots the full docker compose stack on an egress-blocked network and
-curls it - the "does a fresh clone actually run" check.
+Set `PG_URL` when you run the tests, or the Postgres half of the data-gateway
+conformance suite silently skips. CI always sets it.
+
+Two things CI runs that are not in the list above: `npm run test:cli-e2e`,
+which boots a real downloaded Temporal dev server per spec, and a full docker
+compose boot on an egress-blocked network - the "does a fresh clone actually
+run" check. `npm run e2e` is the one gate CI does not run, so it is on you.
 
 ### The release gates
 
@@ -70,6 +83,10 @@ curls it - the "does a fresh clone actually run" check.
 - Node docs: edit the `docs` field in
   `packages/metis-catalogue/src/nodeTypes.v1.json`, then regenerate the
   reference with `node scripts/generate-node-docs.mjs`.
+- Architecture diagrams: the mermaid fences in `docs/architecture.md` are the
+  source. Edit one, then run `node scripts/render-diagrams.mjs` to refresh the
+  committed SVGs in `docs/diagrams/` and commit both. mermaid-cli is fetched by
+  `npx` for that one run and is deliberately not a dependency.
 
 ## Style
 

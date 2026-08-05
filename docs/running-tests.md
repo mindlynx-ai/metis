@@ -8,6 +8,16 @@ npm run lint                      # eslint + style checks
 npm test                          # full unit suite (vitest)
 npm run gates                     # the six release gates
 npm run e2e                       # Playwright editor suite (self-hosting dev harness)
+
+npm run release-audit             # the four above except e2e, in CI's order
+```
+
+Set `PG_URL` for the unit run too, not only the system tests: the data-gateway
+conformance suite runs against SQLite always and Postgres only when it is set,
+so without it a whole adapter is skipped rather than failed.
+
+```bash
+PG_URL=postgres://postgres:metis@localhost:5432/metis_test npm test
 ```
 
 The browser download is a documented step rather than a `postinstall` because

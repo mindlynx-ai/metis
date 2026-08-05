@@ -153,7 +153,11 @@ test('the archive lists runs Temporal forgot, still fully inspectable', async ({
 
   const archive = page.locator('section[aria-label="Archive"]');
   await expect(archive).toContainText("beyond Temporal's memory");
-  await expect(archive).toContainText('for 90 days');
+  // Deliberately NOT "for 90 days": nothing prunes, so the copy must not
+  // promise a window. retentionDays is stamped as a TTL for a store that
+  // expires rows itself, and neither SQLite nor Postgres does.
+  await expect(archive).toContainText('Metis still has them');
+  await expect(archive).not.toContainText('90 days');
   const row = archive.locator('tbody tr', { hasText: 'exec_seeded_ancient' });
   await expect(row.locator('.status')).toHaveText('completed');
   // The board itself does NOT list it (Temporal's view), only the archive.

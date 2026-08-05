@@ -19,6 +19,9 @@
  * remembers (the store outlives the dev server's retention). Detail pages are
  * store-backed, so archived runs stay fully inspectable - no operator levers,
  * though: Temporal no longer has their history.
+ *
+ * The route still returns `retentionDays`; this component no longer renders it,
+ * because nothing enforces it. See docs/architecture.md, "Key invariants".
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
@@ -29,15 +32,11 @@ type ArchiveRow = Awaited<ReturnType<typeof api.executionArchive>>['items'][numb
 
 export function ArchiveSection() {
   const [rows, setRows] = useState<ArchiveRow[]>([]);
-  const [retentionDays, setRetentionDays] = useState<number>();
 
   useEffect(() => {
     api
       .executionArchive()
-      .then((result) => {
-        setRows(result.items);
-        setRetentionDays(result.retentionDays);
-      })
+      .then((result) => setRows(result.items))
       .catch(() => setRows([]));
   }, []);
 
@@ -46,9 +45,15 @@ export function ArchiveSection() {
   return (
     <section aria-label="Archive" className="operate-archive">
       <h2 className="op-section-title">Archive - beyond Temporal&apos;s memory</h2>
+      {/*
+        This used to read "keeps them for N days", which promised an expiry
+        nothing performs: retentionDays is stamped on each row as a TTL for a
+        store that expires rows itself, and neither SQLite nor Postgres does.
+        The store keeps them, full stop - so that is what it now says.
+      */}
       <p className="help">
-        Temporal&apos;s visibility no longer lists these runs; Metis keeps them
-        {retentionDays ? ` for ${retentionDays} days` : ''}. They stay fully inspectable.
+        Temporal&apos;s visibility no longer lists these runs; Metis still has them, and
+        they stay fully inspectable.
       </p>
       <div className="runs-table-wrap">
         <table className="runs-table">

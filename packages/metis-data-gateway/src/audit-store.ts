@@ -108,22 +108,37 @@ export class AuditStore {
 
   /** Newest first, optionally narrowed by actor, entity or action. */
   async list(tenantId: string, query: AuditQuery = {}): Promise<AuditRecord[]> {
-    // An actor filter reads the actor index instead of the tenant partition.
-    const page = query.actor
-      ? await this.gateway.query({
-          table: AUDIT_TABLE.name,
-          index: 'byActor',
-          partitionValue: actorPk(tenantId, query.actor),
-        })
-      : await this.gateway.query({
-          table: AUDIT_TABLE.name,
-          partitionValue: pk(tenantId),
-        });
+    const want = Math.min(Math.max(1, query.limit ?? 50), 500);
+    // The answer was always bounded; the READ was not. It fetched the tenant's
+    // whole history into memory and then took fifty of it, so the cost of the
+    // question grew with the age of the install while the reply stayed the
+    // same size. The store can do the taking - the sort key is time-first, so
+    // newest-first with a limit is the newest N off the top - and sqlite and
+    // postgres push both into the query rather than the process.
+    //
+    // Only where the answer cannot change: entityId and action are matched
+    // here rather than by the store, so bounding those would return the
+    // matches among the newest N instead of the newest N matches, and an
+    // audit trail that quietly omits is worse than one that is slow. They
+    // read the partition whole, as they always have. An actor read is already
+    // narrowed by the index it uses, so it bounds safely.
+    // ponytail: bounding the other two needs a paging loop AND a ceiling on
+    // how far back it will look, which decides what the trail may leave out.
+    const bounded = !query.entityId && !query.action;
+    const page = await this.gateway.query({
+      table: AUDIT_TABLE.name,
+      // An actor filter reads the actor index instead of the tenant partition.
+      ...(query.actor
+        ? { index: 'byActor', partitionValue: actorPk(tenantId, query.actor) }
+        : { partitionValue: pk(tenantId) }),
+      ascending: false,
+      ...(bounded ? { limit: want } : {}),
+    });
     const items = (page.items as unknown as AuditRecord[])
       .filter((item) => !query.actor || item.actor === query.actor)
       .filter((item) => !query.entityId || item.entityId === query.entityId)
       .filter((item) => !query.action || item.action === query.action)
       .sort((a, b) => (a.at < b.at ? 1 : -1));
-    return items.slice(0, Math.min(Math.max(1, query.limit ?? 50), 500));
+    return items.slice(0, want);
   }
 }

@@ -25,7 +25,7 @@ import { readFileSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { scaffoldProject, parseConfig, DEFAULT_CONFIG, type MetisConfig } from './scaffold.js';
-import { MetisRuntime } from './runtime.js';
+import { MetisRuntime, TENANT } from './runtime.js';
 import { buildControlServer } from './control-server.js';
 import {
   seedConnectors,
@@ -43,6 +43,9 @@ Usage:
   metis init             Scaffold a project in the current directory
   metis up               Start Temporal, the worker, the control plane and the editor
   metis run <workflow>   Run a single workflow and print its result
+  metis prune            Delete closed run history past the retention window
+                         (shows what would go; add --yes to delete, --days N
+                         to override metis.config.json's retentionDays)
   metis connectors seed  Seed the top-100 connector catalogue into this project
   metis connectors list  List the connectors registered in this project
   metis triggers add     Bind a webhook, poll or schedule trigger to a workflow
@@ -108,6 +111,8 @@ export async function runCli(argv: string[], context: CliContext): Promise<numbe
       return cmdUp(context);
     case 'run':
       return cmdRun(context, argv[1]);
+    case 'prune':
+      return cmdPrune(context, argv.slice(1));
     case 'connectors':
       return cmdConnectors(context, argv[1]);
     case 'triggers':
@@ -310,6 +315,47 @@ export async function cmdWebhooks(context: CliContext, argv: string[]): Promise<
     context.stderr(error instanceof Error ? error.message : String(error));
     return 1;
   }
+}
+
+/**
+ * `metis prune [--days N] [--yes]` - clear closed run history on demand.
+ *
+ * A DRY RUN by default, unlike `triggers remove` and friends, which delete the
+ * one thing they were handed. This deletes an unbounded set the operator has
+ * not seen, so the first run is the listing and `--yes` is the consent.
+ *
+ * `--days` exists because the useful case is "clear it now" on an install that
+ * has never set a retention window; without it the command would do nothing on
+ * a default project. With neither set there is no window, and no window means a
+ * refusal - never a guess.
+ */
+export async function cmdPrune(context: CliContext, argv: string[]): Promise<number> {
+  const { flags } = parseFlags(argv);
+  const config = loadConfig(context.cwd);
+  const days = flags.days !== undefined ? Number(flags.days) : config.retentionDays;
+  if (days === undefined) {
+    context.stderr('no retention window: set "retentionDays" in metis.config.json, or pass --days N');
+    context.stderr('  metis prune --days 30        what a 30-day window would delete');
+    context.stderr('  metis prune --days 30 --yes  delete it');
+    return 1;
+  }
+  if (!Number.isInteger(days) || days < 0) {
+    context.stderr(`--days must be a whole number of days, not "${flags.days}"`);
+    return 1;
+  }
+  const apply = flags.yes === 'true';
+  const runtime = new MetisRuntime({ projectDir: context.cwd, config, log: context.stdout });
+  const result = await runtime.store.pruneExecutions(TENANT, {
+    olderThanDays: days,
+    dryRun: !apply,
+  });
+  const what = `${result.executions} runs (${result.rows} rows) closed more than ${days} days ago`;
+  context.stdout(apply ? `Deleted ${what}.` : `Would delete ${what}.`);
+  if (result.kept > 0) {
+    context.stdout(`Kept ${result.kept} still going, whatever their age.`);
+  }
+  if (!apply) context.stdout('Nothing was deleted. Re-run with --yes to delete it.');
+  return 0;
 }
 
 export async function cmdRun(context: CliContext, workflowName?: string): Promise<number> {

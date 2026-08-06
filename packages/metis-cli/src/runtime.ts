@@ -139,6 +139,10 @@ function buildExecPort(
   };
 }
 const POLL_INTERVAL_MS = Number(process.env.METIS_POLL_INTERVAL_MS ?? 30_000);
+/** Retention is measured in days, so sweeping more often than daily only
+ *  costs queries. The first sweep is at boot, which is also the one that
+ *  clears whatever piled up while this instance was down. */
+const PRUNE_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const ITEM_ARRAY_KEYS = ['results', 'data', 'items', 'records', 'value'];
 
 function readPath(value: unknown, path: string): unknown {
@@ -211,6 +215,7 @@ export class MetisRuntime {
   private schedules: ScheduleService | undefined;
   private reconciler: StatusReconciler | undefined;
   private poller: ConnectorPoller | undefined;
+  private pruneTimer: ReturnType<typeof setInterval> | undefined;
 
   constructor(private readonly options: RuntimeOptions) {
     this.address =
@@ -222,7 +227,9 @@ export class MetisRuntime {
     registerConnectorTable(this.gateway);
     registerTriggerTable(this.gateway);
     registerOutboundWebhookTable(this.gateway);
-    this.store = new WorkflowStore(this.gateway, { executionTtlDays: this.options.config.retentionDays });
+    this.store = new WorkflowStore(this.gateway, {
+      retentionDays: this.options.config.retentionDays,
+    });
     this.audit = new AuditStore(this.gateway);
     this.connectors = new ConnectorRegistry(this.gateway);
     this.triggers = new TriggerService(this.gateway, TENANT);
@@ -354,6 +361,38 @@ export class MetisRuntime {
       log: this.options.log,
     });
     this.reconciler.start(60_000);
+    this.startPrune();
+  }
+
+  /**
+   * The retention sweep, on boot and then daily. A setting that only takes
+   * effect when somebody remembers to type a command is a default argument,
+   * not a retention policy - so when `retentionDays` is set this enforces it
+   * without being asked, and `metis prune` stays for clearing on demand.
+   *
+   * ponytail: no lock. Prune only reads and deletes by key, both idempotent,
+   * so a second instance sweeping the same store concurrently is harmless.
+   * Add one if a sweep ever starts WRITING.
+   */
+  private startPrune(): void {
+    const days = this.options.config.retentionDays;
+    if (days === undefined) return; // retention off: never delete anything
+    const sweep = () => {
+      this.store
+        .pruneExecutions(TENANT)
+        .then(({ executions, rows }) => {
+          if (executions > 0) {
+            this.options.log(`Pruned ${executions} runs older than ${days} days (${rows} rows).`);
+          }
+        })
+        .catch((error: unknown) => {
+          this.options.log(
+            `Retention sweep skipped: ${error instanceof Error ? error.message : String(error)}`,
+          );
+        });
+    };
+    sweep();
+    this.pruneTimer = setInterval(sweep, PRUNE_INTERVAL_MS);
   }
 
   /** Ensure every enabled schedule trigger has a live Temporal Schedule. */
@@ -451,6 +490,7 @@ export class MetisRuntime {
   async stop(): Promise<void> {
     this.reconciler?.stop();
     this.poller?.stop();
+    if (this.pruneTimer) clearInterval(this.pruneTimer);
     this.outbound.stop();
     this.worker?.shutdown();
     await this.workerRun?.catch(() => undefined);

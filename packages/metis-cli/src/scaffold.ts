@@ -35,9 +35,14 @@ export const MetisConfigSchema = z.object({
     temporalUi: z.number().int().positive(),
   }),
   paths: z.object({ data: z.string().min(1), database: z.string().min(1) }),
-  /** How long Metis keeps execution history - the archive outlives
-   *  Temporal's own (much shorter) visibility retention. */
-  retentionDays: z.number().int().positive().optional(),
+  /**
+   * How long Metis keeps closed execution history, in days. OMITTED BY DEFAULT,
+   * which means keep everything: retention is the operator's policy, and an
+   * upgrade that started deleting run history nobody agreed to lose would be
+   * the wrong default to be wrong about. Set it and `metis up` sweeps daily;
+   * `metis prune` clears on demand either way.
+   */
+  retentionDays: z.number().int().nonnegative().optional(),
 });
 
 export type MetisConfig = z.infer<typeof MetisConfigSchema>;
@@ -46,7 +51,6 @@ export const DEFAULT_CONFIG: MetisConfig = {
   datastore: 'sqlite',
   ports: { editor: 3000, temporalGrpc: 7233, temporalUi: 8233 },
   paths: { data: '.metis', database: '.metis/metis.db' },
-  retentionDays: 90,
 };
 
 /** One level of the config, defaults underneath whatever the file says. A value

@@ -20,8 +20,9 @@
  * store-backed, so archived runs stay fully inspectable - no operator levers,
  * though: Temporal no longer has their history.
  *
- * The route still returns `retentionDays`; this component no longer renders it,
- * because nothing enforces it. See docs/architecture.md, "Key invariants".
+ * The route returns `retentionDays`, which IS enforced now (the store prunes
+ * closed runs past it), but it is absent on the default install because
+ * retention is opt-in - so the copy below still promises no window.
  */
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
@@ -46,10 +47,9 @@ export function ArchiveSection() {
     <section aria-label="Archive" className="operate-archive">
       <h2 className="op-section-title">Archive - beyond Temporal&apos;s memory</h2>
       {/*
-        This used to read "keeps them for N days", which promised an expiry
-        nothing performs: retentionDays is stamped on each row as a TTL for a
-        store that expires rows itself, and neither SQLite nor Postgres does.
-        The store keeps them, full stop - so that is what it now says.
+        Deliberately no window in the copy. Retention is off unless the
+        operator sets retentionDays, so on the install this text is written
+        for, the store keeps them - full stop.
       */}
       <p className="help">
         Temporal&apos;s visibility no longer lists these runs; Metis still has them, and

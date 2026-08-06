@@ -18,6 +18,12 @@ import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import {
+  DataGateway,
+  SqliteAdapter,
+  WorkflowStore,
+  registerWorkflowTables,
+} from '@mindlynx/metis-data-gateway';
 import { runCli, loadConfig, HELP_TEXT } from '../cli.js';
 import { DEFAULT_CONFIG } from '../scaffold.js';
 
@@ -43,7 +49,15 @@ describe('metis CLI', () => {
   });
 
   it('the help text names every command', () => {
-    for (const command of ['init', 'up', 'run', 'connectors seed', 'triggers add', 'webhooks add']) {
+    for (const command of [
+      'init',
+      'up',
+      'run',
+      'prune',
+      'connectors seed',
+      'triggers add',
+      'webhooks add',
+    ]) {
       expect(HELP_TEXT).toContain(`metis ${command}`);
     }
   });
@@ -178,5 +192,89 @@ describe('metis.config.json', () => {
     const dir = mkdtempSync(join(tmpdir(), 'metis-cli-config-'));
     writeFileSync(join(dir, 'metis.config.json'), '{ "ports": ');
     expect(() => loadConfig(dir)).toThrow(/not valid JSON/);
+  });
+});
+
+/**
+ * `metis prune` - the deliberate clear. It deletes run history, so the default
+ * is a dry run and an unset window is a refusal, not "delete everything".
+ */
+describe('metis prune', () => {
+  const DAY = 24 * 60 * 60 * 1000;
+
+  /** A project directory with a config and some seeded runs in its store. */
+  async function project(retentionDays?: number) {
+    const dir = mkdtempSync(join(tmpdir(), 'metis-cli-prune-'));
+    writeFileSync(
+      join(dir, 'metis.config.json'),
+      JSON.stringify({ ...DEFAULT_CONFIG, retentionDays }),
+    );
+    const gateway = new DataGateway(new SqliteAdapter(join(dir, '.metis', 'metis.db')));
+    registerWorkflowTables(gateway);
+    const store = new WorkflowStore(gateway);
+    const seed = (executionId: string, ageDays: number, status: string) =>
+      store.writeExecutionMeta({
+        tenantId: 't1',
+        executionId,
+        workflowId: 'wf1',
+        status,
+        startTime: new Date(Date.now() - ageDays * DAY).toISOString(),
+      });
+    await seed('stale', 60, 'completed');
+    await seed('parked', 60, 'running');
+    return { dir, store };
+  }
+
+  it('refuses when no window is configured rather than guessing one', async () => {
+    const { dir, store } = await project(undefined);
+    const out = capture();
+    const code = await runCli(['prune'], { cwd: dir, stdout: out.write, stderr: out.write });
+    expect(code).toBe(1);
+    expect(out.text()).toMatch(/retentionDays|--days/);
+    expect(await store.getExecution('t1', 'stale')).toBeDefined();
+  });
+
+  it('is a dry run unless --yes is given', async () => {
+    const { dir, store } = await project(30);
+    const out = capture();
+    const code = await runCli(['prune'], { cwd: dir, stdout: out.write, stderr: out.write });
+    expect(code).toBe(0);
+    expect(out.text()).toMatch(/--yes/);
+    expect(await store.getExecution('t1', 'stale')).toBeDefined();
+    expect(await store.getExecution('t1', 'parked')).toBeDefined();
+  });
+
+  it('--yes deletes the closed runs past the window and spares the live one', async () => {
+    const { dir, store } = await project(30);
+    const out = capture();
+    const code = await runCli(['prune', '--yes'], { cwd: dir, stdout: out.write, stderr: out.write });
+    expect(code).toBe(0);
+    expect(await store.getExecution('t1', 'stale')).toBeUndefined();
+    expect(await store.getExecution('t1', 'parked')).toBeDefined();
+  });
+
+  it('--days overrides the config so an operator can clear on demand', async () => {
+    const { dir, store } = await project(undefined);
+    const out = capture();
+    const code = await runCli(['prune', '--days', '30', '--yes'], {
+      cwd: dir,
+      stdout: out.write,
+      stderr: out.write,
+    });
+    expect(code).toBe(0);
+    expect(await store.getExecution('t1', 'stale')).toBeUndefined();
+  });
+
+  it('refuses a --days that is not a whole number of days', async () => {
+    const { dir, store } = await project(undefined);
+    const out = capture();
+    const code = await runCli(['prune', '--days', 'lots', '--yes'], {
+      cwd: dir,
+      stdout: out.write,
+      stderr: out.write,
+    });
+    expect(code).toBe(1);
+    expect(out.text()).toMatch(/--days/);
+    expect(await store.getExecution('t1', 'stale')).toBeDefined();
   });
 });

@@ -20,7 +20,8 @@ import type { DataGateway } from './gateway.js';
 /**
  * The workflow-specific method set over the gateway:
  * two logical stores, workflows (one item per version) and
- * workflow_executions (a META item plus LOG items per run, 90-day TTL).
+ * workflow_executions (a META item plus LOG items per run, kept until an
+ * operator's retention window says otherwise - see pruneExecutions).
  * Version and changeset are zero-padded in sort keys so lexical order
  * is numeric order; listing indexes carry exactly one row per workflow
  * (the newest version) and only META rows populate execution indexes.
@@ -40,7 +41,6 @@ export const WORKFLOW_EXECUTIONS_TABLE: TableDefinition = {
   name: 'workflow_executions',
   partitionAttribute: 'PK',
   sortAttribute: 'SK',
-  ttlAttribute: 'ttl',
   indexes: [
     { name: 'byTenant', partitionAttribute: 'gsi1pk', sortAttribute: 'startTime' },
     { name: 'byWorkflow', partitionAttribute: 'gsi2pk', sortAttribute: 'startTime' },
@@ -115,32 +115,64 @@ const logSk = (sequence: number, attempt = 1) =>
 
 export interface WorkflowStoreOptions {
   clock?: () => number;
-  executionTtlDays?: number;
+  /** Operator retention window in days. Undefined = keep everything. */
+  retentionDays?: number;
 }
+
+/**
+ * The statuses a run can END in. Anything else - 'running', or a status a later
+ * version invents - counts as still going and is never pruned. An allowlist,
+ * not a denylist of 'running': a new status must be added here deliberately
+ * before prune will delete it, so forgetting keeps data rather than losing it.
+ */
+export const CLOSED_STATUSES: ReadonlySet<string> = new Set([
+  'completed',
+  'failed',
+  'cancelled',
+  'terminated',
+]);
+
+export interface PruneOptions {
+  /** Window in days. Defaults to the store's configured retention. */
+  olderThanDays?: number;
+  /** Report what would go without deleting any of it. */
+  dryRun?: boolean;
+}
+
+export interface PruneResult {
+  /** Runs deleted - or, on a dry run, that would have been. */
+  executions: number;
+  /** Rows across those runs: one META plus its LOGs. */
+  rows: number;
+  /** Runs old enough to go but spared because they are still going. */
+  kept: number;
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export class WorkflowStore {
   private readonly clock: () => number;
-  private readonly executionTtlDays: number;
+  private readonly retention: number | undefined;
 
   constructor(
     private readonly gateway: DataGateway,
     options: WorkflowStoreOptions = {},
   ) {
     this.clock = options.clock ?? (() => Date.now());
-    this.executionTtlDays = options.executionTtlDays ?? 90;
+    this.retention = options.retentionDays;
   }
 
-  /** How long execution rows are kept - THE Metis retention (vs Temporal's). */
-  get retentionDays(): number {
-    return this.executionTtlDays;
+  /**
+   * How long execution rows are kept - THE Metis retention (vs Temporal's).
+   * Undefined is the default and means everything is kept: an upgrade must
+   * never silently delete history nobody agreed to lose. Deletion is opt-in.
+   */
+  get retentionDays(): number | undefined {
+    return this.retention;
   }
 
   private nowIso(): string {
     return new Date(this.clock()).toISOString();
-  }
-
-  private ttl(): number {
-    return Math.floor(this.clock() / 1000) + this.executionTtlDays * 24 * 60 * 60;
   }
 
   /**
@@ -317,7 +349,6 @@ export class WorkflowStore {
       ...meta,
       PK: executionPk(meta.tenantId, meta.executionId),
       SK: 'META',
-      ttl: this.ttl(),
       gsi1pk: `TENANT#${meta.tenantId}`,
       gsi2pk: `TENANT#${meta.tenantId}#WF#${meta.workflowId}`,
       gsi3pk: `TENANT#${meta.tenantId}#STATUS#${meta.status}`,
@@ -352,7 +383,6 @@ export class WorkflowStore {
       ...log,
       PK: executionPk(log.tenantId, log.executionId),
       SK: logSk(log.sequence, log.activityAttempt),
-      ttl: this.ttl(),
     });
   }
 
@@ -401,5 +431,104 @@ export class WorkflowStore {
       cursor: options.cursor,
     });
     return { items: page.items as ExecutionMetaItem[], cursor: page.cursor };
+  }
+
+  /**
+   * Delete every row of one run (META and its LOGs), returning the count.
+   * `countOnly` walks the same rows without deleting - the dry run.
+   */
+  private async removeExecution(
+    tenantId: string,
+    executionId: string,
+    countOnly: boolean,
+  ): Promise<number> {
+    const pk = executionPk(tenantId, executionId);
+    let rows = 0;
+    let cursor: string | undefined;
+    do {
+      const page = await this.gateway.query({
+        table: WORKFLOW_EXECUTIONS_TABLE.name,
+        partitionValue: pk,
+        limit: 100,
+        cursor,
+      });
+      for (const item of page.items) {
+        if (!countOnly) {
+          await this.gateway.remove(WORKFLOW_EXECUTIONS_TABLE.name, {
+            partitionKey: pk,
+            sortKey: String(item.SK),
+          });
+        }
+        rows += 1;
+      }
+      cursor = page.cursor;
+    } while (cursor);
+    return rows;
+  }
+
+  /**
+   * Enforce the retention window: delete closed runs whose history is older
+   * than it, META and LOG rows alike.
+   *
+   * Three rules, in the order they matter:
+   *
+   * 1. No window, no deletion. `olderThanDays` falls back to the store's
+   *    configured retention, which is undefined unless an operator set one -
+   *    and then this returns having read nothing and deleted nothing. The
+   *    guard is HERE rather than in each caller so that a scheduler, a CLI
+   *    command and any future route are all safe by construction.
+   * 2. A run that is still going is never touched, whatever its age. Parked on
+   *    a signal since April is not abandoned. "Still going" is the complement
+   *    of CLOSED_STATUSES - an allowlist, so an unfamiliar status survives.
+   * 3. A run is aged by when it ENDED, falling back to when it started. A run
+   *    that started ninety days ago and finished yesterday is a day old; the
+   *    index is on startTime, which only ever over-selects (endTime >= start),
+   *    so it still bounds the scan to candidates.
+   *
+   * Concurrency: this only reads and deletes by key, both idempotent, and
+   * never writes. Two processes sweeping at once therefore agree on the
+   * outcome and may only double-COUNT what they each saw - no lock needed.
+   */
+  async pruneExecutions(tenantId: string, options: PruneOptions = {}): Promise<PruneResult> {
+    const result: PruneResult = { executions: 0, rows: 0, kept: 0 };
+    const days = options.olderThanDays ?? this.retention;
+    if (days === undefined) return result;
+    if (!Number.isFinite(days) || days < 0) {
+      throw new Error(`retention window must be a non-negative number of days, not ${days}`);
+    }
+    const cutoff = new Date(this.clock() - days * DAY_MS).toISOString();
+
+    let cursor: string | undefined;
+    do {
+      const page = await this.gateway.query({
+        table: WORKFLOW_EXECUTIONS_TABLE.name,
+        index: 'byTenant',
+        partitionValue: `TENANT#${tenantId}`,
+        sortRange: { to: cutoff },
+        limit: 100,
+        cursor,
+      });
+      for (const meta of page.items) {
+        const closedAt = typeof meta.endTime === 'string' ? meta.endTime : meta.startTime;
+        // An undated row has an unknown age, which is not the same as an old
+        // one, so it is kept too.
+        if (
+          !CLOSED_STATUSES.has(String(meta.status)) ||
+          typeof closedAt !== 'string' ||
+          closedAt > cutoff
+        ) {
+          result.kept += 1;
+          continue;
+        }
+        result.executions += 1;
+        result.rows += await this.removeExecution(
+          tenantId,
+          String(meta.executionId),
+          options.dryRun === true,
+        );
+      }
+      cursor = page.cursor;
+    } while (cursor);
+    return result;
   }
 }

@@ -486,7 +486,8 @@ export const api = {
         definitionVersion?: number;
         definitionChangeset?: number;
       }[];
-      retentionDays: number;
+      /** Absent unless the operator set one: retention is opt-in. */
+      retentionDays?: number;
     }>('GET', '/api/executions/archive'),
   executionInsight: (executionId: string) =>
     request<ExecutionInsight>('GET', `/api/executions/${encodeURIComponent(executionId)}/insight`),

@@ -39,7 +39,6 @@ export interface TableDefinition {
   partitionAttribute: string;
   sortAttribute?: string;
   indexes?: TableIndexDefinition[];
-  ttlAttribute?: string;
 }
 
 export interface PutOptions {

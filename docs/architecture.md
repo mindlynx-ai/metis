@@ -267,14 +267,61 @@ Three refusals worth knowing about before you deploy anything:
 - **The store outlives Temporal**: the Temporal dev server forgets a run long
   before Metis does. Operate's Archive lists exactly those runs, and their
   detail pages stay fully inspectable because they read the store, not
-  Temporal. Note what this is *not*: execution rows are kept **indefinitely**.
-  `retentionDays` (metis.config.json, default 90) is stamped onto each row as a
-  TTL attribute for a store that expires rows on its own, and neither SQLite
-  nor Postgres does. Nothing prunes today, and lowering the number deletes
-  nothing.
+  Temporal. How long they last is **your** policy, not ours - see
+  [Retention](#retention) below.
 - **Editions**: the open build is complete and self-contained; gated
   capabilities exist only as locked cards. Six release gates enforce the
   boundary structurally.
+
+## Retention
+
+Metis keeps every execution row - the META record and its LOG rows - **for
+ever**, until you say otherwise. Deletion is opt-in, because a default that
+deletes would mean the first person to upgrade quietly loses run history they
+never agreed to lose.
+
+To set a window, add `retentionDays` to `metis.config.json`:
+
+```json
+{
+  "retentionDays": 90
+}
+```
+
+With it set, `metis up` sweeps once at boot and then daily, deleting closed
+runs whose history is older than the window. Leave it out and nothing is ever
+deleted; lowering it later takes effect on the next sweep.
+
+Two rules the sweep will not break:
+
+- **A run that is still going is never deleted, whatever its age.** A run
+  parked on a signal since April is waiting, not abandoned. Only runs that have
+  actually finished - completed, failed, cancelled or terminated - are
+  candidates.
+- **A run is aged by when it *ended*.** A run that started ninety days ago and
+  finished yesterday is a day old, and a 30-day window keeps it for another 29.
+
+### Clearing on demand
+
+`metis prune` clears history without waiting for the sweep. It **shows you what
+would go and deletes nothing** unless you add `--yes`:
+
+```console
+$ metis prune --days 30
+Would delete 41 runs (612 rows) closed more than 30 days ago.
+Kept 2 still going, whatever their age.
+Nothing was deleted. Re-run with --yes to delete it.
+
+$ metis prune --days 30 --yes
+Deleted 41 runs (612 rows) closed more than 30 days ago.
+```
+
+`--days` overrides `retentionDays` for that one run, so you can clear an
+install that has never set a window. With neither, the command refuses rather
+than guessing one. `--days 0` clears every closed run.
+
+Temporal has its own, much shorter, visibility retention and is unaffected by
+any of this; Operate's Archive is the Metis-side history described here.
 
 ## Where things happen
 

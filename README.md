@@ -187,6 +187,22 @@ minutes old is refused, so a captured one cannot be replayed later; signing the
 delivery id keeps a replay from being relabelled into a fresh run. Delivery
 retries with backoff.
 
+## Run history
+
+Metis keeps every run for ever, until you say otherwise - Temporal forgets them
+long before we do, and Operate's Archive is what is left. Deletion is opt-in:
+add `retentionDays` to `metis.config.json` and `metis up` sweeps daily, or clear
+on demand with
+
+```
+metis prune --days 30         # what a 30-day window would delete; deletes nothing
+metis prune --days 30 --yes   # delete it
+```
+
+A run that is still going is never deleted, whatever its age, and a run is aged
+by when it finished rather than when it started. See
+[docs/architecture.md](docs/architecture.md#retention).
+
 ## Editions
 
 Metis is the open core. Memory, agents, approvals, analytics and multi-tenant

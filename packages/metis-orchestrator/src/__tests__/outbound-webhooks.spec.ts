@@ -48,8 +48,11 @@ function service(options = {}) {
 describe('outbound webhook signing and matching', () => {
   it('signs a body so the inbound generic HMAC verifier accepts it (symmetry)', () => {
     const body = '{"id":"d1","event":"workflow.execution.completed"}';
-    const headers = outboundHeaders({ secret: 'shared' }, body, { deliveryId: 'd1', event: 'x', timestamp: 't' });
-    expect(headers['x-metis-signature']).toBe(signOutbound('shared', body));
+    // Unix seconds: the timestamp is signed and held to the replay window, so
+    // it is a real clock reading now rather than a placeholder.
+    const timestamp = String(Math.floor(Date.now() / 1000));
+    const headers = outboundHeaders({ secret: 'shared' }, body, { deliveryId: 'd1', event: 'x', timestamp });
+    expect(headers['x-metis-signature']).toBe(signOutbound('shared', 'd1', timestamp, body));
     expect(verifyTriggerSignature({ verification: 'hmac', secret: 'shared' }, body, headers)).toBe(true);
     expect(verifyTriggerSignature({ verification: 'hmac', secret: 'wrong' }, body, headers)).toBe(false);
   });

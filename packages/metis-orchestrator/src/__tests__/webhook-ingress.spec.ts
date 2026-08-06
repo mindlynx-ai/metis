@@ -51,8 +51,18 @@ class FakeExecutions implements ExecutionPort {
 
 const githubSig = (body: string, secret: string) =>
   `sha256=${createHmac('sha256', secret).update(body, 'utf8').digest('hex')}`;
-const hmacSig = (body: string, secret: string) =>
-  createHmac('sha256', secret).update(body, 'utf8').digest('base64');
+/** The generic scheme signs `deliveryId.timestamp.body`; webhook-replay.spec
+ *  covers what that buys, this only keeps the happy path honest here. */
+const hmacHeaders = (body: string, secret: string) => {
+  const timestamp = String(Math.floor(Date.now() / 1000));
+  return {
+    'x-metis-delivery': 'dlv-1',
+    'x-metis-timestamp': timestamp,
+    'x-metis-signature': createHmac('sha256', secret)
+      .update(`dlv-1.${timestamp}.${body}`, 'utf8')
+      .digest('base64'),
+  };
+};
 
 describe('webhook signature verification', () => {
   const body = '{"hello":"world"}';
@@ -62,9 +72,7 @@ describe('webhook signature verification', () => {
     expect(verifyTriggerSignature(trg, body, { 'x-hub-signature-256': githubSig(body, 'wrong') })).toBe(false);
   });
   it('accepts a valid generic HMAC and rejects a missing secret', () => {
-    expect(
-      verifyTriggerSignature({ verification: 'hmac', secret: 'k' }, body, { 'x-metis-signature': hmacSig(body, 'k') }),
-    ).toBe(true);
+    expect(verifyTriggerSignature({ verification: 'hmac', secret: 'k' }, body, hmacHeaders(body, 'k'))).toBe(true);
     expect(verifyTriggerSignature({ verification: 'hmac', secret: '' }, body, {})).toBe(false);
   });
   it('passes through when verification is none', () => {

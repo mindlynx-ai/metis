@@ -41,8 +41,17 @@ function safeEqual(a: string, b: string): boolean {
 }
 
 /** How long a signed delivery stays acceptable, so a captured one cannot be
- *  replayed indefinitely. Svix's own tolerance. */
-const SVIX_TOLERANCE_SECONDS = 5 * 60;
+ *  replayed indefinitely. Svix's own tolerance, and now the generic scheme's. */
+const TOLERANCE_SECONDS = 5 * 60;
+
+/** True when a sender's unix-seconds timestamp is inside the window. Rejecting
+ *  the future half matters as much as the past: a delivery dated an hour ahead
+ *  would otherwise be a capture with an hour of shelf life. */
+function withinTolerance(timestamp: string, nowMs: number): boolean {
+  const sentAt = Number(timestamp);
+  if (!timestamp || !Number.isFinite(sentAt)) return false;
+  return Math.abs(Math.floor(nowMs / 1000) - sentAt) <= TOLERANCE_SECONDS;
+}
 
 /** Either spelling of the Svix headers: the standard-webhooks names and the
  *  older svix-prefixed ones. Resend sends the svix- set. */
@@ -66,9 +75,7 @@ function verifySvix(secret: string, rawBody: string, headers: HeaderBag, nowMs: 
 
   // Reject a delivery signed too long ago (or too far ahead), so a captured
   // body cannot be replayed later.
-  const sentAt = Number(timestamp);
-  if (!Number.isFinite(sentAt)) return false;
-  if (Math.abs(Math.floor(nowMs / 1000) - sentAt) > SVIX_TOLERANCE_SECONDS) return false;
+  if (!withinTolerance(timestamp, nowMs)) return false;
 
   const key = Buffer.from(secret.replace(/^whsec_/, ''), 'base64');
   const expected = createHmac('sha256', key).update(`${id}.${timestamp}.${rawBody}`, 'utf8').digest('base64');
@@ -98,8 +105,31 @@ export function verifyTriggerSignature(
   if (scheme === 'svix') {
     return verifySvix(secret, rawBody, headers, nowMs);
   }
-  const digest = createHmac('sha256', secret).update(rawBody, 'utf8').digest('base64');
+  const timestamp = header(headers, 'x-metis-timestamp');
+  if (!withinTolerance(timestamp, nowMs)) return false;
+  const digest = signGeneric(secret, header(headers, 'x-metis-delivery'), timestamp, rawBody);
   return safeEqual(digest, header(headers, 'x-metis-signature'));
+}
+
+/**
+ * The generic scheme's signed content, shared with the outbound sender so the
+ * two halves cannot drift apart: `deliveryId.timestamp.body`, the same
+ * construction Svix uses, for the same two reasons.
+ *
+ * The timestamp is signed AND checked, so a captured delivery expires. The
+ * delivery id is signed because it is not decoration: handleWebhook derives the
+ * execution id from it, so it decides whether a repeat is recognised as one.
+ * Unsigned, editing it turned a replay into a fresh run under a signature that
+ * still verified. A sender that supplies no delivery id signs the empty string
+ * for it, which binds the absence too - one cannot be added in flight either.
+ */
+export function signGeneric(
+  secret: string,
+  deliveryId: string,
+  timestamp: string,
+  rawBody: string,
+): string {
+  return createHmac('sha256', secret).update(`${deliveryId}.${timestamp}.${rawBody}`, 'utf8').digest('base64');
 }
 
 export interface WebhookEnvelope {

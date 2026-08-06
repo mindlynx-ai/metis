@@ -179,9 +179,13 @@ Send a signed POST to your own systems on every workflow lifecycle event:
 metis webhooks add https://ops.example.com/metis --events completed,failed --secret <s>
 ```
 
-The body is HMAC-signed (`x-metis-signature`) with the same scheme the inbound
-side verifies, so one Metis validates another out of the box. Delivery retries
-with backoff.
+`x-metis-signature` is `base64(HMAC_SHA256(secret, "<delivery-id>.<timestamp>.<body>"))`,
+over the `x-metis-delivery` and `x-metis-timestamp` headers sent beside it -
+the same scheme the inbound side verifies, so one Metis validates another out
+of the box. `x-metis-timestamp` is unix seconds and a delivery more than five
+minutes old is refused, so a captured one cannot be replayed later; signing the
+delivery id keeps a replay from being relabelled into a fresh run. Delivery
+retries with backoff.
 
 ## Editions
 

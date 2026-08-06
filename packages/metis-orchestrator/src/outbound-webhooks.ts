@@ -27,9 +27,10 @@
  * is operator-registered, so egress there is the trust decision, exactly
  * as with connectors.
  */
-import { createHmac, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { TableDefinition, WorkflowEvent, LocalEventBus } from '@mindlynx/metis-ports';
 import type { DataGateway } from '@mindlynx/metis-data-gateway';
+import { signGeneric } from './webhook-ingress.js';
 
 export const OUTBOUND_WEBHOOKS_TABLE: TableDefinition = {
   name: 'outbound_webhooks',
@@ -93,10 +94,16 @@ export interface DeliveryResult {
 
 const pk = (tenantId: string) => `OWH#${tenantId}`;
 
-/** Base64 HMAC-SHA256 of the body, matching the inbound generic scheme. */
-export function signOutbound(secret: string, body: string): string {
-  return createHmac('sha256', secret).update(body, 'utf8').digest('base64');
-}
+/**
+ * Base64 HMAC-SHA256 over `deliveryId.timestamp.body`, matching the inbound
+ * generic scheme exactly - one function, imported, rather than a second
+ * implementation of the same sentence that can quietly stop agreeing.
+ *
+ * It used to sign the body alone. The timestamp went out beside the signature
+ * without being covered by it, and so did the delivery id the receiver derives
+ * its execution id from, which left both free to edit in flight.
+ */
+export { signGeneric as signOutbound } from './webhook-ingress.js';
 
 export function outboundHeaders(
   record: Pick<OutboundWebhookRecord, 'secret'>,
@@ -109,7 +116,9 @@ export function outboundHeaders(
     'x-metis-delivery': meta.deliveryId,
     'x-metis-timestamp': meta.timestamp,
   };
-  if (record.secret) headers['x-metis-signature'] = signOutbound(record.secret, body);
+  if (record.secret) {
+    headers['x-metis-signature'] = signGeneric(record.secret, meta.deliveryId, meta.timestamp, body);
+  }
   return headers;
 }
 
@@ -219,7 +228,15 @@ export class OutboundWebhookService {
       data: event.payload ?? {},
     };
     const body = JSON.stringify(payload);
-    const headers = outboundHeaders(record, body, { deliveryId, event: event.name, timestamp: event.timestamp });
+    // Unix seconds, and SEND time rather than the event's own clock: the header
+    // is what the receiver's replay window is measured against, so it has to
+    // say when this request left, not when the thing it describes happened. The
+    // event's ISO timestamp is still in the payload, where it belongs.
+    const headers = outboundHeaders(record, body, {
+      deliveryId,
+      event: event.name,
+      timestamp: String(Math.floor(Date.now() / 1000)),
+    });
 
     let lastError: string | undefined;
     for (let attempt = 1; attempt <= this.maxAttempts; attempt += 1) {

@@ -105,11 +105,21 @@ describe('starting and re-running a workflow are attributable', () => {
     registerAuditTable(gateway);
     audit = new AuditStore(gateway);
     executions = new RecordingExecutions();
+    const store = new WorkflowStore(gateway);
+    // The run the reset below acts on: the lifecycle routes require it to be
+    // one this instance started before they will touch Temporal for it.
+    await store.writeExecutionMeta({
+      tenantId: 't1',
+      executionId: 'exec-reset-me',
+      workflowId: 'wf-1',
+      status: 'failed',
+      startTime: new Date().toISOString(),
+    } as never);
     app = buildCoreServer({
       identity: await SingleTenantIdentity.create('t1', [
         { userId: 'jeremy', secret: 'pw', role: 'admin' },
       ]),
-      store: new WorkflowStore(gateway),
+      store,
       executions,
       audit,
     });

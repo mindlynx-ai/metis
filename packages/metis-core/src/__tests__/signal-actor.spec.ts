@@ -81,7 +81,19 @@ describe('the signal route stamps who sent it', () => {
       { userId: 'watcher', secret: 'pw', role: 'viewer' },
     ]);
     executions = new RecordingExecutions();
-    app = buildCoreServer({ identity, store: new WorkflowStore(gateway), executions, audit });
+    const store = new WorkflowStore(gateway);
+    // The runs the signals below are sent to. The lifecycle routes require a
+    // run to be one this instance started, so the suite has to have started it.
+    for (const executionId of ['exec-1', 'exec-approved', 'exec-rejected', 'exec-other']) {
+      await store.writeExecutionMeta({
+        tenantId: 't1',
+        executionId,
+        workflowId: 'wf-1',
+        status: 'running',
+        startTime: new Date().toISOString(),
+      } as never);
+    }
+    app = buildCoreServer({ identity, store, executions, audit });
     await app.ready();
     const login = async (userId: string) => {
       const response = await app.inject({

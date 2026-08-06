@@ -78,9 +78,20 @@ describe('the one error handler', () => {
     ]);
     const session = await identity.authenticate('jeremy', 'pw');
     token = identity.issueToken(session!);
+    const store = new WorkflowStore(gateway);
+    // The run is one WE started; Temporal is the side that has forgotten it.
+    // Without the row the lifecycle route's ownership check answers first and
+    // the Temporal-not-found mapping this test exists for never runs.
+    await store.writeExecutionMeta({
+      tenantId: 't1',
+      executionId: 'exec-gone',
+      workflowId: 'wf-1',
+      status: 'running',
+      startTime: new Date().toISOString(),
+    } as never);
     app = buildCoreServer({
       identity,
-      store: new WorkflowStore(gateway),
+      store,
       executions: new ThrowingExecutions(),
       // Where an operator would look, captured so this suite can read it.
       logger: {

@@ -21,7 +21,7 @@
  * these live in the orchestrator instead.
  */
 import { randomUUID } from 'node:crypto';
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import type { ExecutionPort, Session } from '@mindlynx/metis-ports';
 import type { AuditStore, WorkflowStore } from '@mindlynx/metis-data-gateway';
@@ -139,6 +139,28 @@ export function registerExecutionLifecycleRoutes(
       outcome: 'ok',
       detail,
     });
+
+  /**
+   * The run must be one THIS instance started, under the caller's tenant.
+   *
+   * Every route below took the id straight out of the path and handed it to
+   * Temporal, whose namespace is shared with whatever else runs there: the id
+   * of a workflow Metis never started terminated, signalled and described just
+   * as readily as one it did. The store row is the only ownership fact
+   * available, and it is partitioned by tenant, so this is also the tenancy
+   * check the day tenancy is more than one row's worth.
+   *
+   * DEFERRED, and worth saying plainly: the row is written by the run's first
+   * activity, not by start(), so between a 202 and the worker picking the task
+   * up a brand-new run is not yet ownable and these routes answer 404. The UI
+   * reaches a run through GET /api/executions/:id, which already reads the same
+   * row, so it never asks earlier than that - but a script that starts a run
+   * and cancels it in the same breath can lose the race.
+   */
+  const owns = async (session: Session, executionId: string): Promise<boolean> =>
+    Boolean(await store.getExecution(session.tenantId, executionId));
+
+  const notFound = (reply: FastifyReply) => reply.code(404).send({ error: 'execution not found' });
   app.post('/api/executions', { preHandler: requireAction('edit') }, async (request, reply) => {
     const session = request.session as Session;
     const parsed = startBody.safeParse(request.body);
@@ -216,6 +238,7 @@ export function registerExecutionLifecycleRoutes(
       if (!executions.terminate) return reply.code(501).send({ error: 'terminate not supported' });
       const session = request.session as Session;
       const { id } = request.params as { id: string };
+      if (!(await owns(session, id))) return notFound(reply);
       const parsed = cancelBody.safeParse(request.body ?? {});
       const reason = parsed.success ? parsed.data.reason : undefined;
       await executions.terminate(id, reason);
@@ -232,6 +255,7 @@ export function registerExecutionLifecycleRoutes(
       if (!executions.reset) return reply.code(501).send({ error: 'reset not supported' });
       const session = request.session as Session;
       const { id } = request.params as { id: string };
+      if (!(await owns(session, id))) return notFound(reply);
       const parsed = cancelBody.safeParse(request.body ?? {});
       const reason = parsed.success ? parsed.data.reason : undefined;
       const result = await executions.reset(id, reason);
@@ -344,14 +368,18 @@ export function registerExecutionLifecycleRoutes(
   app.get('/api/executions/:id/insight', async (request, reply) => {
     const session = request.session as Session;
     const { id } = request.params as { id: string };
-    const [described, childItems, detail] = await Promise.all([
+    // The store read comes FIRST and alone: it was already tenant-scoped here,
+    // but the describe beside it in the same Promise.all ran regardless of what
+    // it found, so an unowned id was still described.
+    const detail = await store.getExecution(session.tenantId, id);
+    if (!detail) return notFound(reply);
+    const [described, childItems] = await Promise.all([
       executions.describe(id).catch(() => undefined),
       executions.list
         ? executions.list({ limit: 50, query: `ParentWorkflowId="${id.replaceAll('"', '')}"` }).catch(() => [])
         : Promise.resolve([]),
-      store.getExecution(session.tenantId, id),
     ]);
-    const meta = detail?.meta;
+    const meta = detail.meta;
     const info = meta
       ? await store.getLatestVersion(session.tenantId, String(meta.workflowId))
       : undefined;
@@ -376,12 +404,16 @@ export function registerExecutionLifecycleRoutes(
   });
 
   app.get('/api/executions/:id/status', async (request, reply) => {
+    const session = request.session as Session;
     const { id } = request.params as { id: string };
+    if (!(await owns(session, id))) return notFound(reply);
     return reply.send({ executionId: id, status: await executions.queryStatus(id) });
   });
 
   app.get('/api/executions/:id/describe', async (request, reply) => {
+    const session = request.session as Session;
     const { id } = request.params as { id: string };
+    if (!(await owns(session, id))) return notFound(reply);
     return reply.send(await executions.describe(id));
   });
 
@@ -391,6 +423,7 @@ export function registerExecutionLifecycleRoutes(
     async (request, reply) => {
       const session = request.session as Session;
       const { id } = request.params as { id: string };
+      if (!(await owns(session, id))) return notFound(reply);
       const parsed = signalBody.safeParse(request.body);
       if (!parsed.success) {
         return reply.code(400).send({ error: parsed.error.issues[0]?.message ?? 'invalid body' });
@@ -420,6 +453,7 @@ export function registerExecutionLifecycleRoutes(
     async (request, reply) => {
       const session = request.session as Session;
       const { id } = request.params as { id: string };
+      if (!(await owns(session, id))) return notFound(reply);
       const parsed = cancelBody.safeParse(request.body ?? {});
       const cancelReason = parsed.success ? parsed.data.reason : undefined;
       await executions.cancel(id, cancelReason);

@@ -27,6 +27,7 @@ import type { FastifyInstance } from 'fastify';
 import type { ExecutionPort } from '@mindlynx/metis-ports';
 import type { WorkflowStore, WorkflowVersionItem } from '@mindlynx/metis-data-gateway';
 import type { WorkflowDefinition } from '@mindlynx/metis-engine';
+import { requireAction } from './auth-gate.js';
 
 const DEFAULT_WAIT_MS = 120_000;
 
@@ -148,6 +149,15 @@ export async function handleApiWorkflow(
 /**
  * Mount the single wildcard ingress route. Authed for v1 (the session gives
  * the tenant); public per-endpoint keys are a follow-up.
+ *
+ * The gate is 'edit', the same as every other route that causes something.
+ * Calling a published endpoint is not editing a workflow, so the action name
+ * reads oddly - but the alternative reads worse: a session alone is not a
+ * permission, because `can()` answers 'view' true for every role, and this
+ * route runs a real graph SYNCHRONOUSLY, so a viewer could send the mail, write
+ * the row, call the third party, and read the response. Until per-endpoint keys
+ * land (at which point the caller is the key, not the session), 'edit' is the
+ * closest existing answer to "may cause side effects here".
  */
 export function registerApiWorkflowRoute(
   app: FastifyInstance,
@@ -156,6 +166,7 @@ export function registerApiWorkflowRoute(
   app.route({
     method: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     url: '/api/apiworkflow/*',
+    preHandler: requireAction('edit'),
     handler: async (request, reply) => {
       const path = (request.params as { '*': string })['*'] ?? '';
       const result = await handleApiWorkflow(

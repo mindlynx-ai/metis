@@ -14,6 +14,7 @@
  * limitations under the License.
  */
 export * from './entitlements.js';
+export * from './login-rate-limit.js';
 export * from './auth-gate.js';
 export * from './server.js';
 export * from './workflow-routes.js';

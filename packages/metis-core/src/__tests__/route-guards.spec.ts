@@ -62,6 +62,7 @@ const UNGATED_BY_DESIGN = new Set([
   'GET /api/oauth/callback', //                  state-authed provider redirect
   'GET /api/account/callback', //                state-authed provider redirect, PKCE
   'GET /api/auth/me', //                         the caller's own session
+  'POST /api/auth/logout', //                    ends the caller's own session; every role may
   'GET /api/entitlements',
   'GET /api/offers',
   'GET /api/node-catalogue',

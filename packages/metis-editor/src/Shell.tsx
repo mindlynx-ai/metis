@@ -23,7 +23,7 @@
 import { useEffect, type ReactNode } from 'react';
 import { NavLink, useNavigate } from 'react-router';
 import { useTheme } from './theme.js';
-import { clearToken } from './api.js';
+import { api, clearToken } from './api.js';
 import { ensureUplift, useUplift } from './uplift-store.js';
 import { Icon, type IconName } from './ui/Icon.js';
 
@@ -66,6 +66,11 @@ export function Shell({ children }: { children: ReactNode }) {
   useEffect(ensureUplift, []);
   const nav = cloud === 'disabled' ? NAV : [...NAV, { to: '/account', label: 'Account', icon: 'cloud' as IconName }];
   const signOut = () => {
+    // Ask the server to revoke BEFORE dropping the token, or the request goes
+    // out with no bearer and the session stays alive on the server while this
+    // browser thinks it is signed out. Not awaited: a dead or slow server must
+    // not trap someone in a session they have asked to leave.
+    api.logout().catch(() => undefined);
     clearToken();
     navigate('/login', { replace: true });
   };

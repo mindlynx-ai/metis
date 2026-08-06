@@ -39,6 +39,7 @@ import type {
 } from '@mindlynx/metis-ports';
 import { getCatalogue, listAllConnectors } from '@mindlynx/metis-catalogue';
 import { EntitlementsShim } from './entitlements.js';
+import { LoginRateLimit, type LoginLimitPolicy } from './login-rate-limit.js';
 import { registerErrorHandler } from './error-handler.js';
 import { registerWorkflowRoutes } from './workflow-routes.js';
 import { registerAuditRoutes } from './audit-routes.js';
@@ -59,9 +60,19 @@ import {
   type UpliftDeps,
 } from './helix-account-routes.js';
 
-/** IdentityPort plus token issuance (the open default adapter has it). */
+/** IdentityPort plus token issuance and revocation (the open default adapter
+ *  has both). */
 export interface TokenIssuingIdentity extends IdentityPort {
   issueToken(session: Session): string;
+  /** Sign out. Immediate: the token must be dead when this returns. */
+  revoke(token: string): void;
+}
+
+/** The bearer token as presented, or '' - which no issued token can be, so an
+ *  absent or malformed header simply fails to verify. */
+function bearerOf(request: FastifyRequest): string {
+  const header = request.headers.authorization ?? '';
+  return header.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
 }
 
 export interface CoreDependencies {
@@ -85,6 +96,9 @@ export interface CoreDependencies {
   /** When supplied, workflows can be bound to webhook/schedule/poll triggers.
    *  Structural (no orchestrator import); the runtime supplies it. */
   triggers?: TriggersPort;
+  /** Failed-sign-in throttle for POST /api/auth/login. Defaults to
+   *  DEFAULT_LOGIN_LIMIT; the CLI passes metis.config.json's `auth`. */
+  loginLimit?: LoginLimitPolicy;
   /** OAuth provider config; defaults to well-known providers + env clients. */
   oauth?: OAuthConfig;
   /** The Helix uplift surface (offers/entitlements/account-connect).
@@ -126,39 +140,46 @@ export function buildCoreServer(deps: CoreDependencies): FastifyInstance {
     registerAccountCallback(app, deps.uplift, accountStates);
   }
 
+  const loginLimit = new LoginRateLimit(deps.loginLimit);
+
   app.post('/api/auth/login', async (request, reply) => {
     const parsed = loginBody.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: 'userId and secret are required' });
-    const session = await deps.identity.authenticate(parsed.data.userId, parsed.data.secret);
-    if (!session) {
-      // A rejected sign-in is the entry an auditor looks for first.
-      await deps.audit?.record({
-        tenantId: 't1',
-        actor: parsed.data.userId,
+    const { userId, secret } = parsed.data;
+    const auditLogin = (outcome: 'ok' | 'denied', tenantId = 't1') =>
+      deps.audit?.record({
+        tenantId,
+        actor: userId,
         action: 'auth.login',
         entityType: 'user',
-        entityId: parsed.data.userId,
-        outcome: 'denied',
+        entityId: userId,
+        outcome,
       });
+
+    // Checked before authenticate, so a caller who has spent their guesses
+    // costs no scrypt either - the throttle protects the CPU as well as the
+    // secret. A throttled attempt is still an audit entry.
+    if (loginLimit.blocked(request.ip, userId)) {
+      await auditLogin('denied');
+      return reply.code(429).send({ error: 'too many sign-in attempts, try again later' });
+    }
+
+    const session = await deps.identity.authenticate(userId, secret);
+    if (!session) {
+      loginLimit.fail(request.ip, userId);
+      // A rejected sign-in is the entry an auditor looks for first.
+      await auditLogin('denied');
       return reply.code(401).send({ error: 'invalid credentials' });
     }
-    await deps.audit?.record({
-      tenantId: session.tenantId,
-      actor: session.userId,
-      action: 'auth.login',
-      entityType: 'user',
-      entityId: session.userId,
-      outcome: 'ok',
-    });
+    loginLimit.succeed(request.ip, userId);
+    await auditLogin('ok', session.tenantId);
     const token = deps.identity.issueToken(session);
     return reply.send({ token, session });
   });
 
   app.register(async (authed) => {
     authed.addHook('onRequest', async (request: FastifyRequest, reply: FastifyReply) => {
-      const header = request.headers.authorization ?? '';
-      const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
-      const session = token ? await deps.identity.verify(token) : undefined;
+      const session = await deps.identity.verify(bearerOf(request));
       if (!session) {
         await reply.code(401).send({ error: 'unauthorised' });
         return reply;
@@ -167,6 +188,24 @@ export function buildCoreServer(deps: CoreDependencies): FastifyInstance {
     });
 
     authed.get('/api/auth/me', async (request, reply) => reply.send(request.session));
+
+    // Sign out. Revocation is immediate - the token is dead when this returns,
+    // not queued for whenever a sweep next runs.
+    authed.post('/api/auth/logout', async (request, reply) => {
+      deps.identity.revoke(bearerOf(request));
+      const session = request.session;
+      if (session) {
+        await deps.audit?.record({
+          tenantId: session.tenantId,
+          actor: session.userId,
+          action: 'auth.logout',
+          entityType: 'user',
+          entityId: session.userId,
+          outcome: 'ok',
+        });
+      }
+      return reply.code(204).send();
+    });
 
     // The shim's open set, now with the cloud view: the account's capability
     // ids (empty unless connected and entitled) and whether the cloud is

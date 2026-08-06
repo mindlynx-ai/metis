@@ -132,9 +132,15 @@ export class MemoryAdapter implements DataStore {
     const partitionAttribute = index?.partitionAttribute ?? definition.partitionAttribute;
     const sortAttribute = index?.sortAttribute ?? definition.sortAttribute;
 
+    // A secondary index is sparse: a row is in it only when the index's
+    // partition attribute HAS a value. Null counts as absent (nulling the
+    // attribute is how a row is unlisted); without that, `String(null)` files
+    // every unlisted row under the key 'null' - suppressed by luck, listed in
+    // full by anyone who asks for it.
     let matches = [...(this.rows.get(request.table)?.values() ?? [])].filter((item) => {
-      if (index && item[partitionAttribute] === undefined) return false;
-      return String(item[partitionAttribute]) === request.partitionValue;
+      const value = item[partitionAttribute];
+      if (index && (value === undefined || value === null)) return false;
+      return String(value) === request.partitionValue;
     });
 
     const sortValueOf = (item: ItemRecord): string =>

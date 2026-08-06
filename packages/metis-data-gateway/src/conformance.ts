@@ -246,6 +246,7 @@ export function runDataStoreConformance(name: string, factory: ConformanceFactor
       await seed([
         { PK: 'p1', SK: 'META', statusKey: 'running', updatedAt: '2026-01-01' },
         { PK: 'p2', SK: 'META', statusKey: 'running', updatedAt: '2026-01-02' },
+        { PK: 'p3', SK: 'META', statusKey: null, updatedAt: null },
       ]);
       await adapter.patch(
         TABLE,
@@ -256,6 +257,13 @@ export function runDataStoreConformance(name: string, factory: ConformanceFactor
       expect(page.items.map((i) => i.PK)).toEqual(['p2']);
       const direct = await adapter.get(TABLE, { partitionKey: 'p1', sortKey: 'META' });
       expect(direct?.PK).toBe('p1');
+      // Absent, not renamed. Storing null as the STRING 'null' also suppresses
+      // - nothing queries for 'null' - so the assertion above passes either
+      // way. It passes for the wrong reason: every unlisted row is then packed
+      // into one queryable index key, which is a bucket a caller can ask for
+      // and a DynamoDB adapter would happily list.
+      const bucket = await adapter.query({ table: TABLE, index: 'byStatus', partitionValue: 'null' });
+      expect(bucket.items).toEqual([]);
     });
 
     it('pages a secondary index with a cursor', async () => {

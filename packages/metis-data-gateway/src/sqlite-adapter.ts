@@ -143,12 +143,21 @@ export class SqliteAdapter implements DataStore {
       : [key.partitionKey];
   }
 
-  /** The promoted (indexed) column values for an item, in promotedAttributes order. */
+  /**
+   * The promoted (indexed) column values for an item, in promotedAttributes
+   * order. A null is SQL NULL, never the string 'null': nulling an index
+   * attribute is how a row is unlisted (a soft delete, a superseded version),
+   * and `String(null)` would file every unlisted row under one real index key
+   * instead of removing it from the index. It suppresses either way, because
+   * nothing queries for 'null' - but a caller that asks gets the whole
+   * graveyard back, `IS NULL` finds none of it, and DynamoDB (which these
+   * columns mirror) would index the string and list them all.
+   */
   private promotedValues(definition: TableDefinition, item: ItemRecord): (string | null)[] {
     return this.promotedAttributes(definition).map((name) => {
       const value = item[name];
       if (name === definition.sortAttribute) return String(value ?? '');
-      return value === undefined ? null : String(value);
+      return value === undefined || value === null ? null : String(value);
     });
   }
 

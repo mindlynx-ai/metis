@@ -139,12 +139,12 @@ export class PostgresAdapter implements DataStore {
     return definition.sortAttribute ? [key.partitionKey, key.sortKey ?? ''] : [key.partitionKey];
   }
 
-  /** The promoted (indexed) column values for an item, in promotedAttributes order. */
+  /** The promoted (indexed) column values - see the sqlite adapter on null. */
   private promotedValues(definition: TableDefinition, item: ItemRecord): (string | null)[] {
     return this.promotedAttributes(definition).map((name) => {
       const value = item[name];
       if (name === definition.sortAttribute) return String(value ?? '');
-      return value === undefined ? null : String(value);
+      return value === undefined || value === null ? null : String(value);
     });
   }
 

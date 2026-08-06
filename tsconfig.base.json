@@ -14,6 +14,9 @@
       "node"
     ],
     "paths": {
+      "@mindlynx/metis-approvals": [
+        "./packages/metis-approvals/src/index.ts"
+      ],
       "@mindlynx/metis-ports": [
         "./packages/metis-ports/src/index.ts"
       ],

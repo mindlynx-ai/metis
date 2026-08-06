@@ -187,6 +187,42 @@ minutes old is refused, so a captured one cannot be replayed later; signing the
 delivery id keeps a replay from being relabelled into a fresh run. Delivery
 retries with backoff.
 
+## Sessions and sign-in
+
+Signing in returns an opaque bearer token held in the server's memory. How long
+one lasts, and how hard it is to guess a password, are yours to set - Metis is
+yours to run. They live under `auth` in `metis.config.json`, and like every
+other block that file may hold only the keys you are changing:
+
+```json
+{ "auth": { "sessionIdleHours": 1, "loginAttempts": 5 } }
+```
+
+| Key | Default | What it does |
+|---|---|---|
+| `sessionAbsoluteHours` | `24` | Hard ceiling on a session, measured from sign-in. Using it does not extend it. |
+| `sessionIdleHours` | `8` | Silence that ends a session early. Set it **below** `sessionAbsoluteHours` or it can never be the thing that expires anything. |
+| `maxSessions` | `10000` | Live sessions kept in memory. Past this the oldest is dropped, so a flood of sign-ins costs bounded memory. |
+| `loginAttempts` | `10` | Failed sign-ins allowed per window, per source address **and** username. Successes are not counted and clear the tally. |
+| `loginWindowMinutes` | `15` | How long that window lasts. Once it passes, the allowance returns. |
+
+Both deadlines are checked when a token is *used*, so a token cannot outlive
+its window because a background sweep has not come round yet. `POST
+/api/auth/logout` (the editor's "Sign out") revokes immediately rather than
+marking anything for later.
+
+The defaults expire on purpose. "Never expires" is exactly the setting nobody
+knows they have, and before this a captured token stayed valid until the
+process restarted.
+
+Two things the sign-in limit does not do, worth knowing before you rely on it.
+It gives every source address its own allowance, so it slows one attacker and
+not a distributed one. And it reads `request.ip`: **behind a reverse proxy
+without Fastify's `trustProxy`, every request appears to come from the proxy**,
+the address half of the key collapses to a constant, and the limit degrades to
+one an attacker can use to lock a named user out. Terminate TLS in front of
+Metis by all means, but configure the proxy headers if you do.
+
 ## Editions
 
 Metis is the open core. Memory, agents, approvals, analytics and multi-tenant

@@ -206,6 +206,9 @@ export class MetisRuntime {
   readonly triggers: TriggerService;
   readonly outbound: OutboundWebhookService;
   readonly identity: Promise<SingleTenantIdentity>;
+  /** The sign-in policy from metis.config.json, for whoever builds the
+   *  control server: the session half is already baked into `identity`. */
+  readonly auth: MetisConfig['auth'];
   readonly nodes = new NodeHandlerRegistry();
   readonly address: string;
   private schedules: ScheduleService | undefined;
@@ -235,7 +238,12 @@ export class MetisRuntime {
       loadCredentialKey(options.projectDir),
     );
     registerOpenNodeHandlers(this.nodes, { credentials, connectors: this.connectors });
-    this.identity = SingleTenantIdentity.create(TENANT, seedUsers(process.env));
+    this.identity = SingleTenantIdentity.create(TENANT, seedUsers(process.env), {
+      absoluteHours: options.config.auth.sessionAbsoluteHours,
+      idleHours: options.config.auth.sessionIdleHours,
+      maxSessions: options.config.auth.maxSessions,
+    });
+    this.auth = options.config.auth;
     this.credentials = credentials;
     const exec = buildExecPort(this.nodes, credentials);
     this.execPort = exec.port;

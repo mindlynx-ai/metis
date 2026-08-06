@@ -237,7 +237,18 @@ flowchart TB
   class listen edge
 ```
 
-Three refusals worth knowing about before you deploy anything:
+Four refusals worth knowing about before you deploy anything:
+
+- **Sessions end, and sign-in costs something.** A bearer token carries an
+  absolute deadline fixed at issue (default 24h) and an idle one moved forward
+  by use (default 8h), both checked when the token is *used* rather than only
+  by a sweep, so a token cannot outlive its window because a timer did not
+  fire. The sweep runs on issue - the only path that grows the session map -
+  and a cap drops the oldest entry, bounding memory as well as lifetime.
+  `POST /api/auth/logout` revokes on the spot. Failed sign-ins are throttled
+  per source address **and** username (default 10 per 15 minutes); successes
+  are not counted and clear the tally. All five numbers are `auth` in
+  `metis.config.json`; see the README for what the throttle does not stop.
 
 - **The published default admin secret is refused.** `METIS_ADMIN_SECRET` must
   be set to something other than the built-in `metis` or Metis exits non-zero

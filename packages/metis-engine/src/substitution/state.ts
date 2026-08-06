@@ -72,8 +72,18 @@ function valueAt(obj: unknown, dottedPath: string): unknown {
   return cursor;
 }
 
+/**
+ * Escape a value for splicing into the config JSON as text. Naming the
+ * characters by hand covered backslash, quote and newline and nothing else, so
+ * a tab or a carriage return - what a CSV cell, a Postgres text column and an
+ * HTTP body all carry as a matter of course - left the config unparseable and
+ * threw before the node ever dispatched. JSON.stringify escapes every
+ * character JSON forbids raw, by definition, and agrees with the hand-written
+ * version on the three it did handle; the quotes it adds are the only thing
+ * this does not want.
+ */
 function escapeString(value: string): string {
-  return value.replaceAll('\\', '\\\\').replaceAll('"', '\\"').replaceAll('\n', '\\n');
+  return JSON.stringify(value).slice(1, -1);
 }
 
 function escapeJson(value: unknown): string {

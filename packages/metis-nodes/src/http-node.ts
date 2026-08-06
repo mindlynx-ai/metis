@@ -36,10 +36,17 @@ import { lookup as dnsLookup } from 'node:dns';
 import { isIP, isIPv6 } from 'node:net';
 import { promisify } from 'node:util';
 import { stateEnvelope, type NodeHandler } from '@mindlynx/metis-ports';
+import { readCapped } from './s3-client.js';
 
 const lookupAsync = promisify(dnsLookup);
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+/** How much of a response may become the node's output. Output rides workflow
+ *  history and is re-sent as input to every later dispatch, so an uncapped read
+ *  buffered a multi-megabyte export into the worker and then wedged the run on
+ *  Temporal's payload limit. Same 256 KB the data and object-store nodes read
+ *  inline. */
+const MAX_RESPONSE_BYTES = 256 * 1024;
 const MAX_REDIRECT_HOPS = 5;
 
 export interface HttpNodeConfig {
@@ -298,7 +305,7 @@ export async function fetchFollowingGuardedRedirects(
 }
 
 async function parseResponse(response: Response): Promise<unknown> {
-  const text = await response.text();
+  const text = new TextDecoder().decode(await readCapped(response, MAX_RESPONSE_BYTES));
   try {
     return JSON.parse(text);
   } catch {
@@ -342,13 +349,14 @@ export function createHttpNodeHandler(): NodeHandler {
         async () => {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), timeoutMs);
+          // The engine stops waiting on its own schedule (the node's policy
+          // timeout), and an abandoned POST is the one this node must not
+          // leave running: the next attempt's would go out alongside it.
+          const signal = ctx.signal
+            ? AbortSignal.any([controller.signal, ctx.signal])
+            : controller.signal;
           try {
-            return await fetchFollowingGuardedRedirects(
-              url,
-              init,
-              config.allowedHosts,
-              controller.signal,
-            );
+            return await fetchFollowingGuardedRedirects(url, init, config.allowedHosts, signal);
           } finally {
             clearTimeout(timer);
           }

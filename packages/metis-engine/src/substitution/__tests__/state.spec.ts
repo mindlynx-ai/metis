@@ -97,6 +97,39 @@ describe('replaceConfigStateData', () => {
     expect(resolved.msg).toBe('value: a "quoted" \\ back\nslash');
   });
 
+  // The substituted value is spliced into the config JSON as text and the
+  // whole thing re-parsed, so ANY character JSON forbids raw in a string has
+  // to leave escaped - not just the three that were spelled out. A tab or a
+  // CRLF is what a CSV cell, a Postgres text column and an HTTP body all
+  // routinely carry, and an unescaped one threw before the node ever
+  // dispatched, on a config error the activity then retried three times.
+  it.each([
+    ['a tab', 'left\tright'],
+    ['a carriage return', 'line one\r\nline two'],
+    ['a control character', 'belend'],
+    ['a lone surrogate', 'pair\ud800end'],
+  ])('survives %s in an interpolated value', async (_label, tricky) => {
+    const state = stateWith([
+      { nodeId: NODE_A, stateId: 's1', stateData: { status: 200, data: { tricky } } },
+    ]);
+    const resolved = (await run({ msg: `value: {{${NODE_A}.data.tricky}}` }, state)) as Record<
+      string,
+      unknown
+    >;
+    expect(resolved.msg).toBe(`value: ${tricky}`);
+  });
+
+  it('escapes the switch-node property special case the same way', async () => {
+    const state = stateWith([
+      { nodeId: NODE_B, stateId: 's1', stateData: { status: 200, data: { label: 'a\tb' } } },
+    ]);
+    const resolved = (await run(
+      { property: `${NODE_B}.data.label`, operator: '===' },
+      state,
+    )) as Record<string, unknown>;
+    expect(resolved.property).toBe('a\tb');
+  });
+
   it('resolves a naked node path through the switch-node property special case', async () => {
     const state = stateWith([
       { nodeId: NODE_B, stateId: 's1', stateData: { status: 200, data: { label: 'chosen' } } },

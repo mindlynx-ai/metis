@@ -34,11 +34,12 @@
 import { condition, defineSignal, executeChild, proxyActivities, setHandler, workflowInfo } from '@temporalio/workflow';
 import { getWaitTimeMs } from '../nodes/waituntil.js';
 import { LOOP_CHILD_OUTPUT_BYTES, LOOP_RESULTS_BYTES, type LoopPlan } from '../nodes/loop.js';
-import { cascadeOrphan, getAvailableNodes, isDone, loopBodyIds, signalTarget, sourcesOf } from './graph.js';
+import { applySwitchPartition, getAvailableNodes, isDone, loopBodyIds, signalTarget, sourcesOf } from './graph.js';
 import { awaitCloudJob } from './cloud-park.js';
 import { settleDecisions } from './decision-park.js';
 import { buildExecuteRequest } from './execute-request.js';
 import {
+  dispatchBudgetMs,
   ENGINE_ACTIVITY_RETRY,
   SIGNAL_DEFAULT_TIMEOUT_MS,
   type EngineActivities,
@@ -58,36 +59,24 @@ const activities = proxyActivities<EngineActivities>({
   retry: ENGINE_ACTIVITY_RETRY,
 });
 
+/**
+ * The dispatch proxy for ONE node: its budget is derived from its own policy,
+ * because the policy's retries run inside the activity. A fixed two minutes
+ * covered the bookkeeping activities above and nothing else - a node allowed
+ * more than that outran its budget, Temporal retried the whole activity, and
+ * the request went out again while the first was still in flight.
+ * proxyActivities only builds a proxy object, so calling it per node records
+ * no history and stays deterministic.
+ */
+const dispatchFor = (policy: RuntimeNode['policy']) =>
+  proxyActivities<Pick<EngineActivities, 'executeNode'>>({
+    startToCloseTimeout: dispatchBudgetMs(policy),
+    retry: ENGINE_ACTIVITY_RETRY,
+  });
+
 
 export const helixSignal = defineSignal<[HelixSignalPayload]>('helixSignal');
 export const helixCancelSignal = defineSignal<[HelixCancelSignalPayload]>('helixCancelSignal');
-
-/**
- * Orphan the losing direct targets of a switch (unless another live
- * path feeds them), then cascade from each orphaned target so the
- * selected branch is never swept up (origin behaviour: the cascade
- * starts below the orphaned children, not at the switch itself).
- */
-function applySwitchPartition(
-  partition: SwitchNodeOutput,
-  nodes: RuntimeNode[],
-  edges: WorkflowEdge[],
-): string[] {
-  const orphanedNow: string[] = [];
-  const orphanedIds = partition.orphanedTargetIds ?? [];
-  for (const orphanId of orphanedIds) {
-    const target = nodes.find((candidate) => candidate.id === orphanId);
-    if (!target || target.nodeStatus !== 'Pending') continue;
-    if (sourcesOf(target, nodes, edges).every((source) => isDone(source))) {
-      target.nodeStatus = 'Orphaned';
-      orphanedNow.push(orphanId);
-    }
-  }
-  for (const orphanId of orphanedIds) {
-    orphanedNow.push(...cascadeOrphan(orphanId, nodes, edges));
-  }
-  return orphanedNow;
-}
 
 const TRIGGER_CONFIG_TYPES = new Set(['webhookconfig', 'scheduleconfig', 'apiconfig']);
 // Branch nodes: their activity result carries selected/orphaned targets.
@@ -288,7 +277,7 @@ export async function helixWorkflow(started: HelixWorkflowInput): Promise<HelixW
       // node's started line, and the log's sort key must stay unique.
       nextSequence: () => (sequence += 1),
       dispatch: (next) =>
-        activities.executeNode(
+        dispatchFor(node.policy).executeNode(
           buildExecuteRequest(input, states, nodes, edges, node, nodeType, isBranch, next),
         ),
     });
@@ -316,7 +305,7 @@ export async function helixWorkflow(started: HelixWorkflowInput): Promise<HelixW
     // Branch nodes partition their outgoing targets and orphan the losing
     // branches; they need their edge handles passed as targets.
     const isBranch = BRANCH_NODE_TYPES.has(nodeType);
-    let result = await activities.executeNode(
+    let result = await dispatchFor(node.policy).executeNode(
       buildExecuteRequest(input, states, nodes, edges, node, nodeType, isBranch, nodeSequence),
     );
 
@@ -361,11 +350,11 @@ export async function helixWorkflow(started: HelixWorkflowInput): Promise<HelixW
    */
   async function reportBranchPartition(node: RuntimeNode, result: ExecuteNodeResult): Promise<void> {
     if (result.outcome === 'completed') {
-      await reportSwitchOrphans(result.output as SwitchNodeOutput);
+      await reportSwitchOrphans(node.id, result.output as SwitchNodeOutput);
       return;
     }
     if (result.outcome !== 'unimplemented') return;
-    await reportSwitchOrphans({
+    await reportSwitchOrphans(node.id, {
       selectedSources: [],
       selectedTargetIds: [],
       orphanedTargetIds: edges.filter((edge) => edge.source === node.id).map((edge) => edge.target),
@@ -381,7 +370,7 @@ export async function helixWorkflow(started: HelixWorkflowInput): Promise<HelixW
    * successors fire - the body was pre-orphaned in this walk.
    */
   async function runLoopNode(node: RuntimeNode, nodeSequence: number): Promise<void> {
-    const resolveResult = await activities.executeNode(
+    const resolveResult = await dispatchFor(node.policy).executeNode(
       buildExecuteRequest(input, states, nodes, edges, node, 'loop', false, nodeSequence),
     );
     if (resolveResult.outcome !== 'completed') {
@@ -474,8 +463,8 @@ export async function helixWorkflow(started: HelixWorkflowInput): Promise<HelixW
     await walkSuccessors(node);
   }
 
-  async function reportSwitchOrphans(partition: SwitchNodeOutput): Promise<void> {
-    const orphanedNow = applySwitchPartition(partition, nodes, edges);
+  async function reportSwitchOrphans(branchNodeId: string, partition: SwitchNodeOutput): Promise<void> {
+    const orphanedNow = applySwitchPartition(branchNodeId, partition, nodes, edges);
     if (orphanedNow.length === 0) return;
     sequence += 1;
     await activities.markNodesOrphaned({

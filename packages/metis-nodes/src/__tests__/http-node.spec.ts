@@ -23,6 +23,9 @@ const handler = createHttpNodeHandler();
 
 const request = (config: Record<string, unknown>) => nodeCtx('api', config);
 
+/** Comfortably past MAX_RESPONSE_BYTES, streamed in chunks. */
+const HUGE_BYTES = 2 * 1024 * 1024;
+
 describe('http/api node', () => {
   let server: Server;
   let baseUrl: string;
@@ -64,6 +67,14 @@ describe('http/api node', () => {
           return;
         }
         if (req.url === '/slow') {
+          return;
+        }
+        if (req.url === '/huge') {
+          // No content-length: the far side's length is its choice, so the
+          // stream has to be counted whatever the header claims.
+          res.setHeader('content-type', 'text/plain');
+          for (let sent = 0; sent < HUGE_BYTES; sent += 64 * 1024) res.write('x'.repeat(64 * 1024));
+          res.end();
           return;
         }
         if (req.url === '/status-teapot') {
@@ -110,6 +121,17 @@ describe('http/api node', () => {
       }),
     );
     expect((nodeOutput(legacy) as { data: Record<string, unknown> }).data.header).toBe('legacy-format');
+  });
+
+  // The response is the node's output, and output rides workflow history and
+  // is re-sent as input to every later dispatch. Reading it whole first meant a
+  // large export was buffered into the worker before anything could object.
+  it('refuses a response body past the ceiling instead of buffering it whole', async () => {
+    const result = await handler(
+      request({ method: 'GET', url: `${baseUrl}/huge`, allowedHosts: ['127.0.0.1'] }),
+    );
+    expect(result.status).toBe(502);
+    expect(result.message).toMatch(/ceiling/);
   });
 
   it('sends the run-stable Idempotency-Key when the policy opted in', async () => {

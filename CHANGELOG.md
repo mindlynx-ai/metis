@@ -14,7 +14,7 @@ anyone reading the diffs.
 
 ### Security
 
-Three of these change behaviour you may be relying on; they are marked
+Five of these change behaviour you may be relying on; they are marked
 **breaking**.
 
 - **The published default admin secret is refused (breaking).** The built-in
@@ -47,6 +47,54 @@ Three of these change behaviour you may be relying on; they are marked
   a connected database and run SQL against it. A `viewer` can no longer reach
   any of the five. `requireAction('view')` would not have helped: every role
   has `view`, so it means only "signed in".
+- **Calling a published API workflow requires `edit` (breaking).**
+  `/api/apiworkflow/*` had no action gate, so the lowest-privilege signed-in
+  account could run any published api-type workflow synchronously and read its
+  response - meaning it could cause whatever that graph causes: outbound HTTP
+  calls, database writes, email. It is the third finding of this shape, so the
+  test suite now enumerates every registered route and holds the ungated ones
+  against a named list, rather than checking the route that was reported.
+- **Run lifecycle routes check the run belongs to the caller.** Terminate,
+  reset, signal, cancel, status, describe and insight took the id out of the
+  URL and handed it to Temporal unexamined. Temporal's namespace is not the
+  product's boundary: a workflow Metis never started could be terminated,
+  signalled or described by anyone signed in. Each route now requires the run
+  to be in this instance's store under the caller's tenant. The store row is
+  written by the run's first activity, so a run cancelled in the same breath as
+  it was started can answer 404 until the worker picks the task up.
+- **The generic webhook signature covers the timestamp and the delivery id
+  (breaking).** The `hmac` scheme signed the body alone: nothing dated a
+  delivery, so a captured one stayed valid as long as the secret did. The
+  delivery id was worse than merely unsigned - it decides the execution id, and
+  therefore whether a repeat is recognised as a repeat, so editing that one
+  header replayed a captured request as a brand-new run under a signature that
+  still verified. Both directions now sign `deliveryId.timestamp.body`, the
+  construction the Svix path already used, and hold the timestamp to the same
+  five-minute window. `x-metis-timestamp` is unix seconds and is the time the
+  request was sent. **A sender signing the old way is refused**; there is no
+  dual-accept window, because a receiver that still accepted a body-only
+  signature could not tell a legacy sender from a replay - the attacker simply
+  omits the timestamp - so the window would leave the hole fully open for its
+  whole length. Update senders, or set the trigger to `verification: none` if
+  you genuinely cannot.
+- **An SSRF-refused URL is no longer echoed into the run log.** The node's
+  failure message named the whole URL, and the URL reaching the node has
+  already had `{{secrets.*}}` resolved, so a target like
+  `https://api.example/v1?key=<secret>` wrote a live key into the execution log
+  and the Temporal event history, where a viewer could read it. Refusals now
+  name scheme and host only.
+- **The SSRF guard reads addresses as numbers, not as text.** It matched string
+  prefixes, and `new URL()` never gives it the spelling those prefixes expect:
+  `http://[::ffff:169.254.169.254]/` arrives as `[::ffff:a9fe:a9fe]`, which
+  matched nothing, so the cloud metadata service, loopback and every RFC1918
+  range were reachable through their IPv4-mapped and IPv4-compatible IPv6
+  forms. Addresses are now parsed and tested as integer ranges, both IPv6 forms
+  that embed IPv4 are reduced to that address first, and the blocklist gains
+  CGNAT (`100.64.0.0/10`), the IETF protocol block (`192.0.0.0/24`),
+  benchmarking (`198.18.0.0/15`), multicast, reserved and the NAT64 prefix
+  (`64:ff9b::/96`). An address the guard cannot parse is now blocked rather
+  than allowed. Four modules share this guard, so the fix covers every
+  author-supplied URL the product fetches, not just the http node.
 - **The credential vault is published by rename, not by truncation.** Every
   credential write decrypts, mutates and re-encrypts the whole vault, and the
   old write truncated the file first. A crash inside that window destroyed

@@ -52,3 +52,20 @@ aws ec2 release-address     --region "$REGION" --allocation-id "$ALLOC"
 
 `.state`, `.env` and `*.pem` are local only and git-ignored - they hold the
 Elastic IP, secrets and the private key.
+
+## METIS_PACKS and the approvals trap
+
+`METIS_PACKS` loads paid node packs at boot. Leave it **empty** unless a pack
+is genuinely still gated.
+
+`@mindlynx/metis-approvals` used to belong there. Approvals became free and
+moved into the base build, so loading the pack as well registers a second
+handler for the `approval` node type and the process throws on start:
+
+```
+Error: node handler for "approval" is already registered
+```
+
+The container then crash-loops and Caddy answers 502 for the whole app. It
+looks like a bad image; it is a stale env line. A capability that graduates
+from paid to free has to leave this variable in the same change.

@@ -228,6 +228,45 @@ describe('LocalFileCredentialStore (BYOK)', () => {
     expect(fs.readdirSync(dir)).toEqual(['credentials.enc']);
   });
 
+  /**
+   * The lost update, from the far side. Two writers here are usually two
+   * PROCESSES (the server rotating an OAuth token, an operator on the CLI), so
+   * the other one cannot be driven from this test - it is simulated by holding
+   * the lock it would hold. What is asserted is the property that makes the
+   * lost update impossible: while someone else is inside a read-modify-write,
+   * this writer has not read, and has certainly not written.
+   */
+  it('waits for a writer already inside the vault instead of writing over it', async () => {
+    const { dir, filePath, store, request } = await seeded('creds-lock');
+    const mine = { tenantId: 't1', secretId: 'f0f0f0f0-1111-2222-3333-444444444444' };
+    fs.closeSync(fs.openSync(`${filePath}.lock`, 'wx'));
+
+    const pending = store.setSecret(mine.tenantId, mine.secretId, 'mine');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    await expect(store.resolveSecret(mine)).rejects.toThrow(/not defined/);
+
+    fs.rmSync(`${filePath}.lock`);
+    await pending;
+    expect(await store.resolveSecret(mine)).toBe('mine');
+    // And the other writer's entry survived, which is the whole point.
+    expect(await store.resolveSecret(request)).toBe('the-only-copy');
+    expect(fs.readdirSync(dir)).toEqual(['credentials.enc']);
+  });
+
+  it('takes over a lock left behind by a writer that was killed', async () => {
+    const { filePath, store, request } = await seeded('creds-stale');
+    const lockPath = `${filePath}.lock`;
+    fs.closeSync(fs.openSync(lockPath, 'wx'));
+    const old = new Date(Date.now() - 60_000);
+    fs.utimesSync(lockPath, old, old);
+
+    await store.setSecret('t1', 'a1a1a1a1-1111-2222-3333-444444444444', 'after the crash');
+    expect(await store.resolveSecret(request)).toBe('the-only-copy');
+    expect(
+      await store.resolveSecret({ tenantId: 't1', secretId: 'a1a1a1a1-1111-2222-3333-444444444444' }),
+    ).toBe('after the crash');
+  });
+
   it('refuses to decrypt with the wrong key', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'metis-creds-'));
     const filePath = join(dir, 'credentials.enc');

@@ -23,6 +23,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
@@ -111,6 +112,14 @@ function writeVaultAtomically(filePath: string, contents: string): void {
   }
 }
 
+/** How long a lock may be held before a waiter assumes its owner died. */
+const LOCK_STALE_MS = 5_000;
+/** How long a waiter tries before it gives up and fails the mutation. */
+const LOCK_TIMEOUT_MS = 10_000;
+const LOCK_POLL_MS = 5;
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * The open default CredentialPort: a local AES-256-GCM encrypted file,
  * bring-your-own-key. Plaintext exists only in the return values of the
@@ -159,29 +168,100 @@ export class LocalFileCredentialStore implements ConnectorCredentialStore {
     writeVaultAtomically(this.filePath, JSON.stringify(envelope));
   }
 
+  /** Is the lock old enough that its owner is presumed dead? */
+  private static lockIsStale(lockPath: string): boolean {
+    try {
+      return statSync(lockPath).mtimeMs < Date.now() - LOCK_STALE_MS;
+    } catch {
+      return false; // it went away on its own; the next create will win it
+    }
+  }
+
+  /**
+   * Run one read-modify-write with nobody else inside it.
+   *
+   * The atomic rename in `writeVaultAtomically` stops a reader seeing half a
+   * file. It does nothing about a LOST UPDATE, which is the other failure and
+   * the more likely one: every mutator loads the whole vault, edits it and
+   * writes the whole vault back, so a server refreshing a rotating OAuth token
+   * while an operator adds a connection from the CLI ends with whichever
+   * renamed second, and the other entry is simply gone. It surfaces much later
+   * as "connection has no credentials", with nothing anywhere saying a write
+   * was dropped. Two real processes on this code lost 45 of 92 writes.
+   *
+   * `openSync(path, 'wx')` is an atomic create-if-absent, so exactly one
+   * waiter wins it, and it works between processes, which an in-process mutex
+   * would not: the two writers here are usually the server and the CLI.
+   *
+   * ponytail: covers writers that share a filesystem, which is what `.metis`
+   * is. It does NOT cover two hosts pointed at one vault over NFS or SMB,
+   * where O_EXCL is not reliably atomic; that wants a lock service, and the
+   * BYOK-file adapter is the wrong place for one.
+   *
+   * A process killed mid-mutation leaves the lock behind, so a lock older than
+   * LOCK_STALE_MS is taken over rather than waited on forever - the vault
+   * itself is fine, the rename either happened or did not. Release removes the
+   * lock only while it is still the same file we created, so a takeover we
+   * lost is not then deleted out from under its new owner.
+   */
+  private async withVaultLock<T>(mutate: () => T): Promise<T> {
+    const lockPath = `${this.filePath}.lock`;
+    mkdirSync(dirname(this.filePath), { recursive: true });
+    const giveUp = Date.now() + LOCK_TIMEOUT_MS;
+    let held: number | undefined;
+    while (held === undefined) {
+      try {
+        closeSync(openSync(lockPath, 'wx', 0o600));
+        held = statSync(lockPath).ino;
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;
+        if (LocalFileCredentialStore.lockIsStale(lockPath)) rmSync(lockPath, { force: true });
+        else if (Date.now() >= giveUp)
+          throw new Error('credential vault is locked by another writer');
+        else await delay(LOCK_POLL_MS);
+      }
+    }
+    try {
+      return mutate();
+    } finally {
+      // Ours only. A lock taken from us as stale is a DIFFERENT file at the
+      // same path, and removing it would drop a writer that is mid-mutation
+      // back into exactly the race this exists to stop.
+      try {
+        if (statSync(lockPath).ino === held) rmSync(lockPath, { force: true });
+      } catch {
+        // Already gone: nothing to release.
+      }
+    }
+  }
+
   async setSecret(tenantId: string, secretId: string, value: string): Promise<void> {
-    const vault = this.load();
-    vault.secrets[`${tenantId}/${secretId}`] = value;
-    this.save(vault);
+    await this.withVaultLock(() => {
+      const vault = this.load();
+      vault.secrets[`${tenantId}/${secretId}`] = value;
+      this.save(vault);
+    });
   }
 
   async createConnection(tenantId: string, input: CreateConnectionInput): Promise<ConnectionRecord> {
-    const vault = this.load();
-    const connectionId = `conn_${randomUUID()}`;
-    const now = new Date().toISOString();
-    const stored: StoredConnection = {
-      name: input.name,
-      connectorId: input.connectorId,
-      connectionType: input.connectionType,
-      baseUrl: input.baseUrl,
-      authScheme: input.authScheme,
-      material: input.material,
-      createdAt: now,
-      updatedAt: now,
-    };
-    vault.connections[`${tenantId}/${connectionId}`] = stored;
-    this.save(vault);
-    return { connectionId, ...projectConnection(stored) };
+    return this.withVaultLock(() => {
+      const vault = this.load();
+      const connectionId = `conn_${randomUUID()}`;
+      const now = new Date().toISOString();
+      const stored: StoredConnection = {
+        name: input.name,
+        connectorId: input.connectorId,
+        connectionType: input.connectionType,
+        baseUrl: input.baseUrl,
+        authScheme: input.authScheme,
+        material: input.material,
+        createdAt: now,
+        updatedAt: now,
+      };
+      vault.connections[`${tenantId}/${connectionId}`] = stored;
+      this.save(vault);
+      return { connectionId, ...projectConnection(stored) };
+    });
   }
 
   async updateConnection(
@@ -189,23 +269,27 @@ export class LocalFileCredentialStore implements ConnectorCredentialStore {
     connectionId: string,
     changes: { name?: string; material?: Record<string, string> },
   ): Promise<void> {
-    const vault = this.load();
-    const existing = vault.connections[`${tenantId}/${connectionId}`];
-    if (!existing) throw new Error(`connection ${connectionId} not found`);
-    if (changes.name !== undefined) existing.name = changes.name;
-    // Merge, never replace: editing one field (a rotated secret) must not drop
-    // the others (a connector carries several - Stripe has three).
-    if (changes.material !== undefined) {
-      existing.material = { ...existing.material, ...changes.material };
-    }
-    existing.updatedAt = new Date().toISOString();
-    this.save(vault);
+    await this.withVaultLock(() => {
+      const vault = this.load();
+      const existing = vault.connections[`${tenantId}/${connectionId}`];
+      if (!existing) throw new Error(`connection ${connectionId} not found`);
+      if (changes.name !== undefined) existing.name = changes.name;
+      // Merge, never replace: editing one field (a rotated secret) must not drop
+      // the others (a connector carries several - Stripe has three).
+      if (changes.material !== undefined) {
+        existing.material = { ...existing.material, ...changes.material };
+      }
+      existing.updatedAt = new Date().toISOString();
+      this.save(vault);
+    });
   }
 
   async deleteConnection(tenantId: string, connectionId: string): Promise<void> {
-    const vault = this.load();
-    delete vault.connections[`${tenantId}/${connectionId}`];
-    this.save(vault);
+    await this.withVaultLock(() => {
+      const vault = this.load();
+      delete vault.connections[`${tenantId}/${connectionId}`];
+      this.save(vault);
+    });
   }
 
   async listConnections(tenantId: string): Promise<ConnectionRecord[]> {

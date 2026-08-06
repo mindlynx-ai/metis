@@ -133,6 +133,75 @@ export const ENGINE_ACTIVITY_RETRY = {
  */
 export const MAX_SIGNAL_PARKS = 8;
 
+/**
+ * The ceiling on ONE node's output.
+ *
+ * Output is returned from the dispatch activity, so it is serialised into
+ * workflow history, and the state array it joins is then the input to every
+ * later dispatch: an uncapped output does not cost a node, it wedges the run
+ * on Temporal's payload limit. The handlers that read the outside world cap
+ * themselves - the data node at 256 KB, the object store, the loop - but that
+ * left every handler with no cap of its own (http, code) able to blow the
+ * limit, so the floor lives at the activity boundary instead, which is the one
+ * place every handler's output passes through. Same 256 KB as the data node,
+ * because a config's worth of data is what the walk carries.
+ */
+export const NODE_OUTPUT_BYTES = 256 * 1024;
+
+/**
+ * Why an output is too big to carry, or undefined when it fits. Failing beats
+ * truncating: the output is substituted into the next node's config and sent
+ * onwards, so a silently halved record reaches whatever is downstream, while a
+ * failed node stops the run and says which node and how big. A handler's own
+ * cap (the data node's, the object store's) still refuses earlier and more
+ * cheaply; this is only the floor beneath the handlers with none.
+ */
+export function oversizeOutput(output: unknown): string | undefined {
+  const bytes = JSON.stringify(output ?? null).length;
+  if (bytes <= NODE_OUTPUT_BYTES) return undefined;
+  return `node output is ${bytes} bytes, over the ${NODE_OUTPUT_BYTES} byte ceiling`;
+}
+
+/** Policy attempts are bounded so a typo cannot spin a node for hours. */
+export const MAX_ATTEMPTS = 10;
+
+/** How many times the policy loop may dispatch this node. */
+export function policyAttempts(policy?: NodePolicy): number {
+  return 1 + Math.min(Math.max(0, Math.trunc(policy?.retries ?? 0)), MAX_ATTEMPTS - 1);
+}
+
+/** The old fixed budget, kept as the floor: nothing gets a smaller one. */
+export const DISPATCH_BUDGET_MIN_MS = 120_000;
+/**
+ * The ceiling on a derived budget. A node whose policy wants to spend longer
+ * than an hour dispatching is not a synchronous step any more and belongs on a
+ * park, which waits durably and costs nothing while it does. Clamping can put
+ * a pathological policy back inside the overrun this function exists to fix,
+ * and that is the better half of the trade: an activity Temporal can never
+ * time out is a worker slot nothing reclaims.
+ */
+export const DISPATCH_BUDGET_MAX_MS = 60 * 60 * 1000;
+/** Room for the substitution, the credential resolve and the two log writes. */
+const DISPATCH_BUDGET_MARGIN_MS = 30_000;
+
+/**
+ * The activity budget one node's dispatch needs.
+ *
+ * The node's own policy retries INSIDE the activity, so the activity has to be
+ * able to hold what that policy may spend: every attempt at its timeout, plus
+ * the backoff between them. Fixed at two minutes it could not - a node at 30s
+ * with retries: 4 is 150s of dispatches - so Temporal timed the activity out
+ * and retried the whole loop, and the outside world saw the same request up to
+ * maximumAttempts times over, several of them concurrently.
+ */
+export function dispatchBudgetMs(policy?: NodePolicy): number {
+  const attempts = policyAttempts(policy);
+  const perAttemptMs = Math.max(0, (policy?.timeoutSeconds ?? 0) * 1000);
+  const backoffMs = Math.max(0, (policy?.backoffSeconds ?? 0) * 1000);
+  const needed = attempts * perAttemptMs + (attempts - 1) * backoffMs + DISPATCH_BUDGET_MARGIN_MS;
+  return Math.min(Math.max(needed, DISPATCH_BUDGET_MIN_MS), DISPATCH_BUDGET_MAX_MS);
+}
+
 /** What a handler asked to wait for (structurally the ports' SignalPark;
  *  restated because this module must stay free of runtime imports). */
 export interface SignalParkRequest {

@@ -107,6 +107,13 @@ export interface NodeHandlerContext {
    * one.
    */
   idempotencyKey?: string;
+  /**
+   * Aborted when the engine has stopped waiting for this dispatch - its
+   * policy timeout expired. A handler that reaches the outside world should
+   * pass it on (fetch takes one), or the abandoned call carries on and the
+   * next attempt's runs alongside it. Ignoring it is safe, just wasteful.
+   */
+  signal?: AbortSignal;
 }
 
 export type NodeHandler = (ctx: NodeHandlerContext) => Promise<NodeExecutionResult>;

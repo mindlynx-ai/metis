@@ -47,6 +47,7 @@ import type {
   WorkflowLifecycleRequest,
   WorkflowNode,
 } from '../types.js';
+import { oversizeOutput, policyAttempts } from '../types.js';
 
 /** Map a handler's numeric status to the workflow's internal outcome. */
 function classifyStatus(status: number): ExecuteNodeResult['outcome'] {
@@ -54,9 +55,6 @@ function classifyStatus(status: number): ExecuteNodeResult['outcome'] {
   if (isUnimplemented(status)) return 'unimplemented';
   return 'failed';
 }
-
-/** Policy attempts are bounded so a typo cannot spin a node for hours. */
-const MAX_ATTEMPTS = 10;
 
 /** One dispatch's outcome, before the log line and the event are written. */
 type DispatchResult = Pick<
@@ -82,11 +80,12 @@ async function executeHandlerWithPolicy(
 ): Promise<DispatchResult> {
   const { node } = request;
   const policy = node.policy ?? {};
-  const maxAttempts = 1 + Math.min(Math.max(0, Math.trunc(policy.retries ?? 0)), MAX_ATTEMPTS - 1);
+  const maxAttempts = policyAttempts(policy);
   const timeoutMs = Math.max(0, (policy.timeoutSeconds ?? 0) * 1000);
   const backoffMs = Math.max(0, (policy.backoffSeconds ?? 0) * 1000);
-  const runOnce = () =>
+  const runOnce = (signal: AbortSignal) =>
     nodes.execute({
+      signal,
       nodeRef: {
         id: node.id,
         type: node.type,
@@ -141,18 +140,29 @@ async function executeHandlerWithPolicy(
 }
 
 /**
- * Race work against a timeout, resolving the timeout value when it wins.
- * ponytail: the losing handler promise keeps running to completion; add
- * AbortSignal plumbing through NodeExecPort when handlers can be cancelled.
+ * Race work against a timeout, resolving the timeout value when it wins and
+ * telling the loser to stop. The abort is the half that matters: the losing
+ * dispatch used to run on to completion, so the next attempt's request went
+ * out while the first was still in flight - one node, two concurrent side
+ * effects, and `idempotencyKey` is opt-in. A handler that cannot be cancelled
+ * simply ignores the signal and is no worse off than before.
  */
-async function withTimeout<T>(work: () => Promise<T>, ms: number, timeoutValue: T): Promise<T> {
-  if (ms <= 0) return work();
+async function withTimeout<T>(
+  work: (signal: AbortSignal) => Promise<T>,
+  ms: number,
+  timeoutValue: T,
+): Promise<T> {
+  const controller = new AbortController();
+  if (ms <= 0) return work(controller.signal);
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<T>((resolve) => {
-    timer = setTimeout(() => resolve(timeoutValue), ms);
+    timer = setTimeout(() => {
+      controller.abort(new Error(`node dispatch timed out after ${ms}ms`));
+      resolve(timeoutValue);
+    }, ms);
   });
   try {
-    return await Promise.race([work(), timeout]);
+    return await Promise.race([work(controller.signal), timeout]);
   } finally {
     clearTimeout(timer);
   }
@@ -315,6 +325,11 @@ export function createActivities(ports: EnginePorts): EngineActivities {
       // final line lands when pollCloudJob reaches the terminal state.
       if (result.outcome === 'parked') {
         return { outcome: 'parked', jobId: result.jobId, park: result.park };
+      }
+
+      const oversize = result.outcome === 'completed' ? oversizeOutput(result.output) : undefined;
+      if (oversize !== undefined) {
+        result = { outcome: 'failed', error: { message: oversize }, attempts: result.attempts, binding: result.binding };
       }
 
       const eventByOutcome: Record<string, WorkflowEventName> = {

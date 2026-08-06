@@ -39,6 +39,7 @@ import { awaitCloudJob } from './cloud-park.js';
 import { settleDecisions } from './decision-park.js';
 import { buildExecuteRequest } from './execute-request.js';
 import {
+  dispatchBudgetMs,
   ENGINE_ACTIVITY_RETRY,
   SIGNAL_DEFAULT_TIMEOUT_MS,
   type EngineActivities,
@@ -57,6 +58,21 @@ const activities = proxyActivities<EngineActivities>({
   startToCloseTimeout: '2 minutes',
   retry: ENGINE_ACTIVITY_RETRY,
 });
+
+/**
+ * The dispatch proxy for ONE node: its budget is derived from its own policy,
+ * because the policy's retries run inside the activity. A fixed two minutes
+ * covered the bookkeeping activities above and nothing else - a node allowed
+ * more than that outran its budget, Temporal retried the whole activity, and
+ * the request went out again while the first was still in flight.
+ * proxyActivities only builds a proxy object, so calling it per node records
+ * no history and stays deterministic.
+ */
+const dispatchFor = (policy: RuntimeNode['policy']) =>
+  proxyActivities<Pick<EngineActivities, 'executeNode'>>({
+    startToCloseTimeout: dispatchBudgetMs(policy),
+    retry: ENGINE_ACTIVITY_RETRY,
+  });
 
 
 export const helixSignal = defineSignal<[HelixSignalPayload]>('helixSignal');
@@ -261,7 +277,7 @@ export async function helixWorkflow(started: HelixWorkflowInput): Promise<HelixW
       // node's started line, and the log's sort key must stay unique.
       nextSequence: () => (sequence += 1),
       dispatch: (next) =>
-        activities.executeNode(
+        dispatchFor(node.policy).executeNode(
           buildExecuteRequest(input, states, nodes, edges, node, nodeType, isBranch, next),
         ),
     });
@@ -289,7 +305,7 @@ export async function helixWorkflow(started: HelixWorkflowInput): Promise<HelixW
     // Branch nodes partition their outgoing targets and orphan the losing
     // branches; they need their edge handles passed as targets.
     const isBranch = BRANCH_NODE_TYPES.has(nodeType);
-    let result = await activities.executeNode(
+    let result = await dispatchFor(node.policy).executeNode(
       buildExecuteRequest(input, states, nodes, edges, node, nodeType, isBranch, nodeSequence),
     );
 
@@ -354,7 +370,7 @@ export async function helixWorkflow(started: HelixWorkflowInput): Promise<HelixW
    * successors fire - the body was pre-orphaned in this walk.
    */
   async function runLoopNode(node: RuntimeNode, nodeSequence: number): Promise<void> {
-    const resolveResult = await activities.executeNode(
+    const resolveResult = await dispatchFor(node.policy).executeNode(
       buildExecuteRequest(input, states, nodes, edges, node, 'loop', false, nodeSequence),
     );
     if (resolveResult.outcome !== 'completed') {

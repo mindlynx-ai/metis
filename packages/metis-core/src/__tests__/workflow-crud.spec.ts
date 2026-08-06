@@ -154,6 +154,31 @@ describe('definition CRUD with publish validation', () => {
     expect((stillReadable.json() as { deleted: boolean }).deleted).toBe(true);
   });
 
+  // Deletion is soft and delisting was done purely by nulling the index keys,
+  // which every write sets again. An editor left open on a deleted workflow
+  // could therefore save or publish it straight back into the list, and a
+  // delete a user can undo by accident is not a delete.
+  it('a deleted workflow cannot be saved or published back into the list', async () => {
+    const { id } = (await create('deleted then edited', triggeredDefinition)).json() as {
+      id: string;
+    };
+    expect((await call('DELETE', `/api/workflows/${id}`)).statusCode).toBe(204);
+
+    const saved = await call('PATCH', `/api/workflows/${id}`, { name: 'back from the dead' });
+    expect(saved.statusCode).toBe(409);
+    const published = await call('POST', `/api/workflows/${id}/publish`);
+    expect(published.statusCode).toBe(409);
+
+    const listed = await call('GET', '/api/workflows?limit=10');
+    expect((listed.json() as { items: unknown[] }).items).toEqual([]);
+    // And the refusals are refusals, not writes that failed on the way out.
+    const versions = (await call('GET', `/api/workflows/${id}/versions`)).json() as {
+      items: { changeset: number; name: string }[];
+    };
+    expect(versions.items).toHaveLength(1);
+    expect(versions.items[0]?.name).toBe('deleted then edited');
+  });
+
   it('publish enforces the trigger-entry rule and then getLatestPublished resolves', async () => {
     const { id } = (await create('publishable', bareDefinition)).json() as { id: string };
     const rejected = await call('POST', `/api/workflows/${id}/publish`);

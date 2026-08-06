@@ -13,6 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+import { ConditionFailedError } from '@mindlynx/metis-ports';
 import type { ItemRecord, PatchOptions, TableDefinition } from '@mindlynx/metis-ports';
 import type { DataGateway } from './gateway.js';
 
@@ -163,6 +164,16 @@ export class WorkflowStore {
       limit: 1,
     });
     const currentNewest = newest.items[0];
+    // A deleted workflow takes no more versions. Deletion is soft and delisting
+    // is done by nulling the listing keys, which the write below sets again for
+    // whatever is newest - so without this, any save or publish put a workflow
+    // whose own row says deleted straight back into the list, and `deleted`
+    // rode along as true. The refusal belongs here rather than in each route
+    // because every writer (routes, MCP, a future importer) comes through this
+    // one function, and it costs nothing: the read it needs is already done.
+    if (currentNewest?.deleted === true) {
+      throw new ConditionFailedError('the workflow was deleted');
+    }
     const isNewest = !currentNewest || String(currentNewest.SK) <= sk;
 
     const record: ItemRecord = {
@@ -270,7 +281,14 @@ export class WorkflowStore {
       limit: options.limit,
       cursor: options.cursor,
     });
-    return { items: page.items as WorkflowVersionItem[], cursor: page.cursor };
+    // The index is the primary filter (a soft delete nulls the keys) and this
+    // is the second one, because the index has been wrong before: a row whose
+    // keys were rewritten is otherwise listed with `deleted: true` on it and
+    // the listing is the one place a user checks that a delete took. A page
+    // may come back short; the cursor, not the count, says whether there is
+    // more, which is already true of a sparse index.
+    const items = (page.items as WorkflowVersionItem[]).filter((item) => item.deleted !== true);
+    return { items, cursor: page.cursor };
   }
 
   async softDeleteWorkflow(tenantId: string, workflowId: string): Promise<void> {

@@ -58,6 +58,7 @@ export function registerWorkflowRoutes(
     });
   const badRequest = (reply: FastifyReply, message: string) =>
     reply.code(400).send({ error: message });
+  const deletedMessage = 'the workflow was deleted';
 
   // A Schedule node in a published graph IS the declaration that the workflow
   // should fire on that cron - without this sync the node was config-only and
@@ -210,6 +211,11 @@ export function registerWorkflowRoutes(
       }
       const latest = await store.getLatestVersion(session.tenantId, workflowId);
       if (!latest) return reply.code(404).send({ error: 'workflow not found' });
+      // The store refuses this too; saying so here keeps the answer specific
+      // (the concurrent-save 409 below tells the user to reload, which is the
+      // wrong advice for a workflow that is gone) and skips work that would
+      // only be undone.
+      if (latest.deleted === true) return reply.code(409).send({ error: deletedMessage });
       const changeset = latest.changeset + 1;
       const stored = latest.definition as Record<string, unknown>;
       // A settings-only PATCH (cloudRouting without a graph) must not lose
@@ -265,6 +271,7 @@ export function registerWorkflowRoutes(
       const { workflowId } = request.params as { workflowId: string };
       const latest = await store.getLatestVersion(session.tenantId, workflowId);
       if (!latest) return reply.code(404).send({ error: 'workflow not found' });
+      if (latest.deleted === true) return reply.code(409).send({ error: deletedMessage });
       const validation = validateDefinition(latest.definition as unknown as WorkflowDefinition, {
         kind: latest.type === 'api' ? 'api' : 'workflow',
         level: 'publish',

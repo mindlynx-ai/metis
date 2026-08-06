@@ -20,15 +20,16 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DataGateway } from '../gateway.js';
 import { SqliteAdapter } from '../sqlite-adapter.js';
-import { WorkflowStore, registerWorkflowTables } from '../workflow-store.js';
+import { WorkflowStore, registerWorkflowTables, WORKFLOWS_TABLE } from '../workflow-store.js';
 
 describe('WorkflowStore: the workflow method set over SQLite', () => {
   let store: WorkflowStore;
+  let gateway: DataGateway;
   let now: number;
 
   beforeEach(() => {
     const dir = mkdtempSync(join(tmpdir(), 'metis-wfstore-'));
-    const gateway = new DataGateway(new SqliteAdapter(join(dir, 'store.db')));
+    gateway = new DataGateway(new SqliteAdapter(join(dir, 'store.db')));
     registerWorkflowTables(gateway);
     now = Date.parse('2026-07-03T12:00:00.000Z');
     store = new WorkflowStore(gateway, { clock: () => now });
@@ -121,6 +122,34 @@ describe('WorkflowStore: the workflow method set over SQLite', () => {
     expect(page.items).toEqual([]);
     const direct = await store.getWorkflowVersion('t1', 'wf1', 1, 0);
     expect(direct?.deleted).toBe(true);
+  });
+
+  it('a deleted workflow refuses further versions rather than coming back', async () => {
+    await store.putWorkflowVersion(version(1));
+    await store.softDeleteWorkflow('t1', 'wf1');
+    now += 1000;
+    await expect(store.putWorkflowVersion(version(1, 1))).rejects.toBeInstanceOf(
+      ConditionFailedError,
+    );
+    await expect(
+      store.putWorkflowVersion(version(1, 1), { mustBeNew: true }),
+    ).rejects.toBeInstanceOf(ConditionFailedError);
+    expect(await store.getWorkflowVersion('t1', 'wf1', 1, 1)).toBeUndefined();
+    expect((await store.listWorkflows('t1', { limit: 10 })).items).toEqual([]);
+  });
+
+  it('listWorkflows drops a deleted row even when it carries index keys', async () => {
+    await store.putWorkflowVersion(version(1));
+    await store.putWorkflowVersion({ ...version(1), workflowId: 'wf2' });
+    // What the old resurrection left behind: deleted true with the listing
+    // keys set. Written through the gateway because the store now refuses it.
+    await gateway.update(
+      WORKFLOWS_TABLE.name,
+      { partitionKey: 'WF#t1#wf1', sortKey: 'VER#000001#000000' },
+      { deleted: true },
+    );
+    const page = await store.listWorkflows('t1', { limit: 10 });
+    expect(page.items.map((i) => i.workflowId)).toEqual(['wf2']);
   });
 
   it('writes, patches and reads execution META with LOG assembly in order', async () => {

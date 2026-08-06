@@ -26,6 +26,8 @@ import {
 } from '@mindlynx/metis-data-gateway';
 import { runCli, loadConfig, HELP_TEXT } from '../cli.js';
 import { DEFAULT_CONFIG } from '../scaffold.js';
+import { DEFAULT_SESSION_POLICY } from '@mindlynx/metis-ports';
+import { DEFAULT_LOGIN_LIMIT } from '@mindlynx/metis-core';
 
 const { version: manifestVersion } = createRequire(import.meta.url)('../../package.json') as {
   version: string;
@@ -83,9 +85,13 @@ describe('metis CLI', () => {
     const config = JSON.parse(readFileSync(join(dir, 'metis.config.json'), 'utf8')) as {
       datastore: string;
       ports: { editor: number; temporalGrpc: number; temporalUi: number };
+      auth: Record<string, number>;
     };
     expect(config.datastore).toBe('sqlite');
     expect(config.ports).toEqual({ editor: 3000, temporalGrpc: 7233, temporalUi: 8233 });
+    // Written out, not merely defaulted: an operator who cannot see a setting
+    // does not have it.
+    expect(config.auth).toEqual(DEFAULT_CONFIG.auth);
 
     const workflow = JSON.parse(readFileSync(join(dir, 'workflows', 'hello.json'), 'utf8')) as {
       workflowId: string;
@@ -192,6 +198,30 @@ describe('metis.config.json', () => {
     const dir = mkdtempSync(join(tmpdir(), 'metis-cli-config-'));
     writeFileSync(join(dir, 'metis.config.json'), '{ "ports": ');
     expect(() => loadConfig(dir)).toThrow(/not valid JSON/);
+  });
+
+  it('merges the auth block partially, the way ports and paths already do', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'metis-cli-config-'));
+    // An operator shortening the idle window should not have to restate the
+    // other four keys to keep them.
+    writeFileSync(join(dir, 'metis.config.json'), JSON.stringify({ auth: { sessionIdleHours: 1 } }));
+    expect(loadConfig(dir).auth).toEqual({ ...DEFAULT_CONFIG.auth, sessionIdleHours: 1 });
+  });
+
+  it('names a bad auth key rather than silently taking the default', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'metis-cli-config-'));
+    writeFileSync(join(dir, 'metis.config.json'), JSON.stringify({ auth: { loginAttempts: 0 } }));
+    expect(() => loadConfig(dir)).toThrow(/auth\.loginAttempts/);
+  });
+
+  it('ships config defaults that are the code defaults, so neither can drift', () => {
+    expect(DEFAULT_CONFIG.auth).toEqual({
+      sessionAbsoluteHours: DEFAULT_SESSION_POLICY.absoluteHours,
+      sessionIdleHours: DEFAULT_SESSION_POLICY.idleHours,
+      maxSessions: DEFAULT_SESSION_POLICY.maxSessions,
+      loginAttempts: DEFAULT_LOGIN_LIMIT.attempts,
+      loginWindowMinutes: DEFAULT_LOGIN_LIMIT.windowMinutes,
+    });
   });
 });
 

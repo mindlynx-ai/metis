@@ -216,6 +216,10 @@ export async function buildControlServer(options: ControlServerOptions): Promise
   const dataSources = buildDataSources();
   const app = buildCoreServer({
     identity,
+    loginLimit: {
+      attempts: runtime.auth.loginAttempts,
+      windowMinutes: runtime.auth.loginWindowMinutes,
+    },
     store: runtime.store,
     executions,
     credentials: runtime.credentials,

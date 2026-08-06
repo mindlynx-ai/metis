@@ -43,14 +43,47 @@ export const MetisConfigSchema = z.object({
    * `metis prune` clears on demand either way.
    */
   retentionDays: z.number().int().nonnegative().optional(),
+  /** Sign-in policy. Yours to set, because Metis is yours to run - but see
+   *  DEFAULT_CONFIG: the defaults are deliberately not "never expires". */
+  auth: z.object({
+    /** Hard ceiling on a session, from sign-in. Use does not extend it. */
+    sessionAbsoluteHours: z.number().positive(),
+    /** Silence that ends a session early. Below the absolute one, or inert. */
+    sessionIdleHours: z.number().positive(),
+    /** Live sessions held in memory before the oldest is dropped. */
+    maxSessions: z.number().int().positive(),
+    /** Failed sign-ins allowed per window, per source address + username. */
+    loginAttempts: z.number().int().positive(),
+    /** How long that window lasts. */
+    loginWindowMinutes: z.number().positive(),
+  }),
 });
 
 export type MetisConfig = z.infer<typeof MetisConfigSchema>;
 
+/**
+ * `auth` restates DEFAULT_SESSION_POLICY (metis-ports) and DEFAULT_LOGIN_LIMIT
+ * (metis-core) rather than importing them: this module is on `metis init`'s
+ * path, and importing metis-core would drag Fastify into a command that only
+ * writes four files. A test asserts the two sets are equal, so they cannot
+ * drift apart in silence.
+ */
 export const DEFAULT_CONFIG: MetisConfig = {
   datastore: 'sqlite',
   ports: { editor: 3000, temporalGrpc: 7233, temporalUi: 8233 },
   paths: { data: '.metis', database: '.metis/metis.db' },
+  // No retentionDays here on purpose. Omitted means keep everything, so an
+  // upgrade cannot start deleting run history the operator never agreed to
+  // lose. The session defaults below are deliberately the opposite: secure
+  // rather than permissive, because a default of "never expires" would leave
+  // the old behaviour in place for anyone who does not read this file.
+  auth: {
+    sessionAbsoluteHours: 24,
+    sessionIdleHours: 8,
+    maxSessions: 10_000,
+    loginAttempts: 10,
+    loginWindowMinutes: 15,
+  },
 };
 
 /** One level of the config, defaults underneath whatever the file says. A value
@@ -85,6 +118,7 @@ export function parseConfig(raw: unknown, source: string): MetisConfig {
     ...partial,
     ports: overlay(DEFAULT_CONFIG.ports, partial.ports),
     paths: overlay(DEFAULT_CONFIG.paths, partial.paths),
+    auth: overlay(DEFAULT_CONFIG.auth, partial.auth),
   });
   if (parsed.success) return parsed.data;
   // Name the offending key. A validation failure the operator cannot locate is

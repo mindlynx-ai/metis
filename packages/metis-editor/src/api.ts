@@ -348,6 +348,8 @@ export const api = {
     setToken(result.token);
   },
   me: () => request<{ userId: string; role: string }>('GET', '/api/auth/me'),
+  // Revokes server-side, so signing out is not just this browser forgetting.
+  logout: () => request<void>('POST', '/api/auth/logout'),
   // The audit trail: who did what. Read only, by design.
   audit: (query: AuditQuery = {}) =>
     request<{ items: AuditRecord[]; count: number }>('GET', auditPath(query)),

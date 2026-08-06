@@ -39,3 +39,40 @@
 {$METIS_REDIRECT_HOSTS:metis-redirect.localhost} {
 	redir https://{$METIS_DEMO_HOST}{uri} permanent
 }
+
+# The marketing site, served as static files from a directory mounted at
+# /srv/site. This is what the apex domain answers with; the app keeps
+# METIS_DEMO_HOST to itself.
+#
+# The apex used to sit in METIS_REDIRECT_HOSTS above, which meant anyone who
+# typed the bare domain landed on a sign-in form. Serving it here rather than
+# moving its DNS elsewhere is deliberate: the box already holds a valid
+# certificate for the name, so nothing has to be re-issued and the ACME failure
+# mode described above never comes up.
+#
+# Same .localhost default and the same rule as the redirect block: only set this
+# to a name whose DNS already points at this box. With no site directory mounted
+# the block still answers, with a 404 from file_server, which is a clearer
+# failure than a dead handshake.
+{$METIS_SITE_HOST:metis-site.localhost} {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# A static page with no inline script and no third-party origin can hold
+		# a real policy, unlike the editor above. Keep it that way: if the site
+		# ever needs inline script, hash it rather than widening this.
+		Content-Security-Policy "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; font-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
+	}
+	root * /srv/site
+	file_server
+}
+
+# www -> the apex site. Separate from METIS_REDIRECT_HOSTS because that block
+# sends everything to the app, and www belongs with the page a visitor asked
+# for, not with the sign-in form.
+{$METIS_SITE_WWW_HOST:metis-site-www.localhost} {
+	redir https://{$METIS_SITE_HOST}{uri} permanent
+}

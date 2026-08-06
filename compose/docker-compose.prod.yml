@@ -59,10 +59,17 @@ services:
       # Space-separated extra hostnames to redirect here. See the Caddyfile:
       # list only names whose DNS already points at this box.
       METIS_REDIRECT_HOSTS: ${METIS_REDIRECT_HOSTS:-metis-redirect.localhost}
+      # The apex domain, answered with the static marketing site in ./site.
+      METIS_SITE_HOST: ${METIS_SITE_HOST:-metis-site.localhost}
+      METIS_SITE_WWW_HOST: ${METIS_SITE_WWW_HOST:-metis-site-www.localhost}
     networks:
       - metis
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # The built marketing site. Bind-mounted rather than baked into an image
+      # so publishing a wording change does not mean rebuilding and shipping
+      # the application.
+      - ./site:/srv/site:ro
       - caddy-data:/data
       - caddy-config:/config
 

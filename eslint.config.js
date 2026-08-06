@@ -53,13 +53,14 @@ export default tseslint.config(
     },
   },
   {
-    // Tests exercise local stubs, SSRF-blocked plain-http targets and
-    // deliberately forged signatures; production policy lives in the
-    // guards under test.
+    // Tests exercise local stubs, SSRF-blocked plain-http targets, literal
+    // addresses from every blocked range, and deliberately forged signatures;
+    // production policy lives in the guards under test.
     files: ['**/__tests__/**/*.spec.ts'],
     rules: {
       'sonarjs/no-clear-text-protocols': 'off',
       'sonarjs/hardcoded-secret-signatures': 'off',
+      'sonarjs/no-hardcoded-ip': 'off',
     },
   },
 );

@@ -18,7 +18,7 @@
  * Pure graph-walk helpers shared by the workflow runners.
  * Deterministic and dependency-free: safe inside workflow code.
  */
-import type { RuntimeNode, WorkflowEdge } from '../types.js';
+import type { RuntimeNode, SwitchNodeOutput, WorkflowEdge } from '../types.js';
 
 export function sourcesOf(
   node: RuntimeNode,
@@ -34,9 +34,22 @@ export function isDone(node: RuntimeNode): boolean {
     node.nodeStatus === 'Complete' ||
     node.nodeStatus === 'Orphaned' ||
     // Failed-but-continue (policy onFailure): terminal, non-fatal; readiness
-    // and orphan cascades treat it like any other finished source.
+    // treats it like any other finished source.
     node.nodeStatus === 'Failed'
   );
+}
+
+/**
+ * Whether a source offers NO live path onwards - which only an orphaned one
+ * does. Readiness asks whether a source has finished (isDone); the orphan
+ * cascade asks the opposite question and must not borrow that answer: a
+ * Complete source has already run and handed its output down, and a
+ * Failed-but-continue one carried the walk on past it. Counting either as
+ * dead orphaned a join whose successful parent happened to finish first,
+ * making the same graph run or not run on timing alone.
+ */
+export function isDeadSource(node: RuntimeNode): boolean {
+  return node.nodeStatus === 'Orphaned';
 }
 
 /**
@@ -89,8 +102,9 @@ export function loopBodyIds(loopNodeId: string, edges: WorkflowEdge[]): string[]
 
 /**
  * Cascade-orphan all reachable descendants of startId. A descendant is
- * orphaned only if ALL its sources are Complete or Orphaned after the
- * cascade, so convergence points with a live upstream path survive.
+ * orphaned only if EVERY one of its sources is itself Orphaned, so a
+ * convergence point keeps its live upstream path whether that path has
+ * already run or has not started yet.
  * Iterative BFS, as in the origin, to avoid recursion depth limits.
  */
 export function cascadeOrphan(
@@ -109,7 +123,7 @@ export function cascadeOrphan(
     for (const successorId of successorIds) {
       const successor = nodes.find((candidate) => candidate.id === successorId);
       if (!successor || successor.nodeStatus !== 'Pending') continue;
-      const allDead = sourcesOf(successor, nodes, edges).every((source) => isDone(source));
+      const allDead = sourcesOf(successor, nodes, edges).every((source) => isDeadSource(source));
       if (allDead) {
         successor.nodeStatus = 'Orphaned';
         orphaned.push(successorId);
@@ -118,4 +132,37 @@ export function cascadeOrphan(
     }
   }
   return orphaned;
+}
+
+/**
+ * Orphan the losing direct targets of a branch node (unless another live path
+ * feeds them), then cascade from each so the selected branch is never swept up
+ * (origin behaviour: the cascade starts below the orphaned children, not at
+ * the branch node itself).
+ *
+ * The branch node ran and did NOT take these edges, so for these targets it is
+ * the one dead source however Complete it reads; every other source has to be
+ * dead in its own right before a target loses its last live path.
+ */
+export function applySwitchPartition(
+  branchNodeId: string,
+  partition: SwitchNodeOutput,
+  nodes: RuntimeNode[],
+  edges: WorkflowEdge[],
+): string[] {
+  const orphanedNow: string[] = [];
+  const orphanedIds = partition.orphanedTargetIds ?? [];
+  const dead = (source: RuntimeNode) => source.id === branchNodeId || isDeadSource(source);
+  for (const orphanId of orphanedIds) {
+    const target = nodes.find((candidate) => candidate.id === orphanId);
+    if (!target || target.nodeStatus !== 'Pending') continue;
+    if (sourcesOf(target, nodes, edges).every(dead)) {
+      target.nodeStatus = 'Orphaned';
+      orphanedNow.push(orphanId);
+    }
+  }
+  for (const orphanId of orphanedIds) {
+    orphanedNow.push(...cascadeOrphan(orphanId, nodes, edges));
+  }
+  return orphanedNow;
 }

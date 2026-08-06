@@ -34,7 +34,7 @@
 import { condition, defineSignal, executeChild, proxyActivities, setHandler, workflowInfo } from '@temporalio/workflow';
 import { getWaitTimeMs } from '../nodes/waituntil.js';
 import { LOOP_CHILD_OUTPUT_BYTES, LOOP_RESULTS_BYTES, type LoopPlan } from '../nodes/loop.js';
-import { cascadeOrphan, getAvailableNodes, isDone, loopBodyIds, signalTarget, sourcesOf } from './graph.js';
+import { applySwitchPartition, getAvailableNodes, isDone, loopBodyIds, signalTarget, sourcesOf } from './graph.js';
 import { awaitCloudJob } from './cloud-park.js';
 import { settleDecisions } from './decision-park.js';
 import { buildExecuteRequest } from './execute-request.js';
@@ -61,33 +61,6 @@ const activities = proxyActivities<EngineActivities>({
 
 export const helixSignal = defineSignal<[HelixSignalPayload]>('helixSignal');
 export const helixCancelSignal = defineSignal<[HelixCancelSignalPayload]>('helixCancelSignal');
-
-/**
- * Orphan the losing direct targets of a switch (unless another live
- * path feeds them), then cascade from each orphaned target so the
- * selected branch is never swept up (origin behaviour: the cascade
- * starts below the orphaned children, not at the switch itself).
- */
-function applySwitchPartition(
-  partition: SwitchNodeOutput,
-  nodes: RuntimeNode[],
-  edges: WorkflowEdge[],
-): string[] {
-  const orphanedNow: string[] = [];
-  const orphanedIds = partition.orphanedTargetIds ?? [];
-  for (const orphanId of orphanedIds) {
-    const target = nodes.find((candidate) => candidate.id === orphanId);
-    if (!target || target.nodeStatus !== 'Pending') continue;
-    if (sourcesOf(target, nodes, edges).every((source) => isDone(source))) {
-      target.nodeStatus = 'Orphaned';
-      orphanedNow.push(orphanId);
-    }
-  }
-  for (const orphanId of orphanedIds) {
-    orphanedNow.push(...cascadeOrphan(orphanId, nodes, edges));
-  }
-  return orphanedNow;
-}
 
 const TRIGGER_CONFIG_TYPES = new Set(['webhookconfig', 'scheduleconfig', 'apiconfig']);
 // Branch nodes: their activity result carries selected/orphaned targets.
@@ -361,11 +334,11 @@ export async function helixWorkflow(started: HelixWorkflowInput): Promise<HelixW
    */
   async function reportBranchPartition(node: RuntimeNode, result: ExecuteNodeResult): Promise<void> {
     if (result.outcome === 'completed') {
-      await reportSwitchOrphans(result.output as SwitchNodeOutput);
+      await reportSwitchOrphans(node.id, result.output as SwitchNodeOutput);
       return;
     }
     if (result.outcome !== 'unimplemented') return;
-    await reportSwitchOrphans({
+    await reportSwitchOrphans(node.id, {
       selectedSources: [],
       selectedTargetIds: [],
       orphanedTargetIds: edges.filter((edge) => edge.source === node.id).map((edge) => edge.target),
@@ -474,8 +447,8 @@ export async function helixWorkflow(started: HelixWorkflowInput): Promise<HelixW
     await walkSuccessors(node);
   }
 
-  async function reportSwitchOrphans(partition: SwitchNodeOutput): Promise<void> {
-    const orphanedNow = applySwitchPartition(partition, nodes, edges);
+  async function reportSwitchOrphans(branchNodeId: string, partition: SwitchNodeOutput): Promise<void> {
+    const orphanedNow = applySwitchPartition(branchNodeId, partition, nodes, edges);
     if (orphanedNow.length === 0) return;
     sequence += 1;
     await activities.markNodesOrphaned({

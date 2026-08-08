@@ -14,6 +14,15 @@ playwright-report/
 deploy/aws*/.env
 deploy/aws*/.state
 deploy/aws*/*.pem
+# ...and their timestamped backups. `deploy/aws*/.env` does NOT match
+# `.env.bak.1786037594`, so a rotation backup carrying METIS_ADMIN_SECRET /
+# METIS_DEMO_SECRET sat untracked-but-committable in the working tree.
+# Kept narrow (.bak/.backup/.save only) so `.env.example` and `.env.template`
+# stay trackable everywhere without needing a negation.
+.env.bak*
+.env.backup*
+.env.save*
+deploy/aws*/.env.bak*
 
 # Internal planning/porting notes: never ship in the public repo.
 docs/internal/

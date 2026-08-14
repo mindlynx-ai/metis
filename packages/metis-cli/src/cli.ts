@@ -142,6 +142,17 @@ export function loadConfig(cwd: string): MetisConfig {
   return parseConfig(raw, 'metis.config.json');
 }
 
+/**
+ * The built editor, if this checkout or install has one. Both candidates are
+ * relative to the working directory, which is the whole story for a source
+ * checkout and a local `npm i @mindlynx/metis-editor`.
+ *
+ * It is deliberately allowed to come back undefined: `metis up` still serves a
+ * working API without it, and the CLI does not depend on the editor package, so
+ * a bare `npx @mindlynx/metis-cli up` in an empty directory has no bundle to
+ * find. What must not happen is the boot announcing an editor it is not
+ * serving - see cmdUp.
+ */
 function editorDir(cwd: string): string | undefined {
   const candidates = [join(cwd, 'editor'), join(cwd, 'node_modules', '@mindlynx', 'metis-editor', 'dist')];
   return candidates.find((candidate) => existsSync(candidate));
@@ -171,7 +182,8 @@ export async function cmdUp(context: CliContext): Promise<number> {
   await runtime.start();
   const seeded = await syncCatalogueConnectors(runtime.connectors);
   context.stdout(`Catalogue in sync: ${seeded.seeded} connectors.`);
-  const app = await buildControlServer({ runtime, editorDir: editorDir(context.cwd) });
+  const editor = editorDir(context.cwd);
+  const app = await buildControlServer({ runtime, editorDir: editor });
   const host = bindHost(process.env);
   await app.listen({ port: config.ports.editor, host });
   if (host !== '127.0.0.1' && host !== 'localhost') {
@@ -180,7 +192,19 @@ export async function cmdUp(context: CliContext): Promise<number> {
         + 'this port needs only the admin secret.',
     );
   }
-  context.stdout(`Editor and API on http://localhost:${config.ports.editor}`);
+  if (editor) {
+    context.stdout(`Editor and API on http://localhost:${config.ports.editor}`);
+  } else {
+    // Saying "Editor and API" with no bundle to serve sends the reader to a
+    // raw 404 and lets them conclude Metis is broken. It is not: the API is
+    // up, and the missing half is a build step nobody told them about.
+    context.stdout(`API on http://localhost:${config.ports.editor} - no editor bundle here.`);
+    context.stdout(
+      '  From a source checkout, `npm run build` builds it. Otherwise install '
+        + '@mindlynx/metis-editor beside this project, or use the compose stack, '
+        + 'which ships the editor already built.',
+    );
+  }
   context.stdout(`Temporal Web UI on http://localhost:${config.ports.temporalUi}`);
   context.stdout('Metis is up. Press Ctrl+C to stop.');
   // Block until a termination signal. bin.ts calls process.exit(code) as soon

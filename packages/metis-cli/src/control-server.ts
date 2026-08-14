@@ -275,6 +275,22 @@ export async function buildControlServer(options: ControlServerOptions): Promise
         .header('content-type', CONTENT_TYPES[extname(target.file)] ?? 'application/octet-stream')
         .send(body);
     });
+  } else {
+    // No bundle to serve. Without this, the browser gets Fastify's generic
+    // "Route GET:/ not found" JSON, which reads as a broken product rather than
+    // a missing build step - and the API underneath it is perfectly healthy.
+    app.get('/', async (_request, reply) =>
+      reply
+        .code(503)
+        .header('content-type', 'text/plain; charset=utf-8')
+        .send(
+          'Metis is running, but no editor bundle was found, so there is nothing '
+            + 'to show here. The API on this port is up and serving /api/* to an '
+            + 'authenticated client; only the browser half is missing.\n\n'
+            + 'From a source checkout, `npm run build` builds the editor. Otherwise '
+            + 'install @mindlynx/metis-editor beside this project, or use the compose '
+            + 'stack, which ships it already built.\n',
+        ));
   }
 
   await app.ready();

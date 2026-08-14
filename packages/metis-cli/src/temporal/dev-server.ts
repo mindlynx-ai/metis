@@ -52,6 +52,25 @@ export function devServerArgs(options: DevServerOptions): string[] {
   ];
 }
 
+/** Can something be reached on this port right now? One connect attempt. */
+export async function isPortOpen(
+  port: number,
+  host = '127.0.0.1',
+  timeoutMs = 200,
+): Promise<boolean> {
+  return new Promise<boolean>((resolve) => {
+    const socket: Socket = connect({ port, host }, () => {
+      socket.end();
+      resolve(true);
+    });
+    socket.on('error', () => resolve(false));
+    socket.setTimeout(timeoutMs, () => {
+      socket.destroy();
+      resolve(false);
+    });
+  });
+}
+
 export async function waitForPort(
   port: number,
   host = '127.0.0.1',
@@ -60,18 +79,7 @@ export async function waitForPort(
 ): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const open = await new Promise<boolean>((resolve) => {
-      const socket: Socket = connect({ port, host }, () => {
-        socket.end();
-        resolve(true);
-      });
-      socket.on('error', () => resolve(false));
-      socket.setTimeout(sleepMs, () => {
-        socket.destroy();
-        resolve(false);
-      });
-    });
-    if (open) return;
+    if (await isPortOpen(port, host, sleepMs)) return;
     await new Promise((resolve) => setTimeout(resolve, sleepMs));
   }
   throw new Error(`Temporal dev server did not open port ${port} within ${timeoutMs}ms`);
@@ -83,6 +91,26 @@ export class TemporalDevServer {
   constructor(private readonly options: DevServerOptions) {}
 
   async start(): Promise<void> {
+    // Refuse a port somebody else already holds. `temporal server start-dev`
+    // logs "can't set frontend port N: bind: address already in use" and then
+    // CARRIES ON, so the readiness probe below connects happily - to the
+    // stranger's Temporal. Metis then reported itself up while the worker
+    // polled a task queue on a server we do not own: runs vanish into someone
+    // else's namespace, and their runs surface as ours.
+    //
+    // This path only runs when Metis manages its own Temporal (an external
+    // address short-circuits before here), so anything already listening is by
+    // definition not ours and there is no legitimate case to preserve.
+    if (await isPortOpen(this.options.grpcPort)) {
+      throw new Error(
+        `something is already listening on port ${this.options.grpcPort}, so the `
+          + 'Temporal dev server cannot have it. Metis will not attach to a Temporal '
+          + 'it did not start: your runs would go somewhere you cannot see, and that '
+          + 'server\'s runs would surface as yours. Stop whatever holds the port, or '
+          + `move Metis onto a free one with {"ports":{"temporalGrpc":7333}} in `
+          + 'metis.config.json.',
+      );
+    }
     mkdirSync(dirname(this.options.databaseFile), { recursive: true });
     mkdirSync(dirname(this.options.pidFile), { recursive: true });
     this.child = spawn(this.options.binaryPath, devServerArgs(this.options), {

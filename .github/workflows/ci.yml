@@ -80,6 +80,29 @@ jobs:
       - run: npm run build
       - run: npm run test:cli-e2e
 
+  # Windows was refused outright until Metis learned to download the windows
+  # dev-server build, and nothing in CI ran on Windows to notice. Everything
+  # skip-gated and invisible in this repo has rotted - METIS_E2E did it twice -
+  # so the Windows claim gets a job that actually downloads and boots Temporal
+  # on windows-latest rather than a promise in the README.
+  #
+  # Deliberately narrower than cli-e2e: no Postgres service, and only the boot
+  # spec. This proves the platform, not the product; the product is proved on
+  # Linux above.
+  windows-boot:
+    runs-on: windows-latest
+    env:
+      METIS_E2E: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx vitest run packages/metis-cli/src/temporal/__tests__/boot.e2e.spec.ts
+
   compose-boot:
     runs-on: ubuntu-latest
     steps:

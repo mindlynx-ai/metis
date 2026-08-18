@@ -18,6 +18,9 @@
     "packages/*"
   ],
   "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:api": "node --import tsx packages/metis-editor/e2e/dev-core.ts",
+    "dev:web": "npm run dev --workspace @mindlynx/metis-editor",
     "typecheck": "tsc --noEmit && npm run typecheck --workspaces --if-present",
     "lint": "eslint . && node scripts/check-style.mjs",
     "check:headers": "node scripts/check-headers.mjs",

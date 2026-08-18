@@ -34,6 +34,9 @@ one. Without it `npm run e2e` fails at launch with "Executable doesn't exist".
   (the first run downloads the test server).
 - **Editor e2e** boots its own control plane + Vite dev server on
   127.0.0.1:4181/:4180 (`packages/metis-editor/e2e/dev-core.ts`); no docker.
+  That harness is also the contributor dev loop - `npm run dev` starts the same
+  two halves. Stop it before running e2e: the config reuses a server already on
+  those ports, so a test run would write into your dev store.
   Visual (screenshot) baselines are not tracked - they are platform-specific,
   so Playwright creates them on your machine the first time a visual spec
   runs (that first run reports "snapshot missing"; the second run compares).

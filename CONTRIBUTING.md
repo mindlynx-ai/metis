@@ -64,6 +64,25 @@ run" check. `npm run e2e` is the one gate CI does not run, so it is on you.
 6. **Doc allowlist** - only intentional markdown ships (internal planning
    docs cannot slip into the public tree).
 
+## The dev loop
+
+```
+npm ci
+npm run dev     # editor http://127.0.0.1:4180, API http://127.0.0.1:4181
+```
+
+Both halves together, no Temporal and no Docker, on any platform. `npm run
+dev:api` and `npm run dev:web` run them separately if you want two terminals.
+
+Two things to know:
+
+- **Runs are stubbed here.** The API runs on a fake ExecutionPort, so a workflow
+  appears to run without anything executing. That is the right trade for editor
+  work and the wrong one for engine work - use `metis up` for that.
+- **Stop it before `npm run e2e`.** The Playwright config reuses a server
+  already on those ports, so an e2e run will attach to your dev harness and
+  write into its store.
+
 ## Tests
 
 - **Unit**: `npm test` (vitest, per-package `__tests__/`).

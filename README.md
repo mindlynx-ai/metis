@@ -37,8 +37,8 @@ The SQL Server driver is optional. It is installed by default, but it reaches
 working. That engine then behaves like any other Metis does not carry an
 adapter for: its connections store and show as locked rather than failing.
 
-Three ports have to be free: **3000** (editor and API), **7233** (Temporal
-gRPC) and **8233** (the Temporal Web UI). All three move in
+Running from source, three ports have to be free: **3000** (editor and API),
+**7233** (Temporal gRPC) and **8233** (the Temporal Web UI). All three move in
 `metis.config.json` under `ports`, and that file may hold only the keys you
 are changing:
 
@@ -46,10 +46,20 @@ are changing:
 { "ports": { "temporalGrpc": 7333, "temporalUi": 8333 } }
 ```
 
-If you already run a Temporal, move 7233 before you start. The dev server logs
-`can't set frontend port 7233: bind: address already in use` and carries on, so
-`metis up` still says it is up while the worker talks to whichever Temporal
-already had the port.
+The compose stack only needs **3000** and **8233** free - it keeps Temporal on
+its own private network and never publishes 7233.
+
+If something already holds 7233, `metis up` stops and says so rather than
+starting. It will not attach to a Temporal it did not start: your runs would go
+somewhere you cannot see, and that server's runs would surface as yours. Move
+the port with the file above, or - if the Temporal on 7233 is one you want Metis
+to use - say so explicitly:
+
+```
+METIS_TEMPORAL_ADDRESS=127.0.0.1:7233 metis up
+```
+
+See [Bring your own Temporal](#bring-your-own-temporal).
 
 ## Quickstart: docker compose (the hero path)
 
@@ -104,6 +114,34 @@ the workspace binary, so npx finds it without a global install.
 > `npx @mindlynx/metis-cli up`, with `npx @mindlynx/metis-cli run hello` to run
 > one workflow. Today those return a 404: nothing under `@mindlynx` is
 > published. Use the source path.
+
+## Bring your own Temporal
+
+`metis up` downloads and manages a Temporal dev server so you never install one
+by hand. If you already run a Temporal - a dev server of your own, a container,
+or a real cluster - point Metis at it and nothing is downloaded or started:
+
+```
+METIS_TEMPORAL_ADDRESS=host:7233 metis up
+```
+
+or commit it, so everyone on the project gets the same one:
+
+```json
+{ "temporalAddress": "host:7233" }
+```
+
+The environment wins over the file, so a single command can override a committed
+address without editing anything. Leave both unset - the default - and Metis
+manages its own, exactly as before.
+
+Metis then does not start, stop or own that Temporal, so it does not offer you a
+Web UI for it; use whatever that server already publishes. If the address cannot
+be reached, `metis up` says so and names the setting that asked for it rather
+than handing you a connection error about a server you did not configure here.
+
+This is also the escape hatch for any platform Metis ships no dev-server binary
+for: run Temporal however you can, and Metis attaches to it.
 
 ## What is Temporal, and why is it here?
 
@@ -256,6 +294,7 @@ your instance. See [docs/mcp.md](docs/mcp.md).
 
 ```
 npm ci
+npm run dev           # editor on :4180, API on :4181 - no Temporal, no Docker
 npx playwright install chromium   # once, before the first e2e run
 npm run typecheck     # workspace-wide types
 npm run lint          # eslint, style and header checks
@@ -263,6 +302,12 @@ npm test              # unit and integration suites (Vitest)
 npm run gates         # the six release gates
 npm run e2e           # editor end-to-end (Playwright)
 ```
+
+`npm run dev` is the fast loop for editor work: it starts the real API and the
+Vite dev server together, with no Temporal and no Docker. **Runs are stubbed on
+that loop** - a workflow appears to run without anything executing - so use
+`metis up` for engine work. Stop `npm run dev` before `npm run e2e`: the e2e
+suite reuses a harness already on those ports and would write into it.
 
 Playwright's browser is a separate ~150 MB download, so it is a documented step
 rather than a `postinstall`: everybody installing the workspace would pay for it,

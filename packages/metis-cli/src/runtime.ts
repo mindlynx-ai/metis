@@ -20,7 +20,6 @@
  * all run in one supervised tree. This module owns their lifecycle so
  * `metis up` and `metis run` share exactly one wiring.
  */
-import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Worker } from '@temporalio/worker';
@@ -75,6 +74,7 @@ import {
 } from '@mindlynx/metis-orchestrator';
 import { randomBytes, randomUUID } from 'node:crypto';
 import {
+  defaultEnsureDeps,
   ensureTemporalBinary,
   type EnsureDeps,
 } from './temporal/download.js';
@@ -166,15 +166,6 @@ function extractItems(data: unknown, itemsPath?: string): unknown[] {
 }
 
 const OUTBOUND_TIMEOUT_MS = 10_000;
-
-/**
- * Ceiling on the Temporal dev-server download. Deliberately generous, because
- * this is tens of megabytes and the ceiling is here to end a stalled CDN, not to
- * police a slow line. Without it `metis up` hung at boot with no progress and
- * nothing to read, which is the worst place in the product to hang: it is the
- * first thing a new person runs.
- */
-const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
 
 /** POST an outbound webhook to an operator-registered URL, with a timeout. */
 async function httpDeliver(
@@ -275,32 +266,24 @@ export class MetisRuntime {
     const packs = await loadPacks(this.nodes, process.env.METIS_PACKS);
     if (packs.length > 0) this.options.log(`Node packs loaded: ${packs.join(', ')}.`);
     if (this.options.externalTemporalAddress) {
-      await this.startWorker(`Worker running against Temporal at ${this.address}.`);
+      // Rethrow with the context the connect error cannot have: Metis was told
+      // to attach to a Temporal somebody else runs, so a refused connection is
+      // a claim about THIS configuration, not about a server Metis manages. The
+      // raw gRPC failure sends the reader to look at Temporal instead.
+      await this.startWorker(`Worker running against Temporal at ${this.address}.`).catch(
+        (error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error);
+          throw new Error(
+            `cannot reach the Temporal at ${this.address}: ${message}. Metis did not `
+              + 'start it, because METIS_TEMPORAL_ADDRESS or temporalAddress in '
+              + 'metis.config.json asked for that one. Start it, correct the address, '
+              + 'or unset both to have Metis manage its own.',
+          );
+        },
+      );
       return;
     }
-    const binary = await ensureTemporalBinary({
-      fetchArchive:
-        downloadDeps?.fetchArchive ??
-        (async (url) => {
-          const response = await fetch(url, {
-            signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
-          });
-          if (!response.ok) throw new Error(`download failed (${response.status})`);
-          return new Uint8Array(await response.arrayBuffer());
-        }),
-      extractBinary:
-        downloadDeps?.extractBinary ??
-        (async (archive, destDir) => {
-          const tarPath = join(destDir, 'temporal.tar.gz');
-          writeFileSync(tarPath, archive);
-          // tar's location varies by distro (/usr/bin, /bin), so PATH
-          // resolution is required for portability.
-          // eslint-disable-next-line sonarjs/no-os-command-from-path
-          execFileSync('tar', ['-xzf', tarPath, '-C', destDir]);
-          return join(destDir, 'temporal');
-        }),
-      ...downloadDeps,
-    });
+    const binary = await ensureTemporalBinary({ ...defaultEnsureDeps(), ...downloadDeps });
     this.options.log('Temporal dev server ready.');
 
     const paths = defaultDevServerPaths(this.options.projectDir);

@@ -36,6 +36,15 @@ export const MetisConfigSchema = z.object({
   }),
   paths: z.object({ data: z.string().min(1), database: z.string().min(1) }),
   /**
+   * A Temporal Metis should attach to instead of managing its own, as
+   * `host:port`. OMITTED BY DEFAULT, which means "download and run a dev
+   * server for me" - the behaviour every existing install already has. Set it
+   * and the download is skipped entirely, which is how you run Metis against a
+   * Temporal you already operate, or on a platform Metis ships no dev-server
+   * binary for. METIS_TEMPORAL_ADDRESS overrides it for one command.
+   */
+  temporalAddress: z.string().min(1).optional(),
+  /**
    * How long Metis keeps closed execution history, in days. OMITTED BY DEFAULT,
    * which means keep everything: retention is the operator's policy, and an
    * upgrade that started deleting run history nobody agreed to lose would be
@@ -72,7 +81,7 @@ export const DEFAULT_CONFIG: MetisConfig = {
   datastore: 'sqlite',
   ports: { editor: 3000, temporalGrpc: 7233, temporalUi: 8233 },
   paths: { data: '.metis', database: '.metis/metis.db' },
-  // No retentionDays here on purpose. Omitted means keep everything, so an
+  // No temporalAddress and no retentionDays here on purpose. Omitted means keep everything, so an
   // upgrade cannot start deleting run history the operator never agreed to
   // lose. The session defaults below are deliberately the opposite: secure
   // rather than permissive, because a default of "never expires" would leave

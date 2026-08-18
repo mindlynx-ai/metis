@@ -59,7 +59,11 @@ Usage:
 
 Everything runs locally. The first time you run "metis up" the CLI
 downloads and manages the Temporal dev server for you, so you never
-install Temporal by hand.`;
+install Temporal by hand.
+
+Already running a Temporal? Point Metis at it and nothing is downloaded:
+  METIS_TEMPORAL_ADDRESS=127.0.0.1:7233 metis up
+or put "temporalAddress": "127.0.0.1:7233" in metis.config.json.`;
 
 export interface CliContext {
   cwd: string;
@@ -143,6 +147,36 @@ export function loadConfig(cwd: string): MetisConfig {
 }
 
 /**
+ * The Temporal to attach to instead of managing one, or undefined to manage
+ * one. The environment wins over the file so a single command can point at a
+ * different server without editing anything committed.
+ *
+ * A blank value is UNSET, not an address. `METIS_TEMPORAL_ADDRESS=$SOMETHING`
+ * in a shell script with SOMETHING unset expands to the empty string, and
+ * taking that literally hands NativeConnection.connect "" - which fails
+ * naming Temporal, sending the reader to look at a server rather than at their
+ * own config.
+ */
+export function resolveTemporalAddress(
+  env: Record<string, string | undefined>,
+  config: MetisConfig,
+): string | undefined {
+  const fromEnv = env.METIS_TEMPORAL_ADDRESS?.trim();
+  if (fromEnv) return fromEnv;
+  return config.temporalAddress?.trim() || undefined;
+}
+
+/** Everything MetisRuntime needs that is not the config itself. */
+function runtimeOptions(context: CliContext, config: MetisConfig) {
+  return {
+    projectDir: context.cwd,
+    config,
+    log: context.stdout,
+    externalTemporalAddress: resolveTemporalAddress(process.env, config),
+  };
+}
+
+/**
  * The built editor, if this checkout or install has one. Both candidates are
  * relative to the working directory, which is the whole story for a source
  * checkout and a local `npm i @mindlynx/metis-editor`.
@@ -178,7 +212,7 @@ export async function cmdUp(context: CliContext): Promise<number> {
   // an orphaned child.
   assertServableSecret(process.env);
   const config = loadConfig(context.cwd);
-  const runtime = new MetisRuntime({ projectDir: context.cwd, config, log: context.stdout });
+  const runtime = new MetisRuntime(runtimeOptions(context, config));
   await runtime.start();
   const seeded = await syncCatalogueConnectors(runtime.connectors);
   context.stdout(`Catalogue in sync: ${seeded.seeded} connectors.`);
@@ -205,7 +239,15 @@ export async function cmdUp(context: CliContext): Promise<number> {
         + 'which ships the editor already built.',
     );
   }
-  context.stdout(`Temporal Web UI on http://localhost:${config.ports.temporalUi}`);
+  // Only when Metis started it. Against an external Temporal that port is
+  // somebody else's, and printing it sends the reader to a dead link or, worse,
+  // to a different Temporal's runs.
+  const external = resolveTemporalAddress(process.env, config);
+  if (external) {
+    context.stdout(`Using the Temporal at ${external} - Metis did not start it.`);
+  } else {
+    context.stdout(`Temporal Web UI on http://localhost:${config.ports.temporalUi}`);
+  }
   context.stdout('Metis is up. Press Ctrl+C to stop.');
   // Block until a termination signal. bin.ts calls process.exit(code) as soon
   // as this resolves, so returning here (as the other commands do) would tear
@@ -230,7 +272,7 @@ export async function cmdConnectors(context: CliContext, sub?: string): Promise<
     return 1;
   }
   const config = loadConfig(context.cwd);
-  const runtime = new MetisRuntime({ projectDir: context.cwd, config, log: context.stdout });
+  const runtime = new MetisRuntime(runtimeOptions(context, config));
   if (sub === 'seed') {
     const result = await seedConnectors(runtime.connectors);
     context.stdout(`Seeded ${result.seeded} of ${result.total} connectors into the catalogue.`);
@@ -257,7 +299,7 @@ export async function cmdTriggers(context: CliContext, argv: string[]): Promise<
     return 1;
   }
   const config = loadConfig(context.cwd);
-  const runtime = new MetisRuntime({ projectDir: context.cwd, config, log: context.stdout });
+  const runtime = new MetisRuntime(runtimeOptions(context, config));
 
   if (sub === 'list') {
     const records = await runtime.triggers.list();
@@ -305,7 +347,7 @@ export async function cmdWebhooks(context: CliContext, argv: string[]): Promise<
     return 1;
   }
   const config = loadConfig(context.cwd);
-  const runtime = new MetisRuntime({ projectDir: context.cwd, config, log: context.stdout });
+  const runtime = new MetisRuntime(runtimeOptions(context, config));
 
   if (sub === 'list') {
     const records = await runtime.outbound.list();
@@ -368,7 +410,7 @@ export async function cmdPrune(context: CliContext, argv: string[]): Promise<num
     return 1;
   }
   const apply = flags.yes === 'true';
-  const runtime = new MetisRuntime({ projectDir: context.cwd, config, log: context.stdout });
+  const runtime = new MetisRuntime(runtimeOptions(context, config));
   const result = await runtime.store.pruneExecutions(TENANT, {
     olderThanDays: days,
     dryRun: !apply,
@@ -395,7 +437,7 @@ export async function cmdRun(context: CliContext, workflowName?: string): Promis
     return 1;
   }
   const config = loadConfig(context.cwd);
-  const runtime = new MetisRuntime({ projectDir: context.cwd, config, log: context.stdout });
+  const runtime = new MetisRuntime(runtimeOptions(context, config));
   await runtime.start();
   try {
     const outcome = await runtime.runWorkflow(workflowFile);

@@ -21,6 +21,7 @@
  * before it is ever executed, and cached under ~/.metis/bin. The user
  * never installs Temporal by hand.
  */
+import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -34,25 +35,39 @@ export const TEMPORAL_CLI_CHECKSUMS: Record<string, string> = {
   'darwin_arm64': 'cccbead89534e365a3527d40f6d3370a8fa16af6d7853c9864422fb1f7053fe4',
   'linux_amd64': 'e2063feade24d90cec1590dd9a46b0ccf838433b013738a348af1c01a9cb3874',
   'linux_arm64': '3309f004380edc51ad833937bfd16fe3f2b93aa80f8b46b788de4e371f7628f2',
+  'windows_amd64': '3f8b74f15ea5ae2ce196af5333290b9f9304f5372d5de7a1229b3846c96e884a',
+  'windows_arm64': '48570055915e6f76dc0cc1684ce270a645e51153c059aaed930b780b6ae48185',
 };
 
 export interface PlatformTarget {
-  os: 'darwin' | 'linux';
+  os: 'darwin' | 'linux' | 'windows';
   arch: 'amd64' | 'arm64';
   key: string;
 }
 
-/** Resolve the current platform to a supported target (Windows uses WSL). */
+/**
+ * Resolve the current platform to a supported target.
+ *
+ * Windows used to be refused here, with a message telling the reader to run
+ * under WSL and "see the README" - which has never carried a word about WSL.
+ * The refusal was never necessary: Temporal publishes a windows .tar.gz beside
+ * the darwin and linux ones, Windows 10 1803+ ships bsdtar as tar.exe, and
+ * `spawn` runs an .exe directly. The whole of Windows support is this branch,
+ * two pinned checksums and the .exe suffix in binaryName.
+ */
 export function resolvePlatform(
   platform: NodeJS.Platform,
   arch: string,
 ): PlatformTarget {
-  let os: 'darwin' | 'linux';
+  let os: 'darwin' | 'linux' | 'windows';
   if (platform === 'darwin') os = 'darwin';
   else if (platform === 'linux') os = 'linux';
+  else if (platform === 'win32') os = 'windows';
   else {
     throw new Error(
-      `unsupported platform "${platform}"; run Metis under WSL on Windows (see the README)`,
+      `unsupported platform "${platform}": Metis manages a Temporal dev server on `
+        + 'macOS, Linux and Windows only. Point Metis at a Temporal you run yourself '
+        + 'with METIS_TEMPORAL_ADDRESS to use any other platform.',
     );
   }
   let target: 'amd64' | 'arm64';
@@ -80,8 +95,17 @@ export function cacheDir(version = TEMPORAL_CLI_VERSION, home = homedir()): stri
   return join(home, '.metis', 'bin', `temporal-${version}`);
 }
 
-export function binaryPath(version = TEMPORAL_CLI_VERSION, home = homedir()): string {
-  return join(cacheDir(version, home), 'temporal');
+/** What the extracted dev-server binary is called on this platform. */
+export function binaryName(platform: NodeJS.Platform = process.platform): string {
+  return platform === 'win32' ? 'temporal.exe' : 'temporal';
+}
+
+export function binaryPath(
+  version = TEMPORAL_CLI_VERSION,
+  home = homedir(),
+  platform: NodeJS.Platform = process.platform,
+): string {
+  return join(cacheDir(version, home), binaryName(platform));
 }
 
 export function sha256(bytes: Uint8Array): string {
@@ -107,8 +131,9 @@ export async function ensureTemporalBinary(deps: EnsureDeps): Promise<string> {
     deps.arch ?? process.arch,
   );
   const home = deps.home ?? homedir();
+  const platform = deps.platform ?? process.platform;
   const destDir = cacheDir(TEMPORAL_CLI_VERSION, home);
-  const binPath = binaryPath(TEMPORAL_CLI_VERSION, home);
+  const binPath = binaryPath(TEMPORAL_CLI_VERSION, home, platform);
   if (existsSync(binPath)) return binPath;
 
   const archive = await deps.fetchArchive(downloadUrl(target));
@@ -128,4 +153,44 @@ export async function ensureTemporalBinary(deps: EnsureDeps): Promise<string> {
     `${JSON.stringify({ version: TEMPORAL_CLI_VERSION, target: target.key, sha256: actual }, null, 2)}\n`,
   );
   return extracted;
+}
+
+/**
+ * Ceiling on the download. Deliberately generous, because this is tens of
+ * megabytes and the ceiling is here to end a stalled CDN, not to police a slow
+ * line. Without it `metis up` hung at boot with no progress and nothing to
+ * read, which is the worst place in the product to hang: it is the first thing
+ * a new person runs.
+ */
+export const DOWNLOAD_TIMEOUT_MS = 5 * 60 * 1000;
+
+/**
+ * How the binary is actually fetched and unpacked, separated from the policy
+ * above so tests can supply both without a network or a tar.
+ *
+ * One extractor for every platform: Temporal publishes a windows .tar.gz beside
+ * the darwin and linux ones, and Windows 10 1803+ carries bsdtar as tar.exe, so
+ * there is nothing platform-specific here except the name of what comes out.
+ */
+export function defaultEnsureDeps(): Pick<EnsureDeps, 'fetchArchive' | 'extractBinary'> {
+  return {
+    fetchArchive: async (url) => {
+      const response = await fetch(url, { signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+      if (!response.ok) throw new Error(`download failed (${response.status})`);
+      return new Uint8Array(await response.arrayBuffer());
+    },
+    extractBinary: async (archive, destDir) => {
+      const tarPath = join(destDir, 'temporal.tar.gz');
+      writeFileSync(tarPath, archive);
+      // tar's location varies by distro (/usr/bin, /bin) and on Windows it is
+      // in System32, so PATH resolution is required for portability.
+      // eslint-disable-next-line sonarjs/no-os-command-from-path
+      execFileSync('tar', ['-xzf', tarPath, '-C', destDir]);
+      // binaryName, not a literal: on Windows the archive holds temporal.exe,
+      // and returning a path without the suffix leaves spawn with a file that
+      // does not exist AND defeats the cache check in ensureTemporalBinary, so
+      // every boot re-downloads.
+      return join(destDir, binaryName());
+    },
+  };
 }

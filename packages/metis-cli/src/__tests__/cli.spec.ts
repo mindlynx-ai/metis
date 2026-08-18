@@ -24,7 +24,7 @@ import {
   WorkflowStore,
   registerWorkflowTables,
 } from '@mindlynx/metis-data-gateway';
-import { runCli, loadConfig, HELP_TEXT } from '../cli.js';
+import { runCli, loadConfig, resolveTemporalAddress, HELP_TEXT } from '../cli.js';
 import { DEFAULT_CONFIG } from '../scaffold.js';
 import { DEFAULT_SESSION_POLICY } from '@mindlynx/metis-ports';
 import { DEFAULT_LOGIN_LIMIT } from '@mindlynx/metis-core';
@@ -222,6 +222,61 @@ describe('metis.config.json', () => {
       loginAttempts: DEFAULT_LOGIN_LIMIT.attempts,
       loginWindowMinutes: DEFAULT_LOGIN_LIMIT.windowMinutes,
     });
+  });
+});
+
+/**
+ * Bring your own Temporal. The runtime has always been able to attach to a
+ * Temporal it did not start (MetisRuntime.externalTemporalAddress), but only
+ * the compose entrypoint ever set it, so from the CLI the managed dev server
+ * was the only option and every unsupported platform was a dead end.
+ */
+describe('an external Temporal address', () => {
+  it('is nothing at all when neither the env nor the config asks for one', () => {
+    expect(resolveTemporalAddress({}, DEFAULT_CONFIG)).toBeUndefined();
+  });
+
+  it('comes from metis.config.json', () => {
+    expect(resolveTemporalAddress({}, { ...DEFAULT_CONFIG, temporalAddress: 'temporal.internal:7233' }))
+      .toBe('temporal.internal:7233');
+  });
+
+  it('lets the environment win, so one command can override a committed file', () => {
+    expect(
+      resolveTemporalAddress(
+        { METIS_TEMPORAL_ADDRESS: '127.0.0.1:7233' },
+        { ...DEFAULT_CONFIG, temporalAddress: 'temporal.internal:7233' },
+      ),
+    ).toBe('127.0.0.1:7233');
+  });
+
+  it('treats an empty value as unset rather than as an address of ""', () => {
+    // An unset variable in a shell script is an empty string, not an absent
+    // key. Reading it as an address hands NativeConnection.connect "" and the
+    // failure names Temporal rather than the config.
+    expect(resolveTemporalAddress({ METIS_TEMPORAL_ADDRESS: '' }, DEFAULT_CONFIG)).toBeUndefined();
+    expect(resolveTemporalAddress({ METIS_TEMPORAL_ADDRESS: '  ' }, DEFAULT_CONFIG)).toBeUndefined();
+  });
+
+  it('is carried on metis.config.json, partially merged like every other key', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'metis-cli-config-'));
+    writeFileSync(
+      join(dir, 'metis.config.json'),
+      JSON.stringify({ temporalAddress: 'temporal.internal:7233' }),
+    );
+    const config = loadConfig(dir);
+    expect(config.temporalAddress).toBe('temporal.internal:7233');
+    expect(config.ports).toEqual(DEFAULT_CONFIG.ports);
+  });
+
+  it('is absent from the scaffolded default, which means "manage it for me"', () => {
+    expect(DEFAULT_CONFIG.temporalAddress).toBeUndefined();
+  });
+
+  it('names the key when it is not a string', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'metis-cli-config-'));
+    writeFileSync(join(dir, 'metis.config.json'), JSON.stringify({ temporalAddress: 7233 }));
+    expect(() => loadConfig(dir)).toThrow(/temporalAddress/);
   });
 });
 

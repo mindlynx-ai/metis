@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   archiveName,
+  binaryName,
   binaryPath,
   cacheDir,
   downloadUrl,
@@ -34,8 +35,37 @@ describe('Temporal binary download resolution', () => {
   it('resolves supported platforms and rejects the rest', () => {
     expect(resolvePlatform('darwin', 'arm64').key).toBe('darwin_arm64');
     expect(resolvePlatform('linux', 'x64').key).toBe('linux_amd64');
-    expect(() => resolvePlatform('win32', 'x64')).toThrow(/WSL/);
+    expect(resolvePlatform('win32', 'x64').key).toBe('windows_amd64');
+    expect(resolvePlatform('win32', 'arm64').key).toBe('windows_arm64');
+    expect(() => resolvePlatform('freebsd', 'x64')).toThrow(/platform/);
     expect(() => resolvePlatform('linux', 'riscv')).toThrow(/architecture/);
+  });
+
+  // Windows was refused outright, and the refusal told the reader to "see the
+  // README" about WSL - which the README has never mentioned. Temporal ships a
+  // windows .tar.gz beside the darwin and linux ones, and Windows 10 1803+
+  // carries bsdtar as tar.exe, so the existing extractor needs no Windows arm
+  // at all. The only real difference is that the binary is called temporal.exe.
+  it('pins a checksum for every platform it claims to support', () => {
+    for (const platform of ['darwin', 'linux', 'win32'] as const) {
+      for (const arch of ['x64', 'arm64']) {
+        const target = resolvePlatform(platform, arch);
+        expect(expectedChecksum(target)).toMatch(/^[0-9a-f]{64}$/);
+        expect(archiveName(target)).toBe(
+          `temporal_cli_${TEMPORAL_CLI_VERSION}_${target.key}.tar.gz`,
+        );
+      }
+    }
+  });
+
+  it('names the cached binary temporal.exe on Windows and temporal elsewhere', () => {
+    expect(binaryName('win32')).toBe('temporal.exe');
+    expect(binaryName('darwin')).toBe('temporal');
+    expect(binaryName('linux')).toBe('temporal');
+    // The cache-hit check in ensureTemporalBinary is existsSync(binaryPath()),
+    // so a name without .exe re-downloads on every single run.
+    expect(binaryPath(TEMPORAL_CLI_VERSION, '/home/x', 'win32').endsWith('temporal.exe')).toBe(true);
+    expect(binaryPath(TEMPORAL_CLI_VERSION, '/home/x', 'linux').endsWith('temporal')).toBe(true);
   });
 
   it('builds the official release URL and archive name for the pinned version', () => {

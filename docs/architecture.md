@@ -78,14 +78,15 @@ Two shapes in that picture are easy to get wrong:
 | `metis-orchestrator` | The Temporal client side: execution adapter (start/signal/cancel/describe/list), schedule service, webhook ingress verification, the Socket.IO hub streaming engine events, trigger services. |
 | `metis-approvals` | The Approval node's decision handling. Open, not gated - a run that waits for a person is something a workflow engine has to have. |
 | `metis-data-gateway` | Storage behind one gateway: SQLite for the laptop, Postgres for real deployments. Workflow store, execution logs, connections. |
-| `metis-cli` | `metis init` / `up` / `dev`; downloads and manages a local Temporal dev server; collapses core + orchestrator + worker into one process. |
+| `metis-cli` | `metis init` / `up` / `run`; downloads and manages a local Temporal dev server, or attaches to one you already run (`METIS_TEMPORAL_ADDRESS`); collapses core + orchestrator + worker into one process. |
 | `metis-editor` | The React app: React Flow canvas, schema-driven inspectors, runs pages. |
 
 ## A run, end to end
 
 Everything except the Temporal server is **one Node process**, in both `metis
 up` and the compose stack. The lifelines below are modules, not machines; the
-only network hop inside a run is gRPC to Temporal.
+only network hop inside a run is gRPC to Temporal - which is why pointing Metis
+at a Temporal somewhere else changes nothing in this diagram but the address.
 
 <!-- render: run-sequence.svg -->
 ```mermaid

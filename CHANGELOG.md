@@ -127,7 +127,49 @@ Five of these change behaviour you may be relying on; they are marked
 - **An internal failure is logged rather than swallowed**, and no longer names
   its own database in the response.
 
+### Added
+
+- **Metis runs on Windows.** `metis up` was refused outright on any platform
+  that was not macOS or Linux, and the refusal pointed the reader at a README
+  section about WSL that has never existed. Temporal publishes a Windows
+  `.tar.gz` beside the darwin and linux ones and Windows 10 1803+ ships bsdtar,
+  so the dev server is now downloaded, checksum-verified and booted natively
+  there too. No WSL, no Docker, no hand-installed Temporal.
+- **Bring your own Temporal.** `METIS_TEMPORAL_ADDRESS=host:7233`, or a
+  `temporalAddress` key in `metis.config.json`, points Metis at a Temporal you
+  already run and skips the download entirely. The environment wins over the
+  file, so one command can override a committed value. Omitted stays the
+  default and means "manage one for me", so no existing install changes. This
+  is also the escape hatch for any platform Metis ships no dev-server binary
+  for. When the address is unreachable the error names the setting that asked
+  for it rather than reporting a bare connection failure about a server you did
+  not configure here.
+- **`npm run dev`** starts the editor on 4180 and the API on 4181 together,
+  with no Temporal and no Docker, on any platform. The harness already existed
+  and was reachable only through Playwright. Runs are stubbed on that loop, so
+  it is for editor work; use `metis up` for engine work.
+- **A `windows-latest` CI job** that downloads and boots Temporal, because
+  every job ran on Ubuntu and nothing had ever proved the Windows claim.
+
+### Known limitations
+
+- **File modes are not applied on Windows.** The credential vault key is
+  written `0600`, but Node implements only the read-only bit of `chmod` there,
+  so on Windows the key and vault inherit the directory's permissions. The
+  encryption is unaffected; the file-permission layer underneath it is missing.
+  See SECURITY.md.
+- **The dev server is stopped with SIGTERM**, which Windows translates to
+  TerminateProcess, so the graceful five-second window is meaningless there and
+  Temporal's SQLite history can be left mid-write. Ctrl+C still works.
+
 ### Fixed
+
+- **`metis up` no longer advertises a Temporal Web UI it does not own** when it
+  is attached to an external Temporal.
+- The README said three ports must be free. That is wrong for the compose path,
+  which never publishes 7233, and it still told the reader to move 7233 because
+  the dev server would otherwise silently attach to a stranger's Temporal -
+  behaviour that ended when the port-clash guard landed.
 
 - Two of the six release gates passed without checking their input, and gate 5
   passed a compose file it could not parse. A gate that cannot look now reports

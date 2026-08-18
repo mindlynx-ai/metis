@@ -20,6 +20,14 @@ Metis stores third-party connector credentials, so the boundary matters:
   `.metis/credential.key`, mode `0600`, **in the same directory as the
   ciphertext**. This protects a vault file carried off on its own; it does not
   protect against anything that can read that directory.
+- **On Windows that `0600` is not applied.** Node implements only the
+  read-only bit of `chmod` there, so the mode argument is silently ignored and
+  the key and vault inherit whatever the containing directory grants - on a
+  default user profile, readable by administrators and by any process running
+  as you. The encryption is unaffected; what is missing is the file-permission
+  layer underneath it. Until Metis sets a Windows ACL, put the project
+  directory somewhere only you can read, and treat a shared or roaming profile
+  as unsuitable for a vault.
 - Node handlers resolve credentials server-side at dispatch time; secret
   values are substituted at the credential boundary and never enter workflow
   history or logs.
@@ -68,3 +76,9 @@ Metis stores third-party connector credentials, so the boundary matters:
   also be created with `verification: "none"`, and that one genuinely is a bare
   capability URL - anyone who learns the path can start the workflow.
 - Metis itself is single-tenant per deployment in the open edition.
+- The Temporal dev server `metis up` manages is a **development** server:
+  no TLS, no authentication, bound to loopback. That is appropriate for the
+  laptop it is built for and inappropriate for anything else. A deployment that
+  needs an authenticated or mTLS Temporal should run its own and point Metis at
+  it with `METIS_TEMPORAL_ADDRESS`; note that the address is all Metis reads
+  today, so a server requiring client certificates is not yet reachable.

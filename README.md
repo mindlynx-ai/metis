@@ -10,12 +10,17 @@ machine, and needs no cloud account and no AWS.
 - Open node categories: triggers, logic, transform and integration steps
   (HTTP, a sandboxed code step, Postgres, email, and a generic connector).
 - SQLite by default, Postgres when you want it, both through one data gateway.
-- A CLI that downloads and manages the Temporal dev server for you.
+- A CLI that downloads and manages the Temporal dev server for you on macOS,
+  Linux and Windows, or attaches to a Temporal you already run.
 
 ## Prerequisites
 
 The compose path needs **Docker** and nothing else. Running from source needs:
 
+- **macOS, Linux or Windows.** `metis up` fetches the pinned Temporal dev
+  server for your platform, so none of the three needs WSL, Docker or a
+  hand-installed Temporal. Anywhere else, run Temporal yourself and see
+  [Bring your own Temporal](#bring-your-own-temporal).
 - **Node 22.13 or newer.** The default datastore is `node:sqlite`, which was
   behind `--experimental-sqlite` until 22.13, so 22.12 boots and then throws.
   `.nvmrc` pins the version this is developed on.
@@ -142,6 +147,10 @@ than handing you a connection error about a server you did not configure here.
 
 This is also the escape hatch for any platform Metis ships no dev-server binary
 for: run Temporal however you can, and Metis attaches to it.
+
+Know the limit: the address is all Metis reads today. There is no setting yet
+for TLS, client certificates, an API key or a non-`default` namespace, so a
+Temporal that requires any of those is not reachable this way.
 
 ## What is Temporal, and why is it here?
 

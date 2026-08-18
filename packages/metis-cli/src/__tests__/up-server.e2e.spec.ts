@@ -38,6 +38,17 @@ const bin = resolve(here, '..', 'bin.ts');
 const require = createRequire(import.meta.url);
 const tsxCli = join(dirname(require.resolve('tsx/package.json')), 'dist', 'cli.mjs');
 const EDITOR = 13100;
+/**
+ * One secret, used to BOOT the child and to sign in to it.
+ *
+ * These were two different literals: the child was given
+ * 'up-server-e2e-secret' and the probe below signed in with 'metis'. Metis
+ * refuses to serve on that default, so the harness was correctly updated to
+ * pass a real one and the probe was not - leaving a login that could never
+ * return 200, a 90-second poll that could never succeed, and a job that had
+ * been red on every run since.
+ */
+const ADMIN_SECRET = 'up-server-e2e-secret';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
@@ -46,7 +57,7 @@ async function serves(): Promise<boolean> {
     const res = await fetch(`http://localhost:${EDITOR}/api/auth/login`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ userId: 'admin', secret: 'metis' }),
+      body: JSON.stringify({ userId: 'admin', secret: ADMIN_SECRET }),
       signal: AbortSignal.timeout(2000),
     });
     return res.status === 200;
@@ -76,7 +87,7 @@ describe.skipIf(!enabled)('metis up stays alive until a signal (METIS_E2E)', () 
       // A boot with no admin secret is refused now, so the harness has to supply
       // one exactly as a real operator does. Inheriting the parent environment
       // alone used to be enough because the default was silently accepted.
-      env: { ...process.env, METIS_ADMIN_SECRET: 'up-server-e2e-secret' },
+      env: { ...process.env, METIS_ADMIN_SECRET: ADMIN_SECRET },
     });
     let childOutput = '';
     const capture = (chunk: Buffer) => {

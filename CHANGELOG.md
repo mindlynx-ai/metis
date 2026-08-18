@@ -166,6 +166,16 @@ Five of these change behaviour you may be relying on; they are marked
 
 - **`metis up` no longer advertises a Temporal Web UI it does not own** when it
   is attached to an external Temporal.
+- **The `cli-e2e` CI job is green again.** Its `metis up` server check booted
+  the child with a real admin secret and then tried to sign in with the
+  published default, which Metis refuses to serve on. The login could never
+  return 200, so the check polled for ninety seconds and failed. The job had
+  been red on every run for three weeks.
+- **The real download-and-boot check now exercises the real downloader.** It
+  carried its own copy of the fetch-and-extract pair, so the one test that
+  claims to prove the download proved a parallel implementation instead. That
+  copy hardcoded `/usr/bin/tar` and an extensionless binary name and could only
+  ever pass on POSIX.
 - The README said three ports must be free. That is wrong for the compose path,
   which never publishes 7233, and it still told the reader to move 7233 because
   the dev server would otherwise silently attach to a stranger's Temporal -

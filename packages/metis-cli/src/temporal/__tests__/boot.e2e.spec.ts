@@ -24,8 +24,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { execFileSync } from 'node:child_process';
-import { ensureTemporalBinary } from '../download.js';
+import { binaryName, defaultEnsureDeps, ensureTemporalBinary } from '../download.js';
 import { TemporalDevServer, waitForPort } from '../dev-server.js';
 
 const enabled = process.env.METIS_E2E === '1';
@@ -35,22 +34,13 @@ describe.skipIf(!enabled)('Temporal dev server real boot (METIS_E2E)', () => {
     const home = mkdtempSync(join(tmpdir(), 'metis-boot-home-'));
     const project = mkdtempSync(join(tmpdir(), 'metis-boot-project-'));
 
-    const binary = await ensureTemporalBinary({
-      home,
-      fetchArchive: async (url) => {
-        const response = await fetch(url);
-        if (!response.ok) throw new Error(`download failed (${response.status})`);
-        return new Uint8Array(await response.arrayBuffer());
-      },
-      extractBinary: async (archive, destDir) => {
-        const { writeFileSync } = await import('node:fs');
-        const tarPath = join(destDir, 'temporal.tar.gz');
-        writeFileSync(tarPath, archive);
-        execFileSync('/usr/bin/tar', ['-xzf', tarPath, '-C', destDir]);
-        return join(destDir, 'temporal');
-      },
-    });
-    expect(binary).toContain('temporal');
+    // defaultEnsureDeps, not a copy of it. This spec used to carry its own
+    // fetch-and-extract pair, which meant the one test that claims to prove the
+    // real download proved a parallel implementation instead - and that copy
+    // hardcoded /usr/bin/tar and an extensionless binary name, so it could only
+    // ever pass on POSIX. The Windows job caught it on its first run.
+    const binary = await ensureTemporalBinary({ home, ...defaultEnsureDeps() });
+    expect(binary).toContain(binaryName());
 
     const server = new TemporalDevServer({
       binaryPath: binary,

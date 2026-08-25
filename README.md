@@ -277,6 +277,55 @@ metis triggers add schedule <workflow> --cron "0 9 * * 1"
   cadence, tracks a cursor, and starts one run per new item.
 - **Schedule** - a native Temporal Schedule fires the workflow on a cron.
 
+### Can the sender reach your webhook?
+
+Ask this before anything else, because the answer is usually no to begin with
+and nothing about the setup looks wrong when it is.
+
+`metis up` listens on `localhost`, which means THIS MACHINE and nothing else.
+Every computer calls itself `localhost`, so a provider out on the internet has
+no way to mean yours. Bind the trigger, paste the URL into Stripe or GitHub,
+and the delivery simply never arrives - the trigger is armed and the endpoint
+is fine, it is just somewhere the sender cannot get to.
+
+What already works with no extra setup: anything on the same machine, and
+anything on the same network once you set `METIS_HOST` (see below).
+
+```
+curl -X POST http://localhost:3000/hooks/<triggerId> -H 'content-type: application/json' -d '{"hello":"world"}'
+```
+
+To take deliveries from the internet, put a public address in front of Metis:
+
+| | Command | Good for |
+|---|---|---|
+| **A tunnel** | `cloudflared tunnel --url http://localhost:3000` | Testing today. Hands you a public https address in seconds. |
+| | `ngrok http 3000` | The same, if you already use ngrok. |
+| **A real host** | Run Metis on a server, set `METIS_HOST=0.0.0.0`, put TLS in front | Anything lasting. |
+
+Use whichever address you end up with in place of `http://localhost:3000` when
+you give the URL to the provider. Binding a webhook trigger returns the full
+URL and tells you which of these situations you are in.
+
+`METIS_HOST=0.0.0.0` serves every interface, so the editor, the whole
+authenticated API and your run history are on whatever network the machine is
+joined to. That is the deliberate opt-in, not the default - see
+[Settings and `.env`](#settings-and-env).
+
+### The webhook endpoint is unauthenticated by design
+
+It has to be: a provider cannot sign in. Anyone who can reach the URL can start
+runs with it. Bind the trigger with a verification scheme and a shared secret,
+and an unsigned, forged or tampered delivery is refused with a 401:
+
+```
+metis triggers add webhook <workflow> --connector github --event push --secret <s>
+```
+
+Schemes: `github` (`x-hub-signature-256`), `svix`, or the generic `hmac`
+described under [Outbound webhooks](#outbound-webhooks). `none` accepts
+anything and is for local experiments only.
+
 ## Outbound webhooks
 
 Send a signed POST to your own systems on every workflow lifecycle event:

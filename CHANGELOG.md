@@ -155,6 +155,21 @@ Five of these change behaviour you may be relying on; they are marked
 
 ### Fixed
 
+- **Binding a webhook now says where it is, and who can reach it.** It answered
+  `POST to /hooks/trg_...`: a path, with no host, and nothing about
+  reachability. Metis listens on loopback, so on the machine somebody just
+  installed it on that address means "this computer and nothing else" - while
+  the sender you are binding it for is on the internet. The trigger armed, the
+  URL looked real, and the delivery never arrived, with nothing anywhere saying
+  why. The response now carries the full `url`, warns plainly when it is a
+  loopback one, and names the ways out (a tunnel, or a host with its own
+  address). The node's own docs and the README's Triggers section say the same,
+  along with the fact that the endpoint is unauthenticated by design and wants a
+  verification secret.
+- **An unknown execution status was a 500.** `/api/executions/temporal` passed
+  the `status` query through to Temporal after checking only that it was
+  letters. `?status=running` - the right word in the wrong case - came back as
+  `internal error` with no clue. It is now a 400 naming the valid values.
 - **The MCP server could hang for ever on a refused token.** Its control-plane
   client retried a 401 by logging in and calling itself again, with no limit.
   That is fine while a fresh token works, and fatal when one does not - a

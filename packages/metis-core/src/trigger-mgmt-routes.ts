@@ -26,6 +26,7 @@ import { z } from 'zod';
 import type { Session } from '@mindlynx/metis-ports';
 import type { AuditStore } from '@mindlynx/metis-data-gateway';
 import { requireAction } from './auth-gate.js';
+import { webhookHint, webhookUrl } from './webhook-address.js';
 
 export interface TriggersPort {
   list(): Promise<Record<string, unknown>[]>;
@@ -138,12 +139,21 @@ export function registerTriggerMgmtRoutes(
         workflowId: parsed.data.workflowId,
         kind: parsed.data.kind,
       });
+      // The full URL, and the truth about who can reach it. See
+      // webhook-address.ts: a bare path armed a trigger nobody outside this
+      // machine could ever call, and said nothing about it.
+      const origin = `${request.protocol}://${request.headers.host ?? 'localhost'}`;
       const HINTS: Record<string, string> = {
-        webhook: `POST to /hooks/${record.triggerId}`,
+        webhook: webhookHint(origin, String(record.triggerId)),
         schedule: 'live in Temporal now',
         poll: 'polls on the next runtime cycle',
       };
-      return reply.code(201).send({ ...record, hint: HINTS[String(record.kind)] });
+      const kind = String(record.kind);
+      return reply.code(201).send({
+        ...record,
+        ...(kind === 'webhook' ? { url: webhookUrl(origin, String(record.triggerId)) } : {}),
+        hint: HINTS[kind],
+      });
     } catch (error) {
       // Most likely: a schedule on an unpublished workflow. Surface it plainly.
       return reply.code(422).send({ error: error instanceof Error ? error.message : String(error) });

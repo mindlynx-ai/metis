@@ -70,6 +70,20 @@ function withSignaller(signalParams: unknown, session: Session): unknown {
  * metis-approvals: core does not depend on that package, and one prefix is not
  * worth a dependency edge for.
  */
+/**
+ * Temporal's execution statuses, exactly as its visibility query spells them.
+ * Case matters to Temporal, so it matters here.
+ */
+const TEMPORAL_STATUSES = new Set([
+  'Running',
+  'Completed',
+  'Failed',
+  'Canceled',
+  'Terminated',
+  'ContinuedAsNew',
+  'TimedOut',
+]);
+
 const APPROVAL_SIGNAL_PREFIX = 'approval:';
 
 /**
@@ -312,11 +326,18 @@ export function registerExecutionLifecycleRoutes(
     if (!executions.list) return reply.send({ items: [] });
     const session = request.session as Session;
     const query = request.query as { limit?: string; status?: string };
-    // Server-side visibility filter: Temporal does the filtering, not the browser.
-    const visibility =
-      query.status && /^[A-Za-z]+$/.test(query.status)
-        ? `ExecutionStatus="${query.status}"`
-        : undefined;
+    // Server-side visibility filter: Temporal does the filtering, not the
+    // browser. The letters-only test keeps quotes and operators out of the
+    // query expression; the NAME check is separate and just as necessary,
+    // because Temporal rejects an unknown status with a gRPC error that
+    // surfaced as a bare 500. `?status=running` did it - the right word in the
+    // wrong case - and the reader was told only "internal error".
+    if (query.status !== undefined && !TEMPORAL_STATUSES.has(query.status)) {
+      return reply.code(400).send({
+        error: `unknown status "${query.status}". Use one of: ${[...TEMPORAL_STATUSES].join(', ')}`,
+      });
+    }
+    const visibility = query.status ? `ExecutionStatus="${query.status}"` : undefined;
     const items = await executions.list({
       limit: Math.min(Number(query.limit ?? 50), 100),
       ...(visibility ? { query: visibility } : {}),

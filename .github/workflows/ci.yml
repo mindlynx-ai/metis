@@ -113,7 +113,11 @@ jobs:
       # platform. Running one file and calling Windows covered is what let the
       # last batch of bugs through, so this comment is the tracking, not a
       # silent narrowing.
-      - run: npx vitest run packages/metis-cli/src/temporal packages/metis-nodes packages/metis-editor/src/__tests__/socket.spec.ts
+      # postgres-sendgrid is excluded rather than skipped: it refuses to skip
+      # silently in CI, correctly, and a Windows runner cannot give it a
+      # database - GitHub service containers are Linux-only. It runs with a real
+      # Postgres in the quality and cli-e2e jobs.
+      - run: npx vitest run packages/metis-cli/src/temporal packages/metis-nodes packages/metis-editor/src/__tests__/socket.spec.ts --exclude "**/postgres-sendgrid.spec.ts"
       - run: npx vitest run packages/metis-cli/src/temporal/__tests__/boot.e2e.spec.ts
 
   compose-boot:

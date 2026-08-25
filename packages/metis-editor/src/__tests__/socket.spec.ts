@@ -85,12 +85,25 @@ afterAll(async () => {
 
 const settle = () => new Promise((resolve) => setTimeout(resolve, 150));
 
+/**
+ * Wait for a condition rather than sleeping a fixed amount.
+ *
+ * A flat 150ms is enough on a quiet laptop and not enough on a loaded CI
+ * runner, where this asserted on one join out of three that had all been sent.
+ * A flaky test about connection reuse is worse than none: it teaches people to
+ * re-run rather than read.
+ */
+const until = async (done: () => boolean, ms = 4000): Promise<void> => {
+  const deadline = Date.now() + ms;
+  while (Date.now() < deadline && !done()) await new Promise((r) => setTimeout(r, 25));
+};
+
 describe('the shared socket', () => {
   it('opens ONE connection no matter how many rooms are watched', async () => {
     const a = socketModule.joinRoom('workflow:one');
     const b = socketModule.joinRoom('workflow:two');
     const c = socketModule.joinRoom('tenant:t1:workflows');
-    await settle();
+    await until(() => joined.length >= 3);
 
     // The whole point. Three io() calls used to mean three sockets.
     expect(connections).toBe(1);
@@ -102,7 +115,7 @@ describe('the shared socket', () => {
 
   it('sends the token from the store on connect', async () => {
     const release = socketModule.joinRoom('workflow:tok');
-    await settle();
+    await until(() => tokens.length >= 1);
     expect(tokens).toEqual(['test-token']);
     release();
   });
@@ -110,7 +123,7 @@ describe('the shared socket', () => {
   it('keeps a room while anyone still wants it, and leaves once', async () => {
     const first = socketModule.joinRoom('workflow:shared');
     const second = socketModule.joinRoom('workflow:shared');
-    await settle();
+    await until(() => joined.includes('workflow:shared'));
     // Two watchers, one join: the server should not see a duplicate.
     expect(joined.filter((r) => r === 'workflow:shared')).toHaveLength(1);
 
@@ -119,7 +132,7 @@ describe('the shared socket', () => {
     expect(left).not.toContain('workflow:shared');
 
     second();
-    await settle();
+    await until(() => left.length >= 1);
     expect(left).toEqual(['workflow:shared']);
   });
 
@@ -128,7 +141,7 @@ describe('the shared socket', () => {
     await settle();
     release();
     release();
-    await settle();
+    await until(() => left.includes('workflow:twice'));
     // A second release must not drive the count negative and leave a live room.
     expect(left.filter((r) => r === 'workflow:twice')).toHaveLength(1);
   });
@@ -140,7 +153,7 @@ describe('the shared socket', () => {
     await settle();
 
     io.to('workflow:evt').emit('workflow-event', { name: 'workflow.node.started', nodeId: 'n1' });
-    await settle();
+    await until(() => seen.length >= 1);
     expect(seen).toHaveLength(1);
 
     off();

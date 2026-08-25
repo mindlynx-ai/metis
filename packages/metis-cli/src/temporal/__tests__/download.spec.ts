@@ -103,7 +103,7 @@ describe('Temporal binary download resolution', () => {
         return path;
       },
     });
-    expect(bin).toBe(binaryPath(TEMPORAL_CLI_VERSION, home));
+    expect(bin).toBe(binaryPath(TEMPORAL_CLI_VERSION, home, 'linux'));
     expect(existsSync(bin)).toBe(true);
     expect(existsSync(join(cacheDir(TEMPORAL_CLI_VERSION, home), 'metis-download.json'))).toBe(true);
     expect(fetched).toBe(1);
@@ -145,7 +145,7 @@ describe('Temporal binary download resolution', () => {
   it('a cache hit is honoured even with no network', async () => {
     const home = mkdtempSync(join(tmpdir(), 'metis-home-'));
     mkdirSync(cacheDir(TEMPORAL_CLI_VERSION, home), { recursive: true });
-    writeFileSync(binaryPath(TEMPORAL_CLI_VERSION, home), 'cached');
+    writeFileSync(binaryPath(TEMPORAL_CLI_VERSION, home, 'linux'), 'cached');
     const bin = await ensureTemporalBinary({
       platform: 'linux',
       arch: 'x64',

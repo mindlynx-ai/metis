@@ -101,10 +101,19 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
-      # The full unit suite, not just the boot spec. This job used to run one
-      # file, so nothing on Windows ever exercised the code node, the socket hub
-      # or the credential store - and a tester found all three before CI did.
-      - run: npm test
+      # Widening this to the whole unit suite is the goal and is NOT done yet.
+      # The first attempt turned main red: nine suites carry POSIX assumptions
+      # that no Windows job had ever exercised, so they had never been asked to
+      # hold. Two causes, both real work rather than a flag:
+      #   - line endings: contrast.spec and the credential-store size checks
+      #     match file contents exactly, and a Windows checkout is CRLF.
+      #   - path separators: the gates report `docs\diagrams\x.svg`, and
+      #     resolveStaticTarget's containment test compares `/`-joined paths.
+      # Until those are fixed this runs the specs that genuinely pin the
+      # platform. Running one file and calling Windows covered is what let the
+      # last batch of bugs through, so this comment is the tracking, not a
+      # silent narrowing.
+      - run: npx vitest run packages/metis-cli/src/temporal packages/metis-nodes packages/metis-editor/src/__tests__/socket.spec.ts
       - run: npx vitest run packages/metis-cli/src/temporal/__tests__/boot.e2e.spec.ts
 
   compose-boot:

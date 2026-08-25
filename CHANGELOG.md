@@ -155,6 +155,17 @@ Five of these change behaviour you may be relying on; they are marked
 
 ### Fixed
 
+- **The Data node's table picker kept the schema (breaking a silent wrong
+  answer).** The connection reports every table as name AND schema, and the
+  handler has always honoured `config.schema` - but the picker mapped the list
+  down to bare names and never sent one. So two schemas each holding a table of
+  one name collapsed into two identical, indistinguishable entries, and
+  whichever you picked built a query against the engine's DEFAULT schema. If a
+  table of that name happened to live there, the step read the wrong table and
+  reported success. The picker now keeps the schema, qualifies a label only when
+  the bare name is ambiguous, and records the schema on the step. The same code
+  path already anticipated this: `datasetFor` deliberately hands on a raw
+  qualified query rather than a bare table name whenever a schema is set.
 - **Error positions point at the line you wrote.** Neither language ran your
   source on its own: JavaScript went inside an async wrapper and Python got a
   two-line preamble, and both reported positions in THAT file. Every line number

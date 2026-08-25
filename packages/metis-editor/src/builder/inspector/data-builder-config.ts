@@ -38,8 +38,19 @@ export interface BuilderState {
   query: string;
   operation: string;
   table: string;
+  /** The schema the chosen table sits in. Empty means "the engine's default",
+   *  which is what a typed-in name gets. See `toDataConfig` for why it is
+   *  carried rather than assumed. */
+  schema: string;
   where: WhereRow[];
   values: ValueRow[];
+}
+
+/** One table as the connection reports it. The schema is NOT decoration: two
+ *  schemas in one database may each hold a table of the same name. */
+export interface DataTable {
+  name: string;
+  schema?: string;
 }
 export interface DataColumn {
   name: string;
@@ -50,16 +61,31 @@ export interface DataColumn {
  *  mode's keys are cleared (undefined) so raw SQL and the builder never clash. */
 export function toDataConfig(state: BuilderState): Record<string, unknown> {
   if (state.mode === 'sql') {
-    return { mode: 'sql', query: state.query || undefined, operation: undefined, tables: undefined, where: undefined };
+    // Hand-written SQL qualifies its own names, so the builder's schema must
+    // not ride along and contradict it.
+    return {
+      mode: 'sql',
+      query: state.query || undefined,
+      operation: undefined,
+      schema: undefined,
+      tables: undefined,
+      where: undefined,
+    };
   }
   const values = state.values.filter((row) => row.column.trim() !== '');
   const valueObj = Object.fromEntries(values.map((row) => [row.column.trim(), row.value]));
   const where = state.where.filter((row) => row.column.trim() !== '');
   const table = state.table.trim();
+  const schema = state.schema.trim();
   return {
     mode: 'build',
     query: undefined,
     operation: state.operation,
+    // The schema goes with the name. Without it the query resolves against the
+    // engine's default schema, and a table of the same name living there is a
+    // DIFFERENT table that answers happily - the wrong rows, no error. Left
+    // undefined for a typed-in name, which is a deliberate "use the default".
+    schema: schema === '' ? undefined : schema,
     tables: table ? [{ name: table, ...(values.length > 0 ? { values: valueObj } : {}) }] : [],
     where: NEEDS_WHERE.has(state.operation) && where.length > 0 ? where : undefined,
   };
@@ -82,10 +108,31 @@ export function outputsKey(outputs: unknown): string {
   return rows.map((row) => row.key).join(',');
 }
 
-/** Case-insensitive substring filter for the table browser (many-table search). */
-export function filterTables(tables: string[], query: string): string[] {
+/** How a table is identified in a select value and a React key: unique across
+ *  schemas, unlike the bare name. */
+export function tableKey(table: DataTable): string {
+  return table.schema ? `${table.schema}.${table.name}` : table.name;
+}
+
+/**
+ * What to show for each table. The bare name where it is unambiguous, and the
+ * qualified name where it is not - because a list showing `orders` twice asks
+ * the reader to pick one at random, and picking wrong is silent.
+ */
+export function tableLabels(tables: DataTable[]): { table: DataTable; label: string }[] {
+  const seen = new Map<string, number>();
+  for (const table of tables) seen.set(table.name, (seen.get(table.name) ?? 0) + 1);
+  return tables.map((table) => ({
+    table,
+    label: (seen.get(table.name) ?? 0) > 1 ? tableKey(table) : table.name,
+  }));
+}
+
+/** Case-insensitive substring filter for the table browser (many-table search).
+ *  Matches the qualified name, so a schema is a searchable term too. */
+export function filterTables(tables: DataTable[], query: string): DataTable[] {
   const q = query.trim().toLowerCase();
-  return q === '' ? tables : tables.filter((table) => table.toLowerCase().includes(q));
+  return q === '' ? tables : tables.filter((table) => tableKey(table).toLowerCase().includes(q));
 }
 
 /** Read the builder state back out of a stored config (the reverse of toDataConfig). */
@@ -105,6 +152,7 @@ export function seedFrom(config: Record<string, unknown>): BuilderState {
     query: String(config.query ?? ''),
     operation: String(config.operation ?? 'select'),
     table: first?.name ?? '',
+    schema: String(config.schema ?? ''),
     where,
     values,
   };

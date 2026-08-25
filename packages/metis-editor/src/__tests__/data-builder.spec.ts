@@ -14,12 +14,19 @@
  * limitations under the License.
  */
 import { describe, it, expect } from 'vitest';
-import { columnsToOutputs, filterTables, toDataConfig } from '../builder/inspector/data-builder-config.js';
+import {
+  columnsToOutputs,
+  filterTables,
+  seedFrom,
+  tableKey,
+  tableLabels,
+  toDataConfig,
+} from '../builder/inspector/data-builder-config.js';
 
 describe('toDataConfig (visual builder -> handler config)', () => {
   it('SQL mode writes the query and clears the builder keys', () => {
     expect(
-      toDataConfig({ mode: 'sql', query: 'select 1', operation: 'select', table: 'orders', where: [], values: [] }),
+      toDataConfig({ mode: 'sql', query: 'select 1', operation: 'select', table: 'orders', schema: '', where: [], values: [] }),
     ).toEqual({ mode: 'sql', query: 'select 1', operation: undefined, tables: undefined, where: undefined });
   });
 
@@ -29,6 +36,7 @@ describe('toDataConfig (visual builder -> handler config)', () => {
       query: '',
       operation: 'select',
       table: 'orders',
+      schema: '',
       where: [
         { column: 'status', operator: '=', value: 'paid' },
         { column: '', operator: '=', value: '' },
@@ -51,6 +59,7 @@ describe('toDataConfig (visual builder -> handler config)', () => {
       query: '',
       operation: 'insert',
       table: 'orders',
+      schema: '',
       where: [{ column: 'x', operator: '=', value: '1' }],
       values: [
         { column: 'customer', value: 'Ada' },
@@ -62,7 +71,7 @@ describe('toDataConfig (visual builder -> handler config)', () => {
   });
 
   it('build with no table yields an empty tables array (nothing to run yet)', () => {
-    const config = toDataConfig({ mode: 'build', query: '', operation: 'select', table: '', where: [], values: [] });
+    const config = toDataConfig({ mode: 'build', query: '', operation: 'select', table: '', schema: '', where: [], values: [] });
     expect(config.tables).toEqual([]);
   });
 });
@@ -85,15 +94,66 @@ describe('columnsToOutputs (validated columns -> node output variables)', () => 
 });
 
 describe('filterTables (the many-table browser search)', () => {
-  const tables = ['orders', 'order_items', 'customers', 'products'];
+  const named = (name: string, schema?: string) => ({ name, schema });
+  const tables = [named('orders'), named('order_items'), named('customers'), named('products')];
   it('matches case-insensitive substrings', () => {
-    expect(filterTables(tables, 'ORDER')).toEqual(['orders', 'order_items']);
-    expect(filterTables(tables, 'cust')).toEqual(['customers']);
+    expect(filterTables(tables, 'ORDER')).toEqual([named('orders'), named('order_items')]);
+    expect(filterTables(tables, 'cust')).toEqual([named('customers')]);
   });
   it('returns everything for a blank query', () => {
     expect(filterTables(tables, '  ')).toEqual(tables);
   });
   it('returns nothing when no table matches', () => {
     expect(filterTables(tables, 'zzz')).toEqual([]);
+  });
+  it('searches the schema too, so one schema can be narrowed to', () => {
+    const across = [named('items', 'billing'), named('items', 'shipping')];
+    expect(filterTables(across, 'shipping')).toEqual([named('items', 'shipping')]);
+  });
+});
+
+describe('tableKey and tableLabels (same name, different schema)', () => {
+  const named = (name: string, schema?: string) => ({ name, schema });
+
+  it('keys a table by its schema, so two of one name stay apart', () => {
+    expect(tableKey(named('items', 'billing'))).toBe('billing.items');
+    expect(tableKey(named('items', 'shipping'))).toBe('shipping.items');
+    expect(tableKey(named('orders'))).toBe('orders');
+  });
+
+  it('qualifies a label ONLY when the bare name is ambiguous', () => {
+    // The reason this matters: a picker showing `items` twice asks the reader
+    // to choose at random, and choosing wrong reads a different table without
+    // any error at all.
+    const labels = tableLabels([named('items', 'billing'), named('items', 'shipping'), named('orders', 'public')]);
+    expect(labels.map((entry) => entry.label)).toEqual(['billing.items', 'shipping.items', 'orders']);
+  });
+});
+
+describe('the schema survives the round trip', () => {
+  const state = {
+    mode: 'build' as const,
+    query: '',
+    operation: 'select',
+    table: 'items',
+    schema: 'billing',
+    where: [],
+    values: [],
+  };
+
+  it('is written into the config the handler reads', () => {
+    expect(toDataConfig(state).schema).toBe('billing');
+  });
+
+  it('comes back out of a stored config', () => {
+    expect(seedFrom(toDataConfig(state)).schema).toBe('billing');
+  });
+
+  it('is left unset for a typed-in name, meaning the default schema', () => {
+    expect(toDataConfig({ ...state, schema: '' }).schema).toBeUndefined();
+  });
+
+  it('never rides along with hand-written SQL, which qualifies its own names', () => {
+    expect(toDataConfig({ ...state, mode: 'sql', query: 'select 1 from shipping.items' }).schema).toBeUndefined();
   });
 });

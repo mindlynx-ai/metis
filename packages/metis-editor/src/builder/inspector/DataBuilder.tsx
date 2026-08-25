@@ -35,9 +35,12 @@ import {
   NEEDS_WHERE,
   outputsKey,
   seedFrom,
+  tableKey,
+  tableLabels,
   toDataConfig,
   type BuilderState,
   type DataColumn,
+  type DataTable,
   type ValueRow,
   type WhereRow,
 } from './data-builder-config.js';
@@ -56,7 +59,7 @@ export function DataBuilder({ node }: { node: WorkflowNode }) {
   const connectionId = String(config.connectorId ?? '');
 
   const [state, setState] = useState<BuilderState>(() => seedFrom(config));
-  const [tables, setTables] = useState<string[]>([]);
+  const [tables, setTables] = useState<DataTable[]>([]);
   const [locked, setLocked] = useState(false);
   const [browsing, setBrowsing] = useState(false);
   const [search, setSearch] = useState('');
@@ -132,7 +135,13 @@ export function DataBuilder({ node }: { node: WorkflowNode }) {
       .dataTables(connectionId)
       .then((result) => {
         if (!live) return;
-        setTables((result.tables ?? []).map((table) => table.name));
+        // Keep the schema. Dropping it collapses same-named tables from
+        // different schemas into one indistinguishable choice, and the query
+        // then resolves against the default schema - a different table, no
+        // error. The handler already honours `config.schema`.
+        setTables(
+          (result.tables ?? []).map((table) => ({ name: table.name, schema: table.schema })),
+        );
         setLocked(Boolean(result.locked));
       })
       .catch(() => {
@@ -242,13 +251,16 @@ export function DataBuilder({ node }: { node: WorkflowNode }) {
               {tables.length > 0 ? (
                 <select
                   id="data-table"
-                  value={state.table}
-                  onChange={(event) => commit({ ...state, table: event.target.value })}
+                  value={state.table === '' ? '' : tableKey({ name: state.table, schema: state.schema || undefined })}
+                  onChange={(event) => {
+                    const picked = tables.find((table) => tableKey(table) === event.target.value);
+                    commit({ ...state, table: picked?.name ?? '', schema: picked?.schema ?? '' });
+                  }}
                 >
                   <option value="">Choose a table</option>
-                  {tables.map((table) => (
-                    <option key={table} value={table}>
-                      {table}
+                  {tableLabels(tables).map(({ table, label }) => (
+                    <option key={tableKey(table)} value={tableKey(table)}>
+                      {label}
                     </option>
                   ))}
                 </select>
@@ -257,7 +269,7 @@ export function DataBuilder({ node }: { node: WorkflowNode }) {
                   id="data-table"
                   value={state.table}
                   placeholder="orders"
-                  onChange={(event) => commit({ ...state, table: event.target.value })}
+                  onChange={(event) => commit({ ...state, table: event.target.value, schema: '' })}
                 />
               )}
               {tables.length > 0 && (
@@ -283,18 +295,20 @@ export function DataBuilder({ node }: { node: WorkflowNode }) {
                 onChange={(event) => setSearch(event.target.value)}
               />
               <div className="table-list">
-                {filterTables(tables, search).map((table) => (
+                {tableLabels(filterTables(tables, search)).map(({ table, label }) => (
                   <button
-                    key={table}
+                    key={tableKey(table)}
                     type="button"
-                    className={`table-item${table === state.table ? ' is-on' : ''}`}
+                    className={`table-item${
+                      table.name === state.table && (table.schema ?? '') === state.schema ? ' is-on' : ''
+                    }`}
                     onClick={() => {
-                      commit({ ...state, table });
+                      commit({ ...state, table: table.name, schema: table.schema ?? '' });
                       setBrowsing(false);
                       setSearch('');
                     }}
                   >
-                    {table}
+                    {label}
                   </button>
                 ))}
                 {filterTables(tables, search).length === 0 && (

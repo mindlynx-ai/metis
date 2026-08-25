@@ -23,7 +23,7 @@ import { mkdtempSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MetisRuntime } from '../../metis-cli/src/runtime.js';
-import { buildControlServer } from '../../metis-cli/src/control-server.js';
+import { attachRealtime, buildControlServer } from '../../metis-cli/src/control-server.js';
 import { DEFAULT_CONFIG } from '../../metis-cli/src/scaffold.js';
 
 const projectDir = mkdtempSync(join(tmpdir(), 'metis-full-e2e-'));
@@ -42,4 +42,10 @@ const runtime = new MetisRuntime({
 await runtime.start();
 const app = await buildControlServer({ runtime });
 await app.listen({ port: 4181, host: '127.0.0.1' });
+// AFTER listen, and easy to forget: the run-status socket moved out of
+// buildControlServer so it could attach to every loopback binding, which only
+// exist once the server is listening. Without this the editor connects to
+// nothing and every live update in this suite waits for ever - which is exactly
+// what happened, because e2e:full is not in CI and rotted unnoticed.
+await attachRealtime(app, runtime);
 process.stdout.write('metis full-run control plane ready on 4181\n');

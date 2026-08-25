@@ -126,20 +126,23 @@ describe('the language field', () => {
     expect(nodeOutput(result)).toEqual({ doubled: 42 });
   });
 
-  it('treats an absent language as TypeScript, matching the catalogue default', async () => {
-    // The catalogue says default: "typescript". Anything else here would mean
-    // the field's stated default and its real behaviour disagree again.
-    const result = await handler(
-      nodeCtx('code', { code: 'const n: number = 3;\nreturn n;', input: undefined }),
-    );
-    expect(result.status).toBe(200);
-    expect(nodeOutput(result)).toBe(3);
-  });
-
-  it('still runs untyped source under the TypeScript default', async () => {
+  it('treats an absent language as JavaScript, matching the catalogue default', async () => {
+    // The catalogue says default: "javascript". Anything else here would mean
+    // the field's stated default and its real behaviour disagree again, which
+    // is the bug this whole area started with.
     const result = await handler(nodeCtx('code', { code: 'return 7;', input: undefined }));
     expect(result.status).toBe(200);
     expect(nodeOutput(result)).toBe(7);
+  });
+
+  it('still runs a step already saved as TypeScript', async () => {
+    // TypeScript is gone from the picker because Metis only ever stripped the
+    // types rather than checking them. Steps authored before that decision must
+    // keep working: removing a language from a menu is not a reason to break
+    // somebody's live workflow.
+    const result = await runIn('typescript', 'const n: number = 21;\nreturn n * 2;');
+    expect(result.status).toBe(200);
+    expect(nodeOutput(result)).toBe(42);
   });
 
   it('keeps every offset when it strips, which is what makes the wrapper safe', () => {

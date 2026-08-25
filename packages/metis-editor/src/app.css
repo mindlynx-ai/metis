@@ -5177,3 +5177,95 @@ a.locked-card:hover .upgrade {
   color: var(--text-faint);
   font-size: 13px;
 }
+
+/* The shared code editor. Sized in LINES rather than pixels, because the same
+   widget holds a two-line JSON body and a fifty-line program - a fixed height
+   makes one of them wrong. */
+.code-editor {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-base);
+  overflow: hidden;
+}
+
+.code-editor:focus-within {
+  border-color: var(--brand-blue);
+  box-shadow: 0 0 0 2px var(--brand-wash);
+}
+
+.code-editor .cm-editor {
+  height: 100%;
+}
+
+/* The line the last run failed on. Marked in both the gutter and the line so it
+   is findable whichever half you are looking at, and cleared the moment that
+   line is edited - a stale marker is the same species of lie as a wrong line
+   number. */
+.code-editor .cm-line.cm-error-line {
+  background: color-mix(in srgb, var(--danger-text) 12%, transparent);
+}
+
+.code-editor .cm-gutterElement.cm-error-gutter {
+  color: var(--danger-text);
+  font-weight: 600;
+}
+
+/* The wide modal. 520px is right for a confirm dialog and useless for code. */
+.modal.modal-wide {
+  max-width: min(1080px, 94vw);
+}
+
+/* The workbench: what comes in, the code, the run, what goes out - top to
+   bottom in the order a person works through them. */
+.workbench {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.workbench-heading {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.workbench-io {
+  padding: var(--space-3);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  background: var(--surface-sunken);
+}
+
+.workbench-run {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+.workbench-run textarea {
+  width: 100%;
+}
+
+.workbench-open {
+  align-self: flex-start;
+  margin-bottom: var(--space-3);
+}
+
+/* Side by side once there is room; stacked on a narrow screen, where a
+   two-column workbench would make both halves too thin to use. */
+@media (min-width: 900px) {
+  .workbench {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(260px, 1fr);
+    grid-template-areas:
+      'code receives'
+      'code run'
+      'out  run';
+  }
+  .workbench-code { grid-area: code; }
+  .workbench-run { grid-area: run; }
+  .workbench-io[aria-label='What this step receives'] { grid-area: receives; }
+  .workbench-io[aria-label='What this step passes on'] { grid-area: out; }
+}

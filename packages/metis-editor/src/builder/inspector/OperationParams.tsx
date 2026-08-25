@@ -26,6 +26,7 @@ import { useEffect, useState } from 'react';
 import { type ConnectorDef, type WorkflowNode, type OperationParameter } from '../../api.js';
 import { useFlow } from '../../flow-store.js';
 import { loadConnectors } from './connectors-cache.js';
+import { CodeEditor } from './CodeEditor.js';
 
 const placeholdersOf = (pathTemplate: string): string[] =>
   [...pathTemplate.matchAll(/\{(\w+)\}/g)].map((match) => match[1] ?? '');
@@ -171,12 +172,17 @@ export function OperationParams({
               {field.required && <span className="req" aria-hidden="true"> *</span>}
             </label>
             {field.type === 'text' ? (
-              <textarea
+              <CodeEditor
                 id={id}
-                rows={4}
+                ariaLabel={field.label ?? field.key}
                 value={field.value}
+                onChange={(value) => updateField(index, { value })}
+                // These hold an email body as often as anything else, so HTML
+                // when the field says so and plain text otherwise - a wrong
+                // grammar colours correct content as if it were broken.
+                language={/html/i.test(field.key) ? 'html' : 'text'}
+                minLines={4}
                 placeholder={field.placeholder}
-                onChange={(event) => updateField(index, { value: event.target.value })}
               />
             ) : (
               <input

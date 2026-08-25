@@ -37,3 +37,45 @@ export const addStep = async (page: Page, label: RegExp) => {
   await lib.getByLabel('Find a step').fill(term);
   await lib.getByRole('button', { name: label }).first().click();
 };
+
+/**
+ * Type into a code editor field.
+ *
+ * Every long-form field is CodeMirror now, not a textarea, so `fill()` and
+ * `toHaveValue()` do not apply: it is a contenteditable over a document model.
+ * One helper rather than six specs each learning that, so the next change to the
+ * editor touches this file and nothing else.
+ *
+ * @param page - the page.
+ * @param field - the `data-field` value, or any selector containing the editor.
+ * @param text - what to type. Replaces whatever is there.
+ */
+export const setEditorValue = async (page: Page, field: string, text: string): Promise<void> => {
+  const selector = field.startsWith('.') || field.startsWith('#') ? field : `[data-field="${field}"]`;
+  const content = page.locator(`${selector} .cm-content`).first();
+  await content.click();
+  // Select-all inside the editor, not the page: the editor owns the selection
+  // and a page-level clear would take the rest of the form with it.
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+a' : 'Control+a');
+  await page.keyboard.press('Backspace');
+  if (text !== '') await page.keyboard.type(text);
+};
+
+/** What a code editor field currently holds. */
+export const editorValue = async (page: Page, field: string): Promise<string> => {
+  const selector = field.startsWith('.') || field.startsWith('#') ? field : `[data-field="${field}"]`;
+  return page.locator(`${selector} .cm-content`).first().innerText();
+};
+
+/**
+ * Put the caret at a character offset, for tests that then insert a reference.
+ * The textarea equivalent was `setSelectionRange`, which a contenteditable has
+ * no answer for.
+ */
+export const setEditorCursor = async (page: Page, field: string, offset: number): Promise<void> => {
+  const selector = field.startsWith('.') || field.startsWith('#') ? field : `[data-field="${field}"]`;
+  const content = page.locator(`${selector} .cm-content`).first();
+  await content.click();
+  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowUp' : 'Control+Home');
+  for (let i = 0; i < offset; i += 1) await page.keyboard.press('ArrowRight');
+};

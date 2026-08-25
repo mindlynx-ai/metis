@@ -25,6 +25,7 @@
  */
 import { createHash, randomUUID } from 'node:crypto';
 import { createRequire, stripTypeScriptTypes } from 'node:module';
+import { JS_PRELUDE, retargetJsPositions } from './error-positions.js';
 import { resolvePythonBinary, runPython } from './python-runner.js';
 import type ivmType from 'isolated-vm';
 import { stateEnvelope, type NodeHandler } from '@mindlynx/metis-ports';
@@ -124,12 +125,22 @@ export async function runUserCode(
     await injectHelpers(context);
     await context.eval(`const input = ${JSON.stringify(input ?? null)};`, { timeout: 100 });
 
-    const wrapped = `
-      (async () => {
-        const __value = await (async () => { ${code}\n })();
-        return __value === undefined ? '__metis_undefined__' : JSON.stringify(__value);
-      })()
-    `;
+    // Built line by line, and the user's source starts at COLUMN 0 of its own
+    // line. It used to be spliced into the middle of line 3, so a mistake on
+    // line 1 column 5 was reported as [<isolated-vm>:3:51] - two lines and
+    // forty-five columns out. Now the only difference is JS_PRELUDE_LINES, one
+    // constant that retargetJsPositions subtracts back off.
+    //
+    // The prelude comes from error-positions.ts, which also derives the count
+    // that subtracts it - so the wrapper cannot grow a line without the
+    // translation following it.
+    const wrapped = [
+      ...JS_PRELUDE,
+      code,
+      '})();',
+      "return __value === undefined ? '__metis_undefined__' : JSON.stringify(__value);",
+      '})()',
+    ].join('\n');
     const resultJson = (await context.eval(wrapped, {
       timeout: timeoutMs,
       promise: true,
@@ -139,7 +150,9 @@ export async function runUserCode(
       value: resultJson === '__metis_undefined__' ? undefined : JSON.parse(resultJson),
     };
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+    // Retargeted before it leaves: every position in here counts lines in the
+    // wrapper, and the person reading counts lines in their own file.
+    const message = retargetJsPositions(error instanceof Error ? error.message : String(error));
     if (/timed out/i.test(message)) return { status: 'timeout', error: message };
     if (/disposed|memory/i.test(message)) return { status: 'oom', error: message };
     return { status: 'error', error: message };
@@ -165,11 +178,14 @@ interface CodeNodeConfig {
 /**
  * What the catalogue offers, and what the default is when nobody chose.
  *
- * TypeScript, because that is what the catalogue has always declared. The
- * handler simply never read the field, so the declared default and the real
- * behaviour disagreed and typed source failed on a setting nobody picked.
+ * JavaScript. TypeScript was the default and is no longer offered: Metis only
+ * ever STRIPPED the types rather than checking them, so it gave authors the
+ * syntax and none of the safety while implying otherwise.
+ *
+ * The stripping path below stays for steps already saved as `typescript`. They
+ * keep running exactly as before; the language simply cannot be chosen again.
  */
-const DEFAULT_LANGUAGE = 'typescript';
+const DEFAULT_LANGUAGE = 'javascript';
 
 /**
  * Strip the types off TypeScript so the isolate can run it.

@@ -21,7 +21,7 @@
  * proven against the sample-db compose overlay, not the dev harness.)
  */
 import { test, expect } from '@playwright/test';
-import { login, addStep } from './helpers.js';
+import { login, addStep, setEditorValue, editorValue } from './helpers.js';
 
 test('the Data node has a connection picker and a SQL editor that persists', async ({ page }) => {
   await login(page);
@@ -33,16 +33,14 @@ test('the Data node has a connection picker and a SQL editor that persists', asy
 
   // A connection field (scoped to a data source) and a SQL query editor.
   await expect(inspector.getByText('Connection', { exact: true })).toBeVisible();
-  const query = inspector.locator('[data-field="dataBuilder"] textarea');
-  await expect(query).toBeVisible();
-
-  await query.fill('select id, customer, amount from orders order by amount desc');
+  await expect(inspector.locator('[data-field="dataBuilder"] .cm-content')).toBeVisible();
+  await setEditorValue(page, 'dataBuilder', 'select id, customer, amount from orders order by amount desc');
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.locator('.toast-success')).toBeVisible();
 
   await page.reload();
   await page.locator('.metis-node').first().click();
-  await expect(inspector.locator('[data-field="dataBuilder"] textarea')).toHaveValue(
+  expect(await editorValue(page, 'dataBuilder')).toBe(
     'select id, customer, amount from orders order by amount desc',
   );
 });

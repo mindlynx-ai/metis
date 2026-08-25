@@ -24,6 +24,7 @@
  */
 import { useState } from 'react';
 import type { JsonSchemaProperty } from '../../api.js';
+import { CodeEditor } from './CodeEditor.js';
 
 interface RichProps {
   id: string;
@@ -240,14 +241,18 @@ export function BodyEditor({ id, value, property, describedBy, onCommit }: RichP
       </div>
       {type !== 'none' && (
         <>
-          <textarea
-            className="mono body-content"
-            aria-label="Body content"
-            aria-invalid={Boolean(error) || undefined}
-            rows={6}
-            value={draft}
-            onChange={(event) => setContent(event.target.value)}
-          />
+          <div className="body-content">
+            <CodeEditor
+              ariaLabel="Body content"
+              value={draft}
+              onChange={setContent}
+              // A JSON body gets brackets and folding; a form or free-text body
+              // gets the gutter and indentation without a grammar that would
+              // colour it wrongly.
+              language={type === 'json' ? 'json' : 'text'}
+              minLines={6}
+            />
+          </div>
           {error && (
             <div className="field-error" role="alert">
               {error}

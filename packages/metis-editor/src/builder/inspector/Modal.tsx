@@ -28,17 +28,49 @@ export function Modal({
   title,
   onClose,
   children,
+  wide,
 }: {
   title: string;
   onClose(): void;
   children: ReactNode;
+  /** A code editor at 520px is not worth opening. */
+  wide?: boolean;
 }) {
   const panel = useRef<HTMLDivElement>(null);
 
+  // Focus handling is split in two ON PURPOSE. `onClose` is usually an inline
+  // arrow, so it has a new identity every render - putting the restore in the
+  // same effect meant its cleanup ran on EVERY re-render and yanked focus back
+  // to the opener mid-keystroke. In a dialog holding a code editor that showed
+  // up as only the first character being typed.
   useEffect(() => {
+    const opener = document.activeElement as HTMLElement | null;
     panel.current?.focus();
+    return () => opener?.focus?.();
+  }, []);
+
+  useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') {
+        onClose();
+        return;
+      }
+      if (event.key !== 'Tab' || !panel.current) return;
+      // Trap. A dialog you can Tab out of leaves your focus somewhere you
+      // cannot see, behind the overlay.
+      const focusable = panel.current.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
@@ -47,7 +79,7 @@ export function Modal({
   return createPortal(
     <div className="modal-overlay" onMouseDown={onClose}>
       <div
-        className="modal"
+        className={`modal${wide ? ' modal-wide' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-label={title}

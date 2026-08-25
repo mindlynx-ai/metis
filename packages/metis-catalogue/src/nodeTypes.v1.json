@@ -906,11 +906,10 @@
             "type": "string",
             "enum": [
               "javascript",
-              "typescript",
               "python"
             ],
-            "default": "typescript",
-            "description": "TypeScript (the default) and JavaScript run in a sandbox with no disk and no network. Python runs a real interpreter that has BOTH, and only works if your operator has enabled it - choose it only for code you would be happy to run on this machine yourself.",
+            "default": "javascript",
+            "description": "JavaScript runs in a sandbox with no disk and no network. Python runs a real interpreter that has BOTH, and only works if your operator has enabled it - choose it only for code you would be happy to run on this machine yourself.",
             "title": "Language"
           },
           "timeout": {
@@ -941,10 +940,10 @@
         "label": "Code",
         "icon": "terminal",
         "colour": "emerald-500",
-        "description": "Run a snippet of JavaScript, TypeScript or Python."
+        "description": "Run a snippet of JavaScript or Python."
       },
       "tier": "open",
-      "docs": "## What it is\nRun a snippet of code - the escape hatch when no other step fits. JavaScript and TypeScript run in a sandbox; Python runs on the machine and is off by default.\n\n## How it works\nYour code must `return` a value (Python: `print` a JSON value as its last line); that value becomes the step's output for downstream references. Whatever you wire into \"Data in\" arrives as `input`. `{{...}}` references in the code string are substituted before it runs.\n\n## Languages\n- **TypeScript** (the default) - types are stripped and the result runs in the sandbox. Type annotations only: a `const enum` or a decorator needs real compilation and is refused with a message saying so.\n- **JavaScript** - the same sandbox, no stripping step.\n- **Python** - a real interpreter, and **NOT sandboxed**. See the gotcha below.\n\n## Gotchas\n- JavaScript and TypeScript have no network or filesystem access - transform data, don't fetch it (use the HTTP/API node to fetch).\n- **Python is not sandboxed.** It runs as whoever runs Metis, with that user's files and network, and is refused entirely unless an operator sets `METIS_PYTHON`. Only the step's timeout applies, enforced by killing the process. Treat authoring a Python step as equivalent to handing out a shell.\n- `Date.now` and `Math.random` are denied in the JavaScript sandbox so a replayed run behaves the same way.\n- Keep returns small; outputs ride the workflow state."
+      "docs": "## What it is\nRun a snippet of code - the escape hatch when no other step fits. JavaScript runs in a sandbox; Python runs on the machine and is off by default.\n\n## How it works\nYour code must `return` a value (Python: `print` a JSON value as its last line); that value becomes the step's output for downstream references. Whatever you wire into \"Data in\" arrives as `input`, and with nothing wired it is the run's own input - which is what the Test panel's sample input feeds. `{{...}}` references in the code string are substituted before it runs.\n\n## Languages\n- **JavaScript** (the default) - a fresh V8 isolate per run, with no disk and no network.\n- **Python** - a real interpreter, and **NOT sandboxed**. See the gotcha below.\n\nTypeScript is no longer offered. Metis only ever stripped the types rather than checking them, so it gave you the syntax and none of the safety. Steps already saved as TypeScript keep running.\n\n## Gotchas\n- JavaScript has no network or filesystem access - transform data, don't fetch it (use the HTTP/API node to fetch).\n- **Python is not sandboxed.** It runs as whoever runs Metis, with that user's files and network, and is refused entirely unless an operator sets `METIS_PYTHON`. Only the step's timeout applies, enforced by killing the process. Treat authoring a Python step as equivalent to handing out a shell.\n- `Date.now` and `Math.random` are denied in the JavaScript sandbox so a replayed run behaves the same way.\n- Keep returns small; outputs ride the workflow state."
     },
     {
       "type": "sql",

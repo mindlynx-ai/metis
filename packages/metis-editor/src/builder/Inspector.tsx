@@ -30,6 +30,7 @@ import { Icon } from '../ui/Icon.js';
 import { useFlow } from '../flow-store.js';
 import { SetupPanel } from './inspector/SetupPanel.js';
 import { TestTab } from './inspector/TestTab.js';
+import { CodeWorkbench } from './inspector/CodeWorkbench.js';
 import { HistoryTab } from './inspector/HistoryTab.js';
 import { PolicyTab } from './inspector/PolicyTab.js';
 import { GuidePanel } from './inspector/GuidePanel.js';
@@ -65,6 +66,7 @@ export function Inspector({
   const flow = useFlow();
   const node = flow.nodes.find((candidate) => candidate.id === flow.selectedNodeId);
   const entry = useMemo(() => (node ? entryFor(catalogue, node) : undefined), [catalogue, node]);
+  const [workbench, setWorkbench] = useState(false);
 
   const [tab, setTab] = useState<TabId>('setup');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -79,6 +81,7 @@ export function Inspector({
 
   if (!node) return null;
 
+  const isCodeStep = node.type === 'code';
   const category = entry?.category ?? 'integration';
   const description = entry?.palette?.description ?? '';
   const glyph = (entry?.palette?.label ?? node.type).slice(0, 2).toUpperCase();
@@ -180,9 +183,34 @@ export function Inspector({
         id={`panel-${activeTab}`}
         aria-labelledby={`tab-${activeTab}`}
       >
-        {activeTab === 'setup' && <SetupPanel node={node} entry={entry} catalogue={catalogue} />}
+        {activeTab === 'setup' && (
+          <>
+            {isCodeStep && (
+              <button type="button" className="btn btn-quiet workbench-open" onClick={() => setWorkbench(true)}>
+                <Icon name="code" /> Open the editor
+              </button>
+            )}
+            <SetupPanel node={node} entry={entry} catalogue={catalogue} />
+          </>
+        )}
         {activeTab === 'guide' && entry?.docs && <GuidePanel markdown={entry.docs} />}
-        {activeTab === 'test' && <TestTab node={node} onSave={onSave} />}
+        {/* A code step tests in the workbench, beside the code that failed -
+            two places to run the same step with two sample inputs would drift,
+            and the one you edited last is the one you remember. */}
+        {activeTab === 'test' &&
+          (isCodeStep ? (
+            <div className="test-tab">
+              <p className="help">
+                Code steps are written and run in the editor, so the result appears beside the line
+                that produced it.
+              </p>
+              <button type="button" className="btn btn-primary" onClick={() => setWorkbench(true)}>
+                Open the editor
+              </button>
+            </div>
+          ) : (
+            <TestTab node={node} onSave={onSave} />
+          ))}
         {activeTab === 'history' && <HistoryTab node={node} />}
         {activeTab === 'policy' && <PolicyTab node={node} entry={entry} />}
       </div>
@@ -219,6 +247,14 @@ export function Inspector({
             toast.info('Step removed');
           }}
           onCancel={() => setConfirmRemove(false)}
+        />
+      )}
+      {workbench && (
+        <CodeWorkbench
+          node={node}
+          entry={entry}
+          catalogue={catalogue}
+          onClose={() => setWorkbench(false)}
         />
       )}
     </aside>

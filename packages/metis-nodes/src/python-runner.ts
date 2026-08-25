@@ -36,6 +36,7 @@
  *     because a spawned process ignores the isolate's budget.
  */
 import { spawn, spawnSync } from 'node:child_process';
+import { PY_PRELUDE, retargetPythonTraceback } from './error-positions.js';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -133,7 +134,10 @@ export function runPython(
   // A file also keeps the source off the command line, which is the part that
   // matters on Windows - `-c` there means argument-length limits and a quoting
   // problem that differs between cmd.exe and PowerShell.
-  const preamble = 'import json,sys\ninput = json.loads(sys.stdin.readline() or "null")\n';
+  // Exactly PY_PRELUDE_LINES lines, which retargetPythonTraceback subtracts back
+  // off every reported position. Grow this and the line numbers a person is
+  // shown shift with it, so the two are pinned together by a test.
+  const preamble = `${PY_PRELUDE.join('\n')}\n`;
   const dir = mkdtempSync(join(tmpdir(), 'metis-py-'));
   const scriptPath = join(dir, 'step.py');
   writeFileSync(scriptPath, preamble + source, { mode: 0o600 });
@@ -175,7 +179,12 @@ export function runPython(
     child.on('error', (error) => finish({ status: 'error', error: error.message }));
     child.on('close', (code) => {
       if (code !== 0) {
-        finish({ status: 'error', error: err.trim() || `python exited with code ${code}` });
+        // Retargeted before it leaves: the traceback counts lines in the file we
+        // wrote, and the person reading counts lines in the box they typed into.
+        finish({
+          status: 'error',
+          error: retargetPythonTraceback(err.trim()) || `python exited with code ${code}`,
+        });
         return;
       }
       // The LAST non-empty line, so a script that logs progress before its

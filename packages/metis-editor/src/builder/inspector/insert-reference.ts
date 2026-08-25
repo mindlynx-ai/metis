@@ -69,3 +69,43 @@ export function insertAtCursor(el: HTMLInputElement | HTMLTextAreaElement, text:
   el.focus();
   el.setSelectionRange(caret, caret);
 }
+
+/**
+ * The route into an editor that is not a text control.
+ *
+ * `insertAtCursor` below works by writing through a native `value` setter and
+ * firing a synthetic `input` event. That is exactly right for an `<input>` or a
+ * `<textarea>` and reaches nothing at all in CodeMirror, which is a
+ * contenteditable over a document model. Without this every `{{...}}` chip on a
+ * code, SQL or JSON field would silently degrade to "copied to the clipboard".
+ *
+ * It also fixes the modal, which is the other reason it is a module-level
+ * registry rather than a ref on the panel: `insertReference` requires the
+ * remembered element to sit inside `.setup-panel`, and a portalled modal does
+ * not. A registered handle does not care where the editor is rendered.
+ */
+type InsertHandle = (text: string) => void;
+
+let handle: InsertHandle | undefined;
+
+/**
+ * Claim the insert route on focus, release it on blur.
+ *
+ * @param next - the handle to register, or `undefined` to release.
+ * @param owner - when releasing, the handle doing the releasing. A blur can
+ *   arrive AFTER the next editor's focus, and clearing blindly would leave
+ *   nothing registered while an editor is plainly focused - the chip would then
+ *   go to the clipboard with the cursor sitting right there.
+ */
+export function registerInsertHandle(next?: InsertHandle, owner?: InsertHandle): void {
+  if (next) {
+    handle = next;
+    return;
+  }
+  if (!owner || handle === owner) handle = undefined;
+}
+
+/** The focused editor's insert function, if one holds focus. */
+export function activeInsertHandle(): InsertHandle | undefined {
+  return handle;
+}

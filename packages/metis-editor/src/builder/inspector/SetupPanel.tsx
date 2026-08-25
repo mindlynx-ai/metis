@@ -38,7 +38,9 @@ import { parseConnectorScope } from './connector-scope.js';
 import { SampleRequest, isSampleable } from './SampleRequest.js';
 import { VariablePalette } from './VariablePalette.js';
 import { collectUpstreamVariables } from './upstream-variables.js';
-import { insertAtCursor, isReferenceTarget } from './insert-reference.js';
+import { activeInsertHandle, insertAtCursor, isReferenceTarget } from './insert-reference.js';
+import { CodeEditor, type EditorLanguage } from './CodeEditor.js';
+import { editorLanguageFor } from './editor-language.js';
 
 type Draft = Record<string, string>;
 
@@ -55,6 +57,8 @@ function SimpleControl({
   invalid,
   describedBy,
   onChange,
+  language,
+  ariaLabel,
 }: {
   id: string;
   widget: Widget;
@@ -63,6 +67,10 @@ function SimpleControl({
   invalid: boolean;
   describedBy?: string;
   onChange(next: string): void;
+  /** Grammar for the code editor; ignored by every other control. */
+  language?: EditorLanguage;
+  /** The editor is a contenteditable, so it cannot be named by <label for>. */
+  ariaLabel?: string;
 }) {
   const common = { id, 'aria-invalid': invalid || undefined, 'aria-describedby': describedBy };
   const set = (event: { target: { value: string } }) => onChange(event.target.value);
@@ -111,7 +119,17 @@ function SimpleControl({
     );
   }
   if (widget === 'textarea' || widget === 'json') {
-    return <textarea {...common} className="mono" rows={widget === 'textarea' ? 6 : 4} value={draft} onChange={set} />;
+    return (
+      <CodeEditor
+        id={id}
+        value={draft}
+        onChange={onChange}
+        language={language}
+        // A json field usually holds two lines; a code field is a program.
+        minLines={widget === 'textarea' ? 6 : 4}
+        ariaLabel={ariaLabel}
+      />
+    );
   }
   return <input {...common} value={draft} onChange={set} />;
 }
@@ -168,6 +186,8 @@ function Field({
           invalid={Boolean(error)}
           describedBy={describedBy}
           onChange={onDraft}
+          language={editorLanguageFor(name, widget, node.data?.config)}
+          ariaLabel={label}
         />
       )}
       {help && (
@@ -310,6 +330,14 @@ export function SetupPanel({
   }, [node.id]);
 
   const insertReference = (reference: string) => {
+    // The editor first. It is a contenteditable, so the DOM path below cannot
+    // reach it - and it registers a handle that works wherever it is rendered,
+    // which is also what makes the chips work inside the portalled workbench.
+    const editorInsert = activeInsertHandle();
+    if (editorInsert) {
+      editorInsert(reference);
+      return;
+    }
     const target = targetRef.current;
     if (target && target.isConnected && panelRef.current?.contains(target)) {
       insertAtCursor(target, reference);

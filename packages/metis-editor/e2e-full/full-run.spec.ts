@@ -21,6 +21,7 @@
  */
 import { test, expect } from '@playwright/test';
 import { addStep } from '../e2e/helpers.js';
+import { setEditorValue } from '../e2e/helpers.js';
 
 test('build a two-node workflow, run it, and see it complete', async ({ page }) => {
   await page.goto('http://127.0.0.1:4180/login');
@@ -40,9 +41,7 @@ test('build a two-node workflow, run it, and see it complete', async ({ page }) 
   // Configure the code step with a self-contained body.
   await page.locator('.metis-node').nth(1).click();
   const inspector = page.locator('.inspector');
-  await inspector
-    .locator('[data-field="code"] textarea')
-    .fill("return { message: 'ran in the browser' };");
+  await setEditorValue(page, 'code', "return { message: 'ran in the browser' };");
   // Config edits merge live into the flow store; the footer Save persists.
   await inspector.getByRole('button', { name: 'Save', exact: true }).click();
 

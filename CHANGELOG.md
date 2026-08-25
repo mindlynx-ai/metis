@@ -129,6 +129,48 @@ Five of these change behaviour you may be relying on; they are marked
 
 ### Added
 
+- **A real editor for every long-form field.** Code, SQL, HTTP bodies, JSON and
+  connector text params were all plain textareas: no line numbers, no
+  highlighting, no indentation, no bracket matching. They are now one CodeMirror
+  widget with a grammar chosen per field. CodeMirror rather than Monaco on the
+  numbers - 93 MB installed against about 5 MB, for a published bundle that grew
+  by 153 KB rather than roughly 4 MB.
+- **A workbench for code steps.** "Open the editor" gives a wide window holding
+  what the step receives, the code, a sample input, Run, and what it passes on -
+  the loop you are actually in, rather than the code in one tab and the result
+  in another. For a code step the Test tab now points at it; every other step
+  type keeps the Test tab as it was.
+- **The failing line is marked in the gutter**, with the message beside it, and
+  clears the moment that line is edited.
+
+### Fixed
+
+- **Error positions point at the line you wrote.** Neither language ran your
+  source on its own: JavaScript went inside an async wrapper and Python got a
+  two-line preamble, and both reported positions in THAT file. Every line number
+  was two out, and JavaScript spliced the code mid-line as well, so a mistake on
+  line 1 column 5 was reported as `[<isolated-vm>:3:51]`. A wrong line number
+  sends you to the wrong place with confidence, and it was about to matter more
+  because the new gutter marks whatever these say.
+- **The Python traceback no longer leaks a temp path.**
+  `/var/folders/.../metis-py-KH4NRh/step.py` named a scratch file that will not
+  exist by the time anybody looks.
+- **A modal hands focus back when it closes**, and traps Tab while open. Closing
+  used to drop focus to the document, so a keyboard user restarted from the top
+  of the page.
+- **The full browser suite was not attaching the run-status socket**, so every
+  live update in it waited for ever. It is not in CI, so it rotted unnoticed
+  after the socket moved out of `buildControlServer`.
+
+### Changed
+
+- **TypeScript is no longer offered on the code step**, and JavaScript is the
+  default. Metis only ever STRIPPED the types rather than checking them, so it
+  gave authors the syntax and none of the safety while implying otherwise - and
+  it was the default. Steps already saved as TypeScript keep running exactly as
+  before; the language simply cannot be chosen again.
+
+
 - **Python code steps.** The catalogue has always offered `python` and the
   handler never read the `language` field, so a Python step ran as JavaScript
   until it happened to throw. Python now runs a real interpreter. **It is not

@@ -21,7 +21,7 @@
  * Chips are scoped to actual ancestors, and the inserted reference persists.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { login } from './helpers.js';
+import { login, setEditorValue, setEditorCursor, editorValue } from './helpers.js';
 
 const seed = (page: Page) =>
   page.evaluate(async () => {
@@ -123,13 +123,14 @@ test('an api response mapping is authored with the picker and persists runnably'
   // On API End, author the mapped response by inserting the Start's field.
   await page.locator('.metis-node', { hasText: 'API End' }).click();
   const inspector = page.locator('.inspector');
-  const mapping = inspector.locator('[data-field="responseMapping"] textarea');
-  await mapping.fill('{"greeting":"Hello "}');
+  await setEditorValue(page, 'responseMapping', '{"greeting":"Hello "}');
   // Cursor just before the closing quote+brace so the reference lands inside.
-  await mapping.focus();
-  await mapping.evaluate((el: HTMLTextAreaElement) => el.setSelectionRange(19, 19));
+  // A contenteditable has no setSelectionRange, hence the helper.
+  await setEditorCursor(page, 'responseMapping', 19);
   await inspector.locator('.var-palette').getByRole('button', { name: /firstName/ }).click();
-  await expect(mapping).toHaveValue('{"greeting":"Hello {{start.data.firstName}}"}');
+  expect(await editorValue(page, 'responseMapping')).toBe(
+    '{"greeting":"Hello {{start.data.firstName}}"}',
+  );
 
   // Persist and prove the runnable reference survived the round-trip.
   await inspector.locator('.ins-foot .btn-primary').click();

@@ -16,8 +16,12 @@
 // The DOM helpers (isReferenceTarget, insertAtCursor) are proven end to end in
 // a real browser by variables.spec.ts; the pure cursor maths is unit-tested
 // here so it needs no DOM environment (the editor suite ships none).
-import { describe, it, expect } from 'vitest';
-import { computeInsertion } from '../builder/inspector/insert-reference.js';
+import { describe, it, expect, afterEach } from 'vitest';
+import {
+  activeInsertHandle,
+  computeInsertion,
+  registerInsertHandle,
+} from '../builder/inspector/insert-reference.js';
 
 describe('computeInsertion', () => {
   it('inserts at a collapsed cursor and returns the caret after the text', () => {
@@ -34,5 +38,54 @@ describe('computeInsertion', () => {
   });
   it('clamps a negative start to zero', () => {
     expect(computeInsertion('abc', -5, -5, 'Z')).toEqual({ value: 'Zabc', caret: 1 });
+  });
+});
+
+/**
+ * The editor's route in.
+ *
+ * The DOM insert works by writing a native `value` setter and firing a
+ * synthetic `input` event. CodeMirror is a contenteditable with a document
+ * model, so that reaches nothing - every `{{...}}` chip would silently fall
+ * back to "copied to the clipboard". The editor hands over a real insert
+ * function for as long as it holds focus instead.
+ *
+ * Pure registry, no DOM, so it is unit-tested here rather than only in a
+ * browser.
+ */
+describe('the editor insert handle', () => {
+  afterEach(() => {
+    const live = activeInsertHandle();
+    if (live) registerInsertHandle(undefined, live);
+  });
+
+  it('has nothing registered to begin with', () => {
+    expect(activeInsertHandle()).toBeUndefined();
+  });
+
+  it('hands back whatever the focused editor registered', () => {
+    const insert = () => undefined;
+    registerInsertHandle(insert);
+    expect(activeInsertHandle()).toBe(insert);
+  });
+
+  it('clears on blur', () => {
+    const insert = () => undefined;
+    registerInsertHandle(insert);
+    registerInsertHandle(undefined, insert);
+    expect(activeInsertHandle()).toBeUndefined();
+  });
+
+  it('a stale blur does not steal the handle from whoever has focus now', () => {
+    // Focus moves between two editors: the first one's focusout can arrive
+    // AFTER the second one's focusin. Clearing blindly would leave nothing
+    // registered while an editor is plainly focused, and the chip would go to
+    // the clipboard with the cursor sitting right there.
+    const first = () => undefined;
+    const second = () => undefined;
+    registerInsertHandle(first);
+    registerInsertHandle(second);
+    registerInsertHandle(undefined, first);
+    expect(activeInsertHandle()).toBe(second);
   });
 });

@@ -21,7 +21,7 @@
  * save round-trips exactly. It is always a right panel, never a modal.
  */
 import { test, expect } from '@playwright/test';
-import { login, addStep } from './helpers.js';
+import { login, addStep, setEditorValue } from './helpers.js';
 
 test('three differently-shaped entries render from their schemas alone', async ({ page }) => {
   await login(page);
@@ -49,7 +49,10 @@ test('three differently-shaped entries render from their schemas alone', async (
   await addStep(page, /^Code/);
   await page.locator('.metis-node').nth(2).click();
   await expect(name).toHaveValue('Code');
-  await expect(inspector.locator('[data-field="code"] textarea')).toBeVisible();
+  // A code editor now, not a textarea: line numbers and highlighting, because a
+  // step that reports "line 3" needs a line 3 you can see.
+  await expect(inspector.locator('[data-field="code"] .cm-content')).toBeVisible();
+  await expect(inspector.locator('[data-field="code"] .cm-gutters')).toBeVisible();
 });
 
 test('edits merge live, save and read back exactly', async ({ page }) => {
@@ -103,7 +106,7 @@ test('an invalid JSON object field is rejected inline as you type', async ({ pag
   const inspector = page.locator('.inspector');
   await inspector.locator('.disclosure > summary').click();
   // auth is a plain object field, so it edits as JSON.
-  await inspector.locator('[data-field="auth"] textarea').fill('{not json');
+  await setEditorValue(page, 'auth', '{not json');
   await expect(inspector.locator('[data-field="auth"] .field-error')).toHaveText('must be valid JSON');
 });
 
@@ -283,10 +286,13 @@ test('a schema with no required fields renders everything up front (no disclosur
   await expect(configure.locator('.disclosure')).toHaveCount(0);
 });
 
+// A No Operation step, not a Code step: code is written and run in the
+// workbench now (code-workbench.spec.ts), and the Test tab still serves every
+// other type - which is the half that would rot unnoticed without these.
 test('the Test tab runs this step alone and shows its output', async ({ page }) => {
   await login(page);
   await page.goto('http://127.0.0.1:4180/workflows/inspector-test-run/edit');
-  await addStep(page, /^Code/);
+  await addStep(page, /No Operation/);
   await page.locator('.metis-node').first().click();
   const inspector = page.locator('.inspector');
 
@@ -304,7 +310,7 @@ test('the Test tab runs this step alone and shows its output', async ({ page }) 
 test('the Test tab surfaces a failing step with its error', async ({ page }) => {
   await login(page);
   await page.goto('http://127.0.0.1:4180/workflows/inspector-test-fail/edit');
-  await addStep(page, /^Code/);
+  await addStep(page, /No Operation/);
   await page.locator('.metis-node').first().click();
   const inspector = page.locator('.inspector');
 
@@ -322,7 +328,7 @@ test('the Test tab surfaces a failing step with its error', async ({ page }) => 
 test('the History tab lists runs and expands to this step logs', async ({ page }) => {
   await login(page);
   await page.goto('http://127.0.0.1:4180/workflows/inspector-history-tab/edit');
-  await addStep(page, /^Code/);
+  await addStep(page, /No Operation/);
   await page.locator('.metis-node').first().click();
   const inspector = page.locator('.inspector');
 

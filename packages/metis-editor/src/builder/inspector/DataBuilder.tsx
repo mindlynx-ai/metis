@@ -27,6 +27,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { api, type WorkflowNode } from '../../api.js';
 import { useFlow } from '../../flow-store.js';
 import { Modal } from './Modal.js';
+import { CodeEditor } from './CodeEditor.js';
 import {
   columnsToOutputs,
   filterTables,
@@ -186,13 +187,14 @@ export function DataBuilder({ node }: { node: WorkflowNode }) {
       {state.mode === 'sql' ? (
         <div className="field">
           <label htmlFor="data-query">SQL query</label>
-          <textarea
+          <CodeEditor
             id="data-query"
-            className="mono"
-            rows={5}
+            ariaLabel="SQL query"
             value={state.query}
+            onChange={(query) => commit({ ...state, query })}
+            language="sql"
+            minLines={5}
             placeholder="select * from orders where amount > $1"
-            onChange={(event) => commit({ ...state, query: event.target.value })}
           />
           <p className="help">Its rows become this step&apos;s output. Use $1, $2 for parameter values.</p>
           <div className="validate-row">

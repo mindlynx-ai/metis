@@ -21,7 +21,7 @@
  * round-trip through a save/reload.
  */
 import { test, expect, type Page } from '@playwright/test';
-import { login, addStep } from './helpers.js';
+import { login, addStep, setEditorValue, editorValue } from './helpers.js';
 
 const seed = (page: Page, nodes: unknown[], edges: unknown[]) =>
   page.evaluate(
@@ -56,15 +56,15 @@ test('a Resend node shows typed From / To / Subject / Body fields and persists t
   await expect(inspector.locator('[data-field="param-to"] label')).toContainText('To');
   await expect(inspector.locator('[data-field="param-subject"] label')).toContainText('Subject');
   await expect(inspector.locator('[data-field="param-html"] label')).toContainText('Body');
-  // The body is a textarea (type: text); the rest are single-line inputs.
-  await expect(inspector.locator('[data-field="param-html"] textarea')).toBeVisible();
+  // The body is a code editor (type: text); the rest are single-line inputs.
+  await expect(inspector.locator('[data-field="param-html"] .cm-content')).toBeVisible();
   await expect(inspector.locator('[data-field="param-to"] input')).toBeVisible();
 
   // Fill the email and persist it.
   await inspector.locator('[data-field="param-from"] input').fill('you@demo.com');
   await inspector.locator('[data-field="param-to"] input').fill('lisa@demo.com');
   await inspector.locator('[data-field="param-subject"] input').fill('Welcome');
-  await inspector.locator('[data-field="param-html"] textarea').fill('<p>Hi Lisa</p>');
+  await setEditorValue(page, 'param-html', '<p>Hi Lisa</p>');
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.locator('.toast-success')).toBeVisible();
 
@@ -73,7 +73,7 @@ test('a Resend node shows typed From / To / Subject / Body fields and persists t
   await page.locator('.metis-node').first().click();
   await expect(inspector.locator('[data-field="param-to"] input')).toHaveValue('lisa@demo.com');
   await expect(inspector.locator('[data-field="param-subject"] input')).toHaveValue('Welcome');
-  await expect(inspector.locator('[data-field="param-html"] textarea')).toHaveValue('<p>Hi Lisa</p>');
+  expect(await editorValue(page, 'param-html')).toBe('<p>Hi Lisa</p>');
 });
 
 test('the Test tab shows the email step JSON and tests just that step', async ({ page }) => {

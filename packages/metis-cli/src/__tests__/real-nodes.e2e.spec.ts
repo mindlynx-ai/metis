@@ -248,6 +248,48 @@ describe.skipIf(!enabled)('every open node type on a real Temporal dev server (M
     expect(started).not.toContain(right);
   }, 60_000);
 
+  it('hands the run input to a code node as `input`', async () => {
+    // What makes the inspector's Test tab honest. It runs a step ALONE with your
+    // "Sample input" JSON as the run input - and the code node used to read only
+    // its own `inputData` config, which on an untested step is empty. So the box
+    // did nothing and `input.n` reported "Cannot read properties of null".
+    //
+    // Proven here against a real Temporal rather than in the editor suite,
+    // because that one runs on a stub port and would agree with anything.
+    const code = nodeId();
+    const { status, execution } = await runToCompletion(
+      'rn-code-input',
+      { nodes: [{ id: code, type: 'code', config: { code: 'return { doubled: input.n * 2, who: input.who };' } }], edges: [] },
+      { n: 21, who: 'Jeremy' },
+    );
+    expect(status).toBe('completed');
+    const done = (execution?.logs ?? []).filter((log) => log.nodeId === code).at(-1);
+    expect((done?.output as { data?: unknown })?.data ?? done?.output).toEqual({
+      doubled: 42,
+      who: 'Jeremy',
+    });
+  }, 60_000);
+
+  it('lets a configured Data in beat the run input', async () => {
+    // The wired-up answer wins: in a real workflow `inputData` holds a {{...}}
+    // reference to an upstream step, and the ambient run input must not
+    // silently override a choice somebody made.
+    const code = nodeId();
+    const { status, execution } = await runToCompletion(
+      'rn-code-configured',
+      {
+        nodes: [
+          { id: code, type: 'code', config: { code: 'return input.from;', inputData: { from: 'config' } } },
+        ],
+        edges: [],
+      },
+      { from: 'run' },
+    );
+    expect(status).toBe('completed');
+    const done = (execution?.logs ?? []).filter((log) => log.nodeId === code).at(-1);
+    expect((done?.output as { data?: unknown })?.data ?? done?.output).toBe('config');
+  }, 60_000);
+
   it('parks a signal node and resumes it, binding params downstream', async () => {
     const sig = nodeId();
     const after = nodeId();

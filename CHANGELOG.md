@@ -174,6 +174,14 @@ Five of these change behaviour you may be relying on; they are marked
 - **A missing `isolated-vm` no longer takes down the whole boot.** It was
   required at module scope, so a failed native build killed `metis up` with a
   raw node-gyp error naming nothing. It loads on first use and explains itself.
+- **Testing a code step actually uses your sample input.** The inspector's Test
+  tab runs one step alone with a "Sample input" box, which works for a connector
+  because its config is what it sends. The code step read only its own "Data in"
+  config, empty on a step nobody has wired yet - so the box changed nothing and
+  testing `input.n` reported "Cannot read properties of null". A code step with
+  no Data in configured now falls back to the run input, in JavaScript,
+  TypeScript and Python alike. A configured Data in still wins, because that is
+  the wired-up answer.
 - **Publishing refuses a step that is not finished.** The catalogue has always
   declared which fields a step cannot work without, and nothing enforced it:
   `validateDefinition` checks the SHAPE of a graph and never looks inside a

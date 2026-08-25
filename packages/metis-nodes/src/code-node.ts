@@ -255,7 +255,16 @@ export function createCodeNodeHandler(): NodeHandler {
       configuredTimeout > 0 ? configuredTimeout : SANDBOX_DEFAULT_TIMEOUT_MS,
       SANDBOX_MAX_TIMEOUT_MS,
     );
-    const inputPayload = config.inputData ?? config.input;
+    // A configured "Data in" wins, because that is the wired-up answer: in a
+    // real workflow it holds a {{...}} reference to an upstream step. With none
+    // configured, fall back to the RUN input, which every handler already
+    // receives and switch and logic have always read.
+    //
+    // This is what makes the inspector's Test tab honest. It sends the step
+    // alone with your sample JSON as the run input, and before this the code
+    // step never looked at it - so testing `input.n` reported "Cannot read
+    // properties of null" and the Sample input box changed nothing at all.
+    const inputPayload = config.inputData ?? config.input ?? ctx.inputData;
     const language = String(config.language ?? DEFAULT_LANGUAGE).toLowerCase();
 
     if (language === 'python') {

@@ -182,3 +182,65 @@ describe('the language field', () => {
     }
   });
 });
+
+/**
+ * The run input reaching `input`.
+ *
+ * The inspector's Test tab offers a "Sample input" box, sends the step alone
+ * with that JSON as the run input, and shows what comes back. For a connector
+ * step that works, because its config IS what it sends. For the code step the
+ * box did nothing: `input` came from the node's own `inputData` config, which
+ * on an untested step is empty, so testing `input.n` reported "Cannot read
+ * properties of null". A box that changes nothing is worse than no box.
+ *
+ * The run input has always been on the handler context - switch and logic read
+ * it for their predicates. The code step simply never looked.
+ */
+describe('the run input', () => {
+  it('arrives as `input` when the step has no Data in of its own', async () => {
+    const result = await handler(
+      nodeCtx('code', { code: 'return input.n * 2;' }, { inputData: { n: 21 } }),
+    );
+    expect(result.status).toBe(200);
+    expect(nodeOutput(result)).toBe(42);
+  });
+
+  it('lets a configured Data in win, because that is the wired-up answer', async () => {
+    // In a real workflow `inputData` holds a {{...}} reference to an upstream
+    // step. That is a deliberate choice and must beat the ambient run input.
+    const result = await handler(
+      nodeCtx('code', { code: 'return input.from;', inputData: { from: 'config' } },
+        { inputData: { from: 'run' } }),
+    );
+    expect(nodeOutput(result)).toBe('config');
+  });
+
+  it('leaves `input` null when there is none anywhere, rather than throwing', async () => {
+    // `null`, not undefined: the sandbox normalises an absent payload on the
+    // way in. Asserted as a boolean so the envelope around a returned null is
+    // not what is being pinned here.
+    const result = await handler(nodeCtx('code', { code: 'return input === null;' }));
+    expect(result.status).toBe(200);
+    expect(nodeOutput(result)).toBe(true);
+  });
+
+  it('reaches Python too, so Test works the same way in either language', async () => {
+    const ctx = nodeCtx(
+      'code',
+      { language: 'python', code: 'import json\nprint(json.dumps({"got": input["n"]}))' },
+      { inputData: { n: 7 } },
+    );
+    const previous = process.env.METIS_PYTHON;
+    process.env.METIS_PYTHON = 'auto';
+    try {
+      const result = await handler(ctx);
+      // Skip cleanly where no interpreter exists rather than failing the suite.
+      if (result.status === 500 && /not enabled|METIS_PYTHON/.test(String(result.message))) return;
+      expect(result.status).toBe(200);
+      expect(nodeOutput(result)).toEqual({ got: 7 });
+    } finally {
+      if (previous === undefined) delete process.env.METIS_PYTHON;
+      else process.env.METIS_PYTHON = previous;
+    }
+  });
+});

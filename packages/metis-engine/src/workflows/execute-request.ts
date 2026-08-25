@@ -61,7 +61,15 @@ export function buildExecuteRequest(
               orphaned: nodes.find((candidate) => candidate.id === edge.source)?.nodeStatus === 'Orphaned',
             }))
         : undefined,
-    inputData: isBranch ? input.input : undefined,
+    // Branch nodes need the run input for their predicates, and the code node
+    // exposes it as `input` when the step has no "Data in" wired - which is what
+    // makes the inspector's Test tab honest, since it runs a step alone with
+    // your sample JSON as the run input.
+    //
+    // Named types rather than sent to everything: this rides the activity
+    // request into Temporal history, so handing every node a copy of the whole
+    // run input is exactly the payload growth this engine works to avoid.
+    inputData: isBranch || nodeType === 'code' ? input.input : undefined,
     // Set on a signal node's resume, and on any node the workflow parked for
     // an outside decision: both are dispatched again carrying their answer.
     signalParams: node.signalParams,

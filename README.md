@@ -61,7 +61,8 @@ the port with the file above, or - if the Temporal on 7233 is one you want Metis
 to use - say so explicitly:
 
 ```
-METIS_TEMPORAL_ADDRESS=127.0.0.1:7233 metis up
+# .env
+METIS_TEMPORAL_ADDRESS=127.0.0.1:7233
 ```
 
 See [Bring your own Temporal](#bring-your-own-temporal).
@@ -92,14 +93,25 @@ choose.
 ```
 git clone https://github.com/mindlynx-ai/metis.git && cd metis
 npm ci && npm run build
-export METIS_ADMIN_SECRET=pick-your-own
 node packages/metis-cli/dist/bin.js init   # scaffold a project and a sample workflow
+```
+
+`init` writes a `.env` alongside your project. Open it and set your admin
+secret:
+
+```
+METIS_ADMIN_SECRET=pick-your-own
+```
+
+Then start everything:
+
+```
 node packages/metis-cli/dist/bin.js up     # Temporal, the worker, the API and the editor
 ```
 
 `up` downloads and manages the Temporal dev server the first time you run it,
 so you never install Temporal by hand. The editor and API come up on port 3000,
-the Temporal Web UI on 8233. Sign in as `admin` with the secret you exported.
+the Temporal Web UI on 8233. Sign in as `admin` with the secret you just set.
 To run the sample workflow from the command line instead:
 
 ```
@@ -108,11 +120,22 @@ node packages/metis-cli/dist/bin.js run hello
 
 `METIS_ADMIN_SECRET` is not optional: the built-in default is published in this
 repository, so Metis refuses to serve on it unless you say
-`METIS_INSECURE_DEMO=true` and mean it.
+`METIS_INSECURE_DEMO=true` and mean it. It is set in `.env` above rather than
+with `export` because `export` is bash-only - it does not exist in Windows
+cmd.exe or PowerShell, and a Windows reader following an `export` line got a
+refusal that read like a broken CLI. Every setting on this page can go in
+`.env`; see [Settings and `.env`](#settings-and-env).
 
-The rest of this page writes CLI commands as plain `metis ...`. From a source
-checkout that is `npx metis ...` at the repository root - `npm run build` links
-the workspace binary, so npx finds it without a global install.
+### Shorter commands
+
+The rest of this page writes CLI commands as plain `metis ...`, because
+`node packages/metis-cli/dist/bin.js ...` in every example would be unreadable.
+Both are the same program. To type the short form, use `npx metis ...` from the
+repository root: `npm ci` creates the workspace binary shim, and `npm run build`
+fills it in, so npx finds it without a global install.
+
+If `npx metis` does not resolve for you, the long form always works and needs
+nothing set up. On Windows both work in cmd.exe and PowerShell alike.
 
 > **The npx-from-the-registry route is not live yet.** Once the packages reach
 > npm the two commands above become `npx @mindlynx/metis-cli init` and
@@ -127,7 +150,8 @@ by hand. If you already run a Temporal - a dev server of your own, a container,
 or a real cluster - point Metis at it and nothing is downloaded or started:
 
 ```
-METIS_TEMPORAL_ADDRESS=host:7233 metis up
+# .env
+METIS_TEMPORAL_ADDRESS=host:7233
 ```
 
 or commit it, so everyone on the project gets the same one:
@@ -135,6 +159,9 @@ or commit it, so everyone on the project gets the same one:
 ```json
 { "temporalAddress": "host:7233" }
 ```
+
+(`.env` is git-ignored; `metis.config.json` is not. That is the difference:
+one is yours, the other is the project's.)
 
 The environment wins over the file, so a single command can override a committed
 address without editing anything. Leave both unset - the default - and Metis
@@ -151,6 +178,38 @@ for: run Temporal however you can, and Metis attaches to it.
 Know the limit: the address is all Metis reads today. There is no setting yet
 for TLS, client certificates, an API key or a non-`default` namespace, so a
 Temporal that requires any of those is not reachable this way.
+
+## Settings and `.env`
+
+Every setting is an environment variable, and `metis init` writes a `.env` file
+for them. Metis reads it on every platform, so nothing on this page needs
+`export` (bash) or `$env:` (PowerShell):
+
+```
+METIS_ADMIN_SECRET=pick-your-own
+METIS_TEMPORAL_ADDRESS=127.0.0.1:7233
+```
+
+A real environment variable beats the file, so you can still override one value
+for a single command without editing anything.
+
+Only **one** setting is required: `METIS_ADMIN_SECRET`. Everything else has a
+working default. The ones worth knowing:
+
+| Setting | Does |
+|---|---|
+| `METIS_ADMIN_SECRET` | The admin password. Required. |
+| `METIS_TEMPORAL_ADDRESS` | Attach to a Temporal you already run. |
+| `METIS_HOST` | Where to listen. Loopback unless you say `0.0.0.0`. |
+| `METIS_DATASTORE` + `PG_URL` | Postgres instead of SQLite. |
+| `METIS_PYTHON` | Enable Python code steps. See the code step's docs first. |
+| `METIS_LOG_LEVEL` | `fatal` to `trace`; default `warn`. |
+
+`.env` is git-ignored, and `.env.example` in this repository lists the lot.
+
+> One wrinkle if you contribute: `npm run gates` scans `.env` for leaked
+> credentials along with everything else. That is deliberate, but it means a
+> real AWS key in your own `.env` will fail the gate locally.
 
 ## What is Temporal, and why is it here?
 

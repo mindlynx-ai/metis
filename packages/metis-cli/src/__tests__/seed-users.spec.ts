@@ -96,3 +96,41 @@ describe('seedUsers', () => {
     expect(seedUsers({ ...SET, METIS_DEMO_SECRET: 'p' })).toHaveLength(1);
   });
 });
+
+/**
+ * A blank secret is UNSET, not a password.
+ *
+ * `METIS_ADMIN_SECRET=` in a .env, or an unset shell variable expanding to
+ * nothing, used to sail past the guard: it is not equal to the published
+ * default, so the check passed and admin was seeded with an EMPTY password.
+ * That is worse than the default it exists to refuse, and the scaffolded .env
+ * ships exactly that line for the operator to fill in.
+ */
+describe('a blank admin secret', () => {
+  it.each(['', '   ', '\t'])('is refused rather than accepted as a password (%j)', (value) => {
+    expect(() => assertServableSecret({ METIS_ADMIN_SECRET: value })).toThrow(
+      /METIS_ADMIN_SECRET/,
+    );
+  });
+
+  it('is still refused when the demo opt-in is off', () => {
+    expect(() =>
+      assertServableSecret({ METIS_ADMIN_SECRET: '', METIS_INSECURE_DEMO: 'false' }),
+    ).toThrow();
+  });
+
+  it('never seeds an admin who can be signed in as with no password', () => {
+    const admin = seedUsers({ METIS_ADMIN_SECRET: '   ' }).find((u) => u.userId === 'admin');
+    expect(admin?.secret).not.toBe('');
+    expect(admin?.secret.trim()).not.toBe('');
+  });
+
+  it('leaves a real secret alone, including one with spaces inside it', () => {
+    expect(() => assertServableSecret({ METIS_ADMIN_SECRET: 'correct horse battery' })).not.toThrow();
+    const admin = seedUsers({ METIS_ADMIN_SECRET: 'correct horse battery' }).find(
+      (u) => u.userId === 'admin',
+    );
+    expect(admin?.secret).toBe('correct horse battery');
+  });
+});
+

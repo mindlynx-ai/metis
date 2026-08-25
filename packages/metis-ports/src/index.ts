@@ -28,6 +28,7 @@ export * from './adapters/stdout-event-sink.js';
 export * from './adapters/local-event-bus.js';
 export * from './adapters/node-handler-registry.js';
 export * from './adapters/single-tenant-identity.js';
+export * from './adapters/file-permissions.js';
 export * from './adapters/local-file-credential-store.js';
 export * from './adapters/helix-stub.js';
 export * from './adapters/capability-resolver.js';

@@ -26,7 +26,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { scaffoldProject, parseConfig, DEFAULT_CONFIG, type MetisConfig } from './scaffold.js';
 import { MetisRuntime, TENANT } from './runtime.js';
-import { buildControlServer } from './control-server.js';
+import { attachRealtime, buildControlServer } from './control-server.js';
 import {
   seedConnectors,
   syncCatalogueConnectors,
@@ -147,6 +147,35 @@ export function loadConfig(cwd: string): MetisConfig {
 }
 
 /**
+ * Load `<cwd>/.env` into the environment, if there is one.
+ *
+ * Windows is why this exists. Exactly one variable is genuinely required to run
+ * Metis - METIS_ADMIN_SECRET - and the documented way to set it was `export`,
+ * which neither cmd.exe nor PowerShell has. A file removes the shell from the
+ * question entirely, and Node has read one natively since 22.13, which is
+ * already the floor here, so this costs no dependency.
+ *
+ * A real environment variable WINS over the file: Node's loader leaves an
+ * already-set value alone, which is the precedence you want. Someone typing a
+ * value for one command must not be silently overruled by a file they wrote
+ * last week.
+ *
+ * @returns whether a file was found and read.
+ */
+export function loadProjectEnv(cwd: string): boolean {
+  try {
+    process.loadEnvFile(join(cwd, '.env'));
+    return true;
+  } catch (error) {
+    // Absent is the normal case and not a problem. Anything else - unreadable,
+    // a directory, a permission refusal - is a real fault the operator needs to
+    // see, because it means their settings did NOT take effect.
+    if ((error as NodeJS.ErrnoException)?.code === 'ENOENT') return false;
+    throw error;
+  }
+}
+
+/**
  * The Temporal to attach to instead of managing one, or undefined to manage
  * one. The environment wins over the file so a single command can point at a
  * different server without editing anything committed.
@@ -203,7 +232,12 @@ function editorDir(cwd: string): string | undefined {
  * port is exactly that opt-in.
  */
 function bindHost(env: Record<string, string | undefined>): string {
-  return env.METIS_HOST ?? '127.0.0.1';
+  // 'localhost', not '127.0.0.1'. Loopback is TWO addresses and Fastify binds
+  // both for this name, which matters because Windows resolves localhost to ::1
+  // first: bound to 127.0.0.1 alone, its browsers reached the page over an IPv4
+  // fallback and then failed the WebSocket upgrade, which does not fall back as
+  // reliably. Still loopback-only, so the exposure decision is unchanged.
+  return env.METIS_HOST ?? 'localhost';
 }
 
 export async function cmdUp(context: CliContext): Promise<number> {
@@ -220,6 +254,9 @@ export async function cmdUp(context: CliContext): Promise<number> {
   const app = await buildControlServer({ runtime, editorDir: editor });
   const host = bindHost(process.env);
   await app.listen({ port: config.ports.editor, host });
+  // After listen: the second loopback binding does not exist before it, and the
+  // hub has to cover every address the app answers on.
+  const hub = await attachRealtime(app, runtime);
   if (host !== '127.0.0.1' && host !== 'localhost') {
     context.stdout(
       `Listening on ${host}: reachable from other machines. Anyone who can reach `
@@ -256,6 +293,7 @@ export async function cmdUp(context: CliContext): Promise<number> {
     const shutdown = () => {
       app
         .close()
+        .then(() => hub.close())
         .then(() => runtime.stop())
         .catch(() => undefined)
         .finally(resolve);

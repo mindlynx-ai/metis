@@ -14,7 +14,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { runCli } from './cli.js';
+import { loadProjectEnv, runCli } from './cli.js';
+
+// Before anything reads process.env. Every setting Metis has is read downstream
+// of runCli, so this is the one place a project .env has to land.
+loadProjectEnv(process.cwd());
 
 // A configuration refusal is a message, not a crash. Without this, the very
 // first command a newcomer runs answers a misconfiguration with a V8 stack

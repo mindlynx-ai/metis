@@ -27,6 +27,7 @@ import {
   writeFileSync,
 } from 'node:fs';
 import { dirname } from 'node:path';
+import { restrictToOwner } from './file-permissions.js';
 import type {
   ConnectionRecord,
   ConnectorCredentialStore,
@@ -97,6 +98,10 @@ function writeVaultAtomically(filePath: string, contents: string): void {
   const tempPath = `${filePath}.${randomUUID()}.tmp`;
   try {
     const handle = openSync(tempPath, 'w', 0o600);
+    // The mode above is ignored on Windows, so say it again in a way that
+    // platform understands. Done on the TEMP file, before the rename, so the
+    // vault is never briefly readable at its real path.
+    restrictToOwner(tempPath);
     try {
       writeFileSync(handle, contents);
       fsyncSync(handle);
@@ -212,6 +217,7 @@ export class LocalFileCredentialStore implements ConnectorCredentialStore {
     while (held === undefined) {
       try {
         closeSync(openSync(lockPath, 'wx', 0o600));
+        restrictToOwner(lockPath);
         held = statSync(lockPath).ino;
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error;

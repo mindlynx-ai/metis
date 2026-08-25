@@ -36,6 +36,7 @@ import {
   helixAccountBearer,
   isCompleted,
   nodeOutput,
+  restrictToOwner,
   type ConnectorCredentialStore,
   type NodeExecPort,
 } from '@mindlynx/metis-ports';
@@ -101,6 +102,9 @@ function loadCredentialKey(projectDir: string): Buffer {
   if (existsSync(keyPath)) return Buffer.from(readFileSync(keyPath, 'utf8'), 'hex');
   const key = randomBytes(32);
   writeFileSync(keyPath, key.toString('hex'), { mode: 0o600 });
+  // `mode` is accepted and ignored on Windows, where the key would otherwise
+  // inherit the folder's ACL. This is the key to every stored credential.
+  restrictToOwner(keyPath);
   return key;
 }
 

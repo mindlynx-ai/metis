@@ -21,10 +21,10 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { io, type Socket } from 'socket.io-client';
-import { api, getToken, type ExecutionSummary, type RunLog } from '../api.js';
+import { api, type ExecutionSummary, type RunLog } from '../api.js';
 import { Icon } from '../ui/Icon.js';
 import { RunTimeline } from './RunTimeline.js';
+import { joinRoom, onWorkflowEvent } from '../socket.js';
 
 interface LiveEvent {
   name: string;
@@ -41,7 +41,10 @@ export function RunsPage() {
   const [selected, setSelected] = useState<string>();
   const [logs, setLogs] = useState<RunLog[]>([]);
   const [liveEvents, setLiveEvents] = useState<LiveEvent[]>([]);
-  const socketRef = useRef<Socket | undefined>(undefined);
+  // Release for the execution room of whichever run is open. Opening a second
+  // run leaves the first: the old code joined and never left, so a long session
+  // accumulated rooms and every run's events kept arriving forever.
+  const openRoomRef = useRef<(() => void) | undefined>(undefined);
 
   const refreshRuns = useCallback(async () => {
     if (!workflowId) return;
@@ -58,32 +61,27 @@ export function RunsPage() {
     } catch {
       setLogs([]);
     }
-    socketRef.current?.emit('join', { room: `execution:${executionId}` });
+    openRoomRef.current?.();
+    openRoomRef.current = joinRoom(`execution:${executionId}`);
   }, []);
+
+  // Leave the open run's room when the page goes away.
+  useEffect(() => () => openRoomRef.current?.(), []);
 
   useEffect(() => {
     refreshRuns().catch(() => setRuns([]));
-    const socket = io({
-      path: '/ws/workflows',
-      auth: { token: getToken() ?? '' },
-      transports: ['websocket'],
-    });
-    socketRef.current = socket;
     // Join the workflow room so every run of this workflow streams in,
     // not only a run that has been opened.
-    const joinWorkflowRoom = () => {
-      if (workflowId) socket.emit('join', { room: `workflow:${workflowId}` });
-    };
-    socket.on('connect', joinWorkflowRoom);
-    joinWorkflowRoom();
-    socket.on('workflow-event', (event: LiveEvent) => {
-      setLiveEvents((current) => [...current, event]);
-      if (event.name.startsWith('workflow.execution.')) {
+    const leave = workflowId ? joinRoom(`workflow:${workflowId}`) : undefined;
+    const off = onWorkflowEvent((event) => {
+      setLiveEvents((current) => [...current, event as LiveEvent]);
+      if (String(event.name).startsWith('workflow.execution.')) {
         refreshRuns().catch(() => undefined);
       }
     });
     return () => {
-      socket.close();
+      off();
+      leave?.();
     };
   }, [refreshRuns, workflowId]);
 

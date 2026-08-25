@@ -129,6 +129,55 @@ Five of these change behaviour you may be relying on; they are marked
 
 ### Added
 
+- **Python code steps.** The catalogue has always offered `python` and the
+  handler never read the `language` field, so a Python step ran as JavaScript
+  until it happened to throw. Python now runs a real interpreter. **It is not
+  sandboxed** - unlike JavaScript it has the machine's disk and network - so it
+  is refused entirely unless an operator sets `METIS_PYTHON`. Read the code
+  step's docs and SECURITY.md before enabling it.
+- **TypeScript code steps.** `typescript` is the catalogue's DEFAULT and typed
+  source used to fail with a V8 syntax error, which is as close to "broken out
+  of the box" as a setting gets. Types are now stripped before the sandbox runs
+  the code. Type annotations only: a `const enum` or a decorator needs real
+  compilation and is refused with a message that says so.
+- **A `.env` file.** `metis init` writes one, and Metis reads it on every
+  platform. The one required setting, `METIS_ADMIN_SECRET`, was documented with
+  `export`, which neither cmd.exe nor PowerShell has - so on Windows the first
+  command in the README produced a refusal that read like a broken CLI. No new
+  dependency: Node has read `.env` natively since 22.13, already the floor here.
+- **Links can be removed.** Drawing one was always possible and undoing it was
+  not: hover a link and a control appears, or select it and press Backspace.
+  Previously the only way to unlink two steps was to delete one of them.
+- **The theme follows your system** on a first visit instead of always starting
+  dark. A theme you have chosen still wins.
+
+### Fixed
+
+- **The live run feed reconnects and stays connected.** Three pages each opened
+  their own WebSocket, and one was rebuilt whenever a run started or a run was
+  opened - so the feed died at the moment it mattered. There is now one socket
+  per tab, shared, with rooms reference-counted and rejoined after any drop.
+- **The WebSocket reaches both loopback addresses.** `metis up` bound
+  `127.0.0.1` only while the hub was attached to a single server. Windows
+  resolves `localhost` to `::1` first, so its browsers loaded the page over an
+  IPv4 fallback and then failed the upgrade, which does not fall back as
+  reliably. Metis now serves both loopback addresses and attaches the hub to
+  every one of them. Still loopback-only.
+- **A failed upgrade degrades to polling** instead of dying. The client pinned
+  `transports: ['websocket']`, so any upgrade failure was terminal and silent.
+- **`/ws/...` no longer answers with the editor's HTML.** The static route had
+  no extension to match on, so a socket handshake got a 200 and an HTML page
+  where an Engine.IO packet was expected. It 404s now, like `/api/...`.
+- **The credential vault is restricted on Windows.** `chmod 0600` is a silent
+  no-op there, so the vault and the key beside it inherited the folder's rights.
+  Both now get an explicit ACL as they are written.
+- **A missing `isolated-vm` no longer takes down the whole boot.** It was
+  required at module scope, so a failed native build killed `metis up` with a
+  raw node-gyp error naming nothing. It loads on first use and explains itself.
+- **The Reviews empty state says what it is waiting for**, rather than being
+  indistinguishable from a broken page.
+
+
 - **Metis runs on Windows.** `metis up` was refused outright on any platform
   that was not macOS or Linux, and the refusal pointed the reader at a README
   section about WSL that has never existed. Temporal publishes a Windows

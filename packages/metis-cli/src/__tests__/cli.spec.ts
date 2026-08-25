@@ -13,7 +13,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, afterEach } from 'vitest';
 import { mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
@@ -24,7 +24,7 @@ import {
   WorkflowStore,
   registerWorkflowTables,
 } from '@mindlynx/metis-data-gateway';
-import { runCli, loadConfig, resolveTemporalAddress, HELP_TEXT } from '../cli.js';
+import { runCli, loadConfig, loadProjectEnv, resolveTemporalAddress, HELP_TEXT } from '../cli.js';
 import { DEFAULT_CONFIG } from '../scaffold.js';
 import { DEFAULT_SESSION_POLICY } from '@mindlynx/metis-ports';
 import { DEFAULT_LOGIN_LIMIT } from '@mindlynx/metis-core';
@@ -81,6 +81,16 @@ describe('metis CLI', () => {
     expect(existsSync(join(dir, '.metis'))).toBe(true);
     expect(existsSync(join(dir, '.gitignore'))).toBe(true);
     expect(existsSync(join(dir, 'workflows', 'hello.json'))).toBe(true);
+    // The .env is what makes the first run work on Windows: the documented way
+    // to set the one required secret used to be `export`, which cmd.exe and
+    // PowerShell do not have.
+    expect(existsSync(join(dir, '.env'))).toBe(true);
+    const env = readFileSync(join(dir, '.env'), 'utf8');
+    expect(env).toContain('METIS_ADMIN_SECRET=');
+    // Scaffolded with the DEFAULT, which Metis refuses to serve on, so the
+    // first boot stops and says what to change rather than quietly running on a
+    // secret published in this repository.
+    expect(env).not.toMatch(/^METIS_ADMIN_SECRET=\S/m);
 
     const config = JSON.parse(readFileSync(join(dir, 'metis.config.json'), 'utf8')) as {
       datastore: string;
@@ -222,6 +232,43 @@ describe('metis.config.json', () => {
       loginAttempts: DEFAULT_LOGIN_LIMIT.attempts,
       loginWindowMinutes: DEFAULT_LOGIN_LIMIT.windowMinutes,
     });
+  });
+});
+
+/**
+ * `.env` - the file that makes Windows bearable.
+ *
+ * Exactly one variable is genuinely required (METIS_ADMIN_SECRET), but the
+ * README set it with `export`, which neither cmd.exe nor PowerShell has. A
+ * project-local .env removes the shell from the question entirely.
+ */
+describe('the project .env', () => {
+  const KEY = 'METIS_DOTENV_SPEC';
+  afterEach(() => {
+    delete process.env[KEY];
+  });
+
+  it('loads values from a .env beside the project', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'metis-dotenv-'));
+    writeFileSync(join(dir, '.env'), `${KEY}=from_file\n`);
+    expect(loadProjectEnv(dir)).toBe(true);
+    expect(process.env[KEY]).toBe('from_file');
+  });
+
+  it('is optional: no file is not an error', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'metis-dotenv-'));
+    expect(loadProjectEnv(dir)).toBe(false);
+    expect(process.env[KEY]).toBeUndefined();
+  });
+
+  it('lets a real environment variable win over the file', () => {
+    // The shell is the more specific instruction: someone typing a value for one
+    // command must not be silently overruled by a file they forgot they wrote.
+    const dir = mkdtempSync(join(tmpdir(), 'metis-dotenv-'));
+    writeFileSync(join(dir, '.env'), `${KEY}=from_file\n`);
+    process.env[KEY] = 'from_shell';
+    loadProjectEnv(dir);
+    expect(process.env[KEY]).toBe('from_shell');
   });
 });
 

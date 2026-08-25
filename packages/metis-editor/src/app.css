@@ -3625,7 +3625,7 @@ body {
   line-height: 1.4;
 }
 .req {
-  color: var(--danger, #e5484d);
+  color: var(--danger-text);
 }
 .field-opt {
   color: var(--text-faint);
@@ -5099,4 +5099,81 @@ a.locked-card:hover .upgrade {
 
 .audit-actor {
   max-width: 220px;
+}
+
+/* Removing a link.
+   The cross is hidden until the link is hovered, selected, or the button
+   itself has keyboard focus - the canvas would be a rash of crosses otherwise.
+   It is a real button so it is tabbable and screen-reader nameable, unlike a
+   click handler bolted to an SVG path. */
+.edge-drop {
+  position: absolute;
+  /* Above React Flow's edge SVG layer. Without this the button is drawn on top
+     but the SVG still takes the pointer, so it looks clickable and is not - the
+     kind of bug that only shows up when a real mouse is used rather than a
+     synthetic DOM click. */
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-raised);
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition:
+    opacity 120ms ease,
+    color 120ms ease,
+    border-color 120ms ease;
+}
+
+.edge-drop svg {
+  width: 11px;
+  height: 11px;
+  stroke: currentColor;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  fill: none;
+}
+
+/* `is-on` is set from React state (hover or selection), not a CSS :hover rule:
+   React Flow's edge group does not reliably receive :hover. */
+.edge-drop.is-on,
+.edge-drop:focus-visible {
+  opacity: 1;
+}
+
+.edge-drop:hover,
+.edge-drop:focus-visible {
+  color: var(--danger-text);
+  border-color: var(--danger-text);
+}
+
+.edge-drop:focus-visible {
+  outline: 2px solid var(--brand-blue);
+  outline-offset: 2px;
+}
+
+/* A 2px line is a pixel-hunt. This widens the hit area without changing the
+   look, so hovering "near enough" reveals the control. */
+.edge-hit {
+  pointer-events: stroke;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .edge-drop {
+    transition: none;
+  }
+}
+
+/* The second line of an empty state: quieter than the first, and narrower so it
+   reads as a hint rather than a second headline. */
+.conn-empty-hint {
+  max-width: 46ch;
+  margin-top: 6px;
+  color: var(--text-faint);
+  font-size: 13px;
 }

@@ -24,7 +24,7 @@
  * command bus that could drive the graph. This canvas talks to nothing
  * but the flow store.
  */
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
   BackgroundVariant,
@@ -36,16 +36,21 @@ import {
   type Connection,
   type Edge,
   type Node,
+  type EdgeChange,
   type NodeChange,
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import { useFlow } from '../flow-store.js';
 import { Icon } from '../ui/Icon.js';
 import { MetisNode } from './MetisNode.js';
+import { DeletableEdge } from './DeletableEdge.js';
 import { layoutPositions, type LayoutDirection } from './layout.js';
 import type { CatalogueEntry } from '../api.js';
 
 const nodeTypes = { metis: MetisNode };
+// Module scope, like nodeTypes: XYFlow warns and re-renders the whole graph if
+// this object is rebuilt every render.
+const edgeTypes = { deletable: DeletableEdge };
 
 /** The per-step "Where it runs" choice ('local' and absent draw no chip). */
 function cloudModeOf(node: { data?: { metadata?: Record<string, unknown> } }): 'cloud' | 'auto' | undefined {
@@ -173,6 +178,11 @@ export function BuilderCanvas({
     [flow.nodes, flow.selectedNodeId, categoryOf, labelOf, onAddAfter, runStates, runBadges, runDegraded, cloudEnabled],
   );
 
+  // Which link the pointer or keyboard is on. Canvas-only state: it is not part
+  // of the workflow, so it does not belong in the store the way selectedNodeId
+  // does (that one drives the inspector).
+  const [selectedEdgeId, setSelectedEdgeId] = useState<string | undefined>(undefined);
+
   const edges: Edge[] = useMemo(
     () =>
       flow.edges.map((edge, index) => {
@@ -183,12 +193,13 @@ export function BuilderCanvas({
           source: edge.source,
           target: edge.target,
           sourceHandle: edge.sourceHandle,
-          type: 'default',
+          type: 'deletable',
+          selected: (edge.id ?? `edge-${index}-${edge.source}-${edge.target}`) === selectedEdgeId,
           style: { stroke: `var(--cat-${category}-dot)`, strokeWidth: 2 },
           markerEnd: { type: MarkerType.ArrowClosed, color: `var(--cat-${category}-dot)` },
         };
       }),
-    [flow.edges, flow.nodes, categoryOf],
+    [flow.edges, flow.nodes, categoryOf, selectedEdgeId],
   );
 
   const onNodesChange = useCallback(
@@ -205,6 +216,30 @@ export function BuilderCanvas({
         }
         if (change.type === 'select') {
           flow.select(change.selected ? change.id : undefined);
+        }
+      }
+    },
+    [flow],
+  );
+
+  /**
+   * Edge changes were never wired at all, and that is the whole bug.
+   *
+   * XYFlow only applies changes itself when it owns the edges (`defaultEdges`).
+   * With a controlled `edges` prop it hands every change to `onEdgesChange` and
+   * drops them on the floor if that prop is missing - so `select` never landed,
+   * an edge could never reach `selected: true`, and `deleteKeyCode` therefore
+   * found nothing to delete. Backspace looked broken because it WAS.
+   */
+  const onEdgesChange = useCallback(
+    (changes: EdgeChange[]) => {
+      for (const change of changes) {
+        if (change.type === 'remove') {
+          flow.removeEdge(change.id);
+          setSelectedEdgeId((current) => (current === change.id ? undefined : current));
+        }
+        if (change.type === 'select') {
+          setSelectedEdgeId(change.selected ? change.id : undefined);
         }
       }
     },
@@ -231,9 +266,14 @@ export function BuilderCanvas({
         edges={edges}
         nodeTypes={nodeTypes}
         onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        edgeTypes={edgeTypes}
         onConnect={onConnect}
         onNodeClick={(_event, node) => flow.select(node.id)}
-        onPaneClick={() => flow.select(undefined)}
+        onPaneClick={() => {
+          flow.select(undefined);
+          setSelectedEdgeId(undefined);
+        }}
         fitView={flow.nodes.length > 0}
         deleteKeyCode={['Backspace', 'Delete']}
         proOptions={{ hideAttribution: true }}

@@ -18,7 +18,7 @@ Generated from the node catalogue - do not edit by hand
 - [Loop](loop.md) - Iterate over items: each batch runs the 'Each item' branch as a real Temporal child workflow; 'Done' continues with the collected results.
 - [Filter](filter.md) - Split an array's elements into Kept and Discarded by conditions; an empty side's branch does not run.
 - [Compare Datasets](comparedatasets.md) - Diff two arrays keyed by match fields into In A only / Same / Different / In B only; empty branches do not run.
-- [Code](code.md) - Run a sandboxed JavaScript snippet.
+- [Code](code.md) - Run a snippet of JavaScript, TypeScript or Python.
 - [Data](data.md) - Read or write any data source: a SQL query or a visual table builder.
 - [HTTP API](api.md) - Call an external HTTP API. Supports retry, configurable timeout, and headers array format.
 - [SendGrid](sendgrid.md) - Send transactional email via a SendGrid connector. Supports basic to/from/subject/text/html; templates, cc/bcc and open-tracking are not yet supported.

@@ -24,9 +24,24 @@
     />
     <meta property="og:type" content="website" />
     <script>
-      // Dark-first identity: first-time visitors get dark; a stored choice wins.
-      const stored = localStorage.getItem('metis-theme');
-      document.documentElement.dataset.theme = stored || 'dark';
+      // Follow the machine, then remember the person. A first-time visitor gets
+      // whatever their OS already asked for, because arriving in dark mode on a
+      // light desktop reads as a site that ignores you. A stored choice still
+      // wins over both - once you have picked, that IS your preference.
+      // Inline and pre-paint on purpose: a theme applied after first paint is a
+      // white flash on a dark machine.
+      var stored = null;
+      try {
+        stored = localStorage.getItem('metis-theme');
+      } catch (error) {
+        // Private mode and blocked site-data both throw on read. A theme is not
+        // worth a blank page, so fall through to the system preference.
+      }
+      document.documentElement.dataset.theme =
+        stored ||
+        (window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches
+          ? 'light'
+          : 'dark');
     </script>
   </head>
   <body>

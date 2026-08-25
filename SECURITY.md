@@ -20,14 +20,14 @@ Metis stores third-party connector credentials, so the boundary matters:
   `.metis/credential.key`, mode `0600`, **in the same directory as the
   ciphertext**. This protects a vault file carried off on its own; it does not
   protect against anything that can read that directory.
-- **On Windows that `0600` is not applied.** Node implements only the
-  read-only bit of `chmod` there, so the mode argument is silently ignored and
-  the key and vault inherit whatever the containing directory grants - on a
-  default user profile, readable by administrators and by any process running
-  as you. The encryption is unaffected; what is missing is the file-permission
-  layer underneath it. Until Metis sets a Windows ACL, put the project
-  directory somewhere only you can read, and treat a shared or roaming profile
-  as unsuitable for a vault.
+- **On Windows the `0600` alone would not apply**, because Node implements only
+  the read-only bit of `chmod` there and silently ignores the rest of the mode.
+  Metis therefore sets an explicit ACL on the vault and its key as it writes
+  them (`icacls /inheritance:r /grant:r <you>:F`), so both are restricted to the
+  account that created them rather than inheriting the folder's rights. It is
+  best-effort: if `icacls` cannot be run, Metis still starts, and the files then
+  carry whatever the directory grants. A shared or roaming profile remains a
+  poor home for a vault.
 - Node handlers resolve credentials server-side at dispatch time; secret
   values are substituted at the credential boundary and never enter workflow
   history or logs.
@@ -53,11 +53,21 @@ Metis stores third-party connector credentials, so the boundary matters:
   throwaway local stack; that is safe only because of those loopback pins.
 - The compose production overlay (`compose/docker-compose.prod.yml` +
   `compose/.env.example`) documents the required variables.
-- Workflow definitions are validated at start time. The code node runs in a
-  fresh V8 isolate per execution (`isolated-vm`): 32 MB, a 5 s default timeout
-  capped at 30 s, and no network or filesystem access - by absence rather than
-  by a blocklist, since nothing that could open a socket is bridged into the
-  isolate.
+- Workflow definitions are validated at start time. A **JavaScript or
+  TypeScript** code node runs in a fresh V8 isolate per execution
+  (`isolated-vm`): 32 MB, a 5 s default timeout capped at 30 s, and no network
+  or filesystem access - by absence rather than by a blocklist, since nothing
+  that could open a socket is bridged into the isolate. TypeScript is stripped
+  to JavaScript before it reaches that isolate; it is the same sandbox.
+- **A Python code node is not sandboxed, and is off by default.** It runs the
+  interpreter on the machine, as whoever runs Metis, with that user's disk and
+  network. Anyone who can author a workflow can therefore read that user's files
+  and make outbound connections. There is no isolate, no memory cap and no
+  denial list - only the step's timeout, which is enforced by killing the
+  process. This is why the whole arm stays off until an operator sets
+  `METIS_PYTHON`: the capability must be asked for, never arrive in an upgrade.
+  If the people who can author workflows on your instance are not the people you
+  would give a shell to, leave it unset.
 - Author-supplied outbound URLs are checked against private and link-local
   ranges, on every DNS record and again at every redirect hop. Every outbound
   call carries a deadline.

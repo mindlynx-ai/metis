@@ -136,3 +136,29 @@ describe('a request can never read outside the editor directory', () => {
     });
   });
 });
+
+/**
+ * The socket path must never reach the SPA.
+ *
+ * Engine.IO handles a websocket upgrade on the raw server, before Fastify's
+ * router, so this route does not break the socket today. It makes a broken one
+ * unreadable: the polling handshake asks for /ws/workflows/ with no file
+ * extension, falls through to the shell, and gets 200 text/html instead of an
+ * Engine.IO packet. The client then reports a protocol error rather than "there
+ * is no socket server here", which is the difference between a five-minute fix
+ * and an afternoon.
+ */
+describe('resolveStaticTarget and the socket path', () => {
+  it('refuses the socket path instead of serving the editor shell', () => {
+    for (const url of ['ws', 'ws/', 'ws/workflows', 'ws/workflows/']) {
+      expect(resolveStaticTarget(DIR, url, exists), url).toEqual({ notFound: true });
+    }
+  });
+
+  it('still serves a client route that merely starts with the same letters', () => {
+    // 'wsl-guide' is not the socket path. A bare prefix test would eat it.
+    expect(resolveStaticTarget(DIR, 'wsl-guide', exists)).toEqual({ file: shell });
+    expect(resolveStaticTarget(DIR, 'workflows', exists)).toEqual({ file: shell });
+  });
+});
+

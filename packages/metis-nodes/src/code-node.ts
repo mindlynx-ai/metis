@@ -24,13 +24,39 @@
  * exposed through references, so the sandbox cannot reach back.
  */
 import { createHash, randomUUID } from 'node:crypto';
-import { createRequire } from 'node:module';
+import { createRequire, stripTypeScriptTypes } from 'node:module';
+import { resolvePythonBinary, runPython } from './python-runner.js';
 import type ivmType from 'isolated-vm';
 import { stateEnvelope, type NodeHandler } from '@mindlynx/metis-ports';
 
 // isolated-vm is a native module; createRequire keeps bundlers away.
 const requireModule = createRequire(import.meta.url);
-const ivm = requireModule('isolated-vm') as typeof ivmType;
+
+/**
+ * The isolate library, loaded on FIRST USE rather than at import.
+ *
+ * It used to be a bare module-scope require. metis-nodes re-exports this file
+ * and the CLI imports the package, so an install where the native binding did
+ * not build took down `metis up` at boot with a raw MODULE_NOT_FOUND pointing
+ * into node-gyp - nothing naming the code node, and nothing to suggest the rest
+ * of the product was fine. This is the same shape as loadSqlServer() next door.
+ */
+let ivmModule: typeof ivmType | undefined;
+function loadIvm(): typeof ivmType {
+  if (ivmModule) return ivmModule;
+  try {
+    ivmModule = requireModule('isolated-vm') as typeof ivmType;
+    return ivmModule;
+  } catch (error) {
+    throw new Error(
+      'the code step needs isolated-vm, and it is not usable in this install: '
+        + `${error instanceof Error ? error.message : String(error)}. It ships prebuilt `
+        + 'for Node 22 and 24 on macOS (Apple Silicon), Linux and Windows x64; anything '
+        + 'else builds from source and needs Python and a C++ toolchain. Every other '
+        + 'step type works without it.',
+    );
+  }
+}
 
 export const SANDBOX_MEMORY_MB = 32;
 export const SANDBOX_DEFAULT_TIMEOUT_MS = 5_000;
@@ -44,15 +70,15 @@ const DENIALS = `
 async function injectHelpers(context: ivmType.Context): Promise<void> {
   await context.global.set(
     '__metis_hash',
-    new ivm.Reference((input: string, algo?: string): string => {
+    new (loadIvm()).Reference((input: string, algo?: string): string => {
       const algorithm = algo === 'md5' ? 'md5' : 'sha256';
       return createHash(algorithm).update(String(input)).digest('hex');
     }),
   );
-  await context.global.set('__metis_uuid', new ivm.Reference((): string => randomUUID()));
+  await context.global.set('__metis_uuid', new (loadIvm()).Reference((): string => randomUUID()));
   await context.global.set(
     '__metis_parseDate',
-    new ivm.Reference((input: string): string => {
+    new (loadIvm()).Reference((input: string): string => {
       const parsed = new Date(input);
       if (Number.isNaN(parsed.getTime())) throw new Error(`parseDate: cannot parse '${input}'`);
       return parsed.toISOString();
@@ -60,7 +86,7 @@ async function injectHelpers(context: ivmType.Context): Promise<void> {
   );
   await context.global.set(
     '__metis_formatDate',
-    new ivm.Reference((input: string, locale?: string): string => {
+    new (loadIvm()).Reference((input: string, locale?: string): string => {
       const parsed = new Date(input);
       if (Number.isNaN(parsed.getTime())) throw new Error(`formatDate: cannot parse '${input}'`);
       return parsed.toLocaleString(locale ?? 'en-GB');
@@ -91,7 +117,7 @@ export async function runUserCode(
   input: unknown,
   timeoutMs: number,
 ): Promise<RunUserCodeResult> {
-  const isolate = new ivm.Isolate({ memoryLimit: SANDBOX_MEMORY_MB });
+  const isolate = new (loadIvm()).Isolate({ memoryLimit: SANDBOX_MEMORY_MB });
   try {
     const context = await isolate.createContext();
     await context.eval(DENIALS, { timeout: 100 });
@@ -133,6 +159,88 @@ interface CodeNodeConfig {
   input?: unknown; // legacy Metis alias for inputData
   timeout?: number; // primary timeout in ms (catalogue + Helix)
   timeoutMs?: number; // legacy alias
+  language?: string; // javascript | typescript | python (catalogue default: typescript)
+}
+
+/**
+ * What the catalogue offers, and what the default is when nobody chose.
+ *
+ * TypeScript, because that is what the catalogue has always declared. The
+ * handler simply never read the field, so the declared default and the real
+ * behaviour disagreed and typed source failed on a setting nobody picked.
+ */
+const DEFAULT_LANGUAGE = 'typescript';
+
+/**
+ * Strip the types off TypeScript so the isolate can run it.
+ *
+ * Node's own stripper: types-only syntax erased, nothing transpiled, no
+ * dependency. That is the honest limit and it is documented on the node - a
+ * `const enum`, a decorator or anything else that needs real code generation is
+ * not supported, and says so rather than failing strangely.
+ */
+function stripTypes(source: string): string {
+  // The user writes a function BODY, not a module: `return x;` at the top level
+  // is what every code step looks like. Handing that to a parser is a syntax
+  // error before it ever reaches a type, so wrap it, strip, and cut the wrapper
+  // back off.
+  //
+  // Slicing by length is safe BECAUSE the stripper blanks types in place rather
+  // than removing them - `const x: number` becomes `const x         ` - so every
+  // offset after the wrapper is exactly where it started. A test pins that.
+  const prefix = 'async function __metis_wrap() {\n';
+  const suffix = '\n}';
+  // The API is flagged experimental, so Node prints a warning the first time it
+  // is called. That warning is about Node, not about the user's workflow, and
+  // seeing it in a run log reads as "your step is broken". Silence only this
+  // one, only for the duration of the call.
+  const emit = process.emitWarning;
+  process.emitWarning = ((warning: string | Error, ...rest: unknown[]) => {
+    const text = typeof warning === 'string' ? warning : warning.message;
+    if (text.includes('stripTypeScriptTypes')) return;
+    (emit as (...args: unknown[]) => void)(warning, ...rest);
+  }) as typeof process.emitWarning;
+  try {
+    const stripped = stripTypeScriptTypes(prefix + source + suffix);
+    return stripped.slice(prefix.length, stripped.length - suffix.length);
+  } finally {
+    process.emitWarning = emit;
+  }
+}
+
+/**
+ * The Python arm, kept out of the handler so the handler stays readable.
+ *
+ * Not the isolate: this is the interpreter on the machine, with that machine's
+ * disk and network. It stays off until an operator names one, and the refusal
+ * says which setting turns it on rather than failing obscurely.
+ */
+async function runPythonStep(
+  ctx: Parameters<NodeHandler>[0],
+  code: string,
+  input: unknown,
+  timeoutMs: number,
+): ReturnType<NodeHandler> {
+  const binary = resolvePythonBinary(process.env);
+  if (!binary) {
+    return {
+      status: 500,
+      message:
+        'this step is set to Python, and Python is not enabled on this Metis. Set '
+        + 'METIS_PYTHON to an interpreter path, or to "auto" to find one. Note that '
+        + 'Python steps are NOT sandboxed the way JavaScript steps are: they can '
+        + 'read this machine and reach the network.',
+    };
+  }
+  const outcome = await runPython(binary, code, input, timeoutMs);
+  if (outcome.status === 'ok') {
+    return {
+      status: 200,
+      message: 'ok',
+      nodeData: stateEnvelope(ctx.nodeRef.id, ctx.nodeRef.type, outcome.value),
+    };
+  }
+  return { status: outcome.status === 'timeout' ? 504 : 500, message: outcome.error };
 }
 
 export function createCodeNodeHandler(): NodeHandler {
@@ -148,7 +256,34 @@ export function createCodeNodeHandler(): NodeHandler {
       SANDBOX_MAX_TIMEOUT_MS,
     );
     const inputPayload = config.inputData ?? config.input;
-    const result = await runUserCode(code, inputPayload, timeoutMs);
+    const language = String(config.language ?? DEFAULT_LANGUAGE).toLowerCase();
+
+    if (language === 'python') {
+      return runPythonStep(ctx, code, inputPayload, timeoutMs);
+    }
+
+    let source = code;
+    if (language === 'typescript') {
+      try {
+        source = stripTypes(code);
+      } catch (error) {
+        return {
+          status: 500,
+          message: `this step will not parse as TypeScript: ${
+            error instanceof Error ? error.message : String(error)
+          }`,
+        };
+      }
+    } else if (language !== 'javascript') {
+      // Named, not ignored. Running an unknown language as JavaScript is how
+      // `python` silently became JavaScript in the first place.
+      return {
+        status: 500,
+        message: `this step is set to "${language}", which Metis cannot run. Choose javascript, typescript or python.`,
+      };
+    }
+
+    const result = await runUserCode(source, inputPayload, timeoutMs);
     if (result.status === 'ok') {
       return { status: 200, message: 'ok', nodeData: stateEnvelope(ctx.nodeRef.id, ctx.nodeRef.type, result.value) };
     }

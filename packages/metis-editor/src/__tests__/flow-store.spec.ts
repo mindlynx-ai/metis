@@ -117,3 +117,73 @@ describe('inspector schema helpers', () => {
     expect(fromDraftValue('{bad', 'json').error).toBeTruthy();
   });
 });
+
+/**
+ * Removing an edge. There was no way to do this at all: `connect` had no
+ * opposite, and the only code that ever dropped an edge was `removeNode`, as a
+ * side effect of deleting one of its ends. A tester reported it as "I am unable
+ * to delink them" and was right - the answer was to delete a node and rebuild it.
+ */
+describe('removing an edge', () => {
+  // Its own reset: the one above is scoped to the other describe block, so
+  // without this the store carries nodes in from earlier tests.
+  beforeEach(reset);
+
+  const twoConnectedNodes = () => {
+    const store = useFlow.getState();
+    store.addNode({ type: 'api', label: 'First' });
+    store.addNode({ type: 'api', label: 'Second' });
+    const [first, second] = useFlow.getState().nodes;
+    useFlow.getState().connect({ source: first!.id, target: second!.id });
+    return { first: first!.id, second: second!.id };
+  };
+
+  it('drops the edge and leaves both nodes standing', () => {
+    twoConnectedNodes();
+    const edge = useFlow.getState().edges[0]!;
+    useFlow.setState({ dirty: false });
+
+    useFlow.getState().removeEdge(edge.id);
+
+    expect(useFlow.getState().edges).toHaveLength(0);
+    // The whole point: unlike removeNode, the steps survive.
+    expect(useFlow.getState().nodes).toHaveLength(2);
+    expect(useFlow.getState().dirty).toBe(true);
+  });
+
+  it('leaves other edges alone', () => {
+    const { first, second } = twoConnectedNodes();
+    useFlow.getState().addNode({ type: 'api', label: 'Third' });
+    const third = useFlow.getState().nodes[2]!.id;
+    useFlow.getState().connect({ source: second, target: third });
+    expect(useFlow.getState().edges).toHaveLength(2);
+
+    const firstEdge = useFlow.getState().edges.find((e) => e.source === first)!;
+    useFlow.getState().removeEdge(firstEdge.id);
+
+    const left = useFlow.getState().edges;
+    expect(left).toHaveLength(1);
+    expect(left[0]!.source).toBe(second);
+  });
+
+  it('ignores an id that is not there rather than throwing', () => {
+    twoConnectedNodes();
+    useFlow.setState({ dirty: false });
+
+    useFlow.getState().removeEdge('edge-that-never-existed');
+
+    expect(useFlow.getState().edges).toHaveLength(1);
+    // Nothing changed, so nothing to save. Marking the graph dirty here would
+    // offer a Save for an edit that did not happen.
+    expect(useFlow.getState().dirty).toBe(false);
+  });
+
+  it('lets the same two nodes be reconnected afterwards', () => {
+    const { first, second } = twoConnectedNodes();
+    useFlow.getState().removeEdge(useFlow.getState().edges[0]!.id);
+    // connect() refuses a duplicate, so a stale edge left behind would make
+    // relinking silently impossible.
+    useFlow.getState().connect({ source: first, target: second });
+    expect(useFlow.getState().edges).toHaveLength(1);
+  });
+});

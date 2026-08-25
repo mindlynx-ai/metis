@@ -24,12 +24,12 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { io } from 'socket.io-client';
-import { api, getToken, type TemporalExecution } from '../api.js';
+import { api, type TemporalExecution } from '../api.js';
 import { Icon } from '../ui/Icon.js';
 import { durationBetween, timeAgo } from './format.js';
 import { UpcomingSection } from './UpcomingSection.js';
 import { ArchiveSection } from './ArchiveSection.js';
+import { joinRoom, onWorkflowEvent } from '../socket.js';
 
 // Socket events drive refresh; the poll is only a fallback.
 const POLL_MS = 15000;
@@ -122,18 +122,16 @@ export function OperatePage() {
 
   // Live refresh on execution events (single-tenant room), poll as fallback.
   useEffect(() => {
-    const socket = io({ path: '/ws/workflows', auth: { token: getToken() ?? '' }, transports: ['websocket'] });
-    const join = () => socket.emit('join', { room: 'tenant:t1:workflows' });
-    socket.on('connect', join);
-    join();
-    socket.on('workflow-event', (event: { name?: string }) => {
+    const leave = joinRoom('tenant:t1:workflows');
+    const off = onWorkflowEvent((event) => {
       if (event.name?.startsWith('workflow.execution.') && !document.hidden) void load(filter);
     });
     const timer = setInterval(() => {
       if (!document.hidden) void load(filter);
     }, POLL_MS);
     return () => {
-      socket.disconnect();
+      off();
+      leave();
       clearInterval(timer);
     };
   }, [filter, load]);

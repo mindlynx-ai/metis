@@ -22,7 +22,7 @@
  */
 import { join } from 'node:path';
 import { MetisRuntime } from './runtime.js';
-import { buildControlServer } from './control-server.js';
+import { attachRealtime, buildControlServer } from './control-server.js';
 import { syncCatalogueConnectors } from './connectors.js';
 import { DEFAULT_CONFIG } from './scaffold.js';
 import { assertServableSecret } from './seed-users.js';
@@ -65,11 +65,13 @@ const app = await buildControlServer({
 // compose file (which binds 127.0.0.1), not here. `metis up` on a host machine
 // defaults the other way round - see bindHost in cli.ts.
 await app.listen({ port: config.ports.editor, host: process.env.METIS_HOST ?? '0.0.0.0' });
+const hub = await attachRealtime(app, runtime);
 log(`Metis is up. Editor and API on port ${config.ports.editor}.`);
 
 const shutdown = () => {
   app
     .close()
+    .then(() => hub.close())
     .then(() => runtime.stop())
     .then(() => process.exit(0))
     .catch(() => process.exit(1));

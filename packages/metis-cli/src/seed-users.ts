@@ -48,8 +48,22 @@ export function insecureDemoOptIn(env: Record<string, string | undefined>): bool
  * admin/metis, on a port that was bound to every interface, with the password
  * sitting in a public repository.
  */
+/**
+ * The configured admin secret, or the published default when there isn't one.
+ *
+ * BLANK COUNTS AS UNSET. `METIS_ADMIN_SECRET=` in a .env, and an unset shell
+ * variable expanding to nothing, both used to pass the guard below simply by
+ * not being equal to the default - and then seeded an admin with an empty
+ * password. That is worse than the default the guard exists to refuse, and the
+ * scaffolded .env ships that exact line for the operator to fill in.
+ */
+function configuredSecret(env: Record<string, string | undefined>): string {
+  const configured = env.METIS_ADMIN_SECRET?.trim();
+  return configured ? configured : DEFAULT_ADMIN_SECRET;
+}
+
 export function assertServableSecret(env: Record<string, string | undefined>): void {
-  const adminSecret = env.METIS_ADMIN_SECRET ?? DEFAULT_ADMIN_SECRET;
+  const adminSecret = configuredSecret(env);
   if (adminSecret !== DEFAULT_ADMIN_SECRET || insecureDemoOptIn(env)) return;
   throw new Error(
     'METIS_ADMIN_SECRET must be set before Metis will serve: the built-in '
@@ -61,7 +75,7 @@ export function assertServableSecret(env: Record<string, string | undefined>): v
 }
 
 export function seedUsers(env: Record<string, string | undefined>): UserSeed[] {
-  const adminSecret = env.METIS_ADMIN_SECRET ?? DEFAULT_ADMIN_SECRET;
+  const adminSecret = configuredSecret(env);
 
   const users: UserSeed[] = [{ userId: 'admin', secret: adminSecret, role: 'admin' }];
 

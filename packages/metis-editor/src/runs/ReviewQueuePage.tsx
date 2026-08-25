@@ -48,6 +48,13 @@ function EmptyQueue() {
       <p>
         When a run reaches an approval step it parks here with everything you need to decide.
       </p>
+      {/* An empty queue and a broken page look identical, and a tester read this
+          one as broken. Saying what has to happen first is the difference. */}
+      <p className="conn-empty-hint">
+        Nothing is waiting yet. Add an <strong>Approval</strong> step to a workflow and run it,
+        and it will appear here. By default only an admin can decide - change
+        &ldquo;Who may approve&rdquo; on the step to let editors in.
+      </p>
     </div>
   );
 }

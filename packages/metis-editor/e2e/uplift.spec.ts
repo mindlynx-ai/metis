@@ -477,6 +477,12 @@ test('account fidelity at 390px', async ({ browser }) => {
 
 test('connect round-trip: Helix sign-in, back connected, entitled palette, disconnect', async ({ page }) => {
   await login(page);
+  // Explicit, and BEFORE the first goto because setTheme is an init script that
+  // only applies to later navigations. The baseline below is named -dark, and
+  // the default theme follows the operating system now, so inheriting it would
+  // render light (Playwright's own default) against a dark baseline. This was
+  // the last screenshot in the file relying on that inheritance.
+  await setTheme(page, 'dark');
   await page.goto('http://127.0.0.1:4180/account');
   await page.getByRole('button', { name: 'Connect your Helix account' }).click();
 

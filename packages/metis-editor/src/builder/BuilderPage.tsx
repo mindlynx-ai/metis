@@ -16,8 +16,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { ReactFlowProvider } from '@xyflow/react';
-import { io } from 'socket.io-client';
-import { api, ApiError, getToken, type CatalogueEntry } from '../api.js';
+import { api, ApiError, type CatalogueEntry } from '../api.js';
 import { toast } from '../toast-store.js';
 import { Icon } from '../ui/Icon.js';
 import { useFlow } from '../flow-store.js';
@@ -31,6 +30,7 @@ import { CloudWorkflowModal, DegradedBanner } from './CloudControls.js';
 import { Modal } from './inspector/Modal.js';
 import { statesFromLogs, type NodeRunStatus } from './run-paint.js';
 import { timeAgo } from '../runs/format.js';
+import { joinRoom, onWorkflowEvent } from '../socket.js';
 
 export function BuilderPage() {
   const { workflowId } = useParams();
@@ -84,20 +84,14 @@ export function BuilderPage() {
   // events stream in. The Run button's own 600ms poll still applies on top.
   useEffect(() => {
     if (!workflowId || replayRun) return undefined;
-    const socket = io({
-      path: '/ws/workflows',
-      auth: { token: getToken() ?? '' },
-      transports: ['websocket'],
-    });
-    const join = () => socket.emit('join', { room: `workflow:${workflowId}` });
-    socket.on('connect', join);
-    join();
     const STATUS_BY_EVENT: Record<string, NodeRunStatus> = {
       'workflow.node.started': 'running',
       'workflow.node.completed': 'completed',
       'workflow.node.failed': 'failed',
     };
-    socket.on('workflow-event', (event: { name?: string; nodeId?: string }) => {
+    const leave = joinRoom(`workflow:${workflowId}`);
+    const off = onWorkflowEvent((event) => {
+      if (event.workflowId && event.workflowId !== workflowId) return;
       const status = event.name ? STATUS_BY_EVENT[event.name] : undefined;
       if (status && event.nodeId) {
         setRunStates((current) => ({ ...current, [event.nodeId!]: status }));
@@ -105,7 +99,8 @@ export function BuilderPage() {
       if (event.name === 'workflow.execution.started') setRunStates({});
     });
     return () => {
-      socket.disconnect();
+      off();
+      leave();
     };
   }, [workflowId, replayRun]);
 

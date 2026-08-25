@@ -27,8 +27,9 @@ import { existsSync } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 import { join, extname, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
+import type { Server as HttpServer } from 'node:http';
 import type { FastifyInstance } from 'fastify';
-import { attachSocketHub, handleWebhook, type TriggerService } from '@mindlynx/metis-orchestrator';
+import { attachSocketHub, handleWebhook, type SocketHub, type TriggerService } from '@mindlynx/metis-orchestrator';
 import { TemporalExecutionAdapter } from '@mindlynx/metis-orchestrator';
 import {
   CloudEntitlementsClient,
@@ -138,6 +139,13 @@ export function resolveStaticTarget(
   // both spellings so a caller that passes the raw URL is not silently missed.
   const path = url.startsWith('/') ? url.slice(1) : url;
   if (path === 'api' || path.startsWith('api/')) return { notFound: true };
+  // The socket path, for the same reason. Engine.IO takes the websocket upgrade
+  // off the raw server before Fastify sees it, so this is not what breaks the
+  // socket - it is what makes a broken one unreadable. The polling handshake
+  // carries no file extension, so it fell through to the shell and answered
+  // 200 text/html where an Engine.IO packet was expected; the client then
+  // reports a protocol error rather than "nothing is serving sockets here".
+  if (path === 'ws' || path.startsWith('ws/')) return { notFound: true };
   if (!url) return { file: shell };
   const candidate = resolve(editorDir, url);
   // Checked before the extension test, so an escaping path is refused outright
@@ -294,6 +302,51 @@ export async function buildControlServer(options: ControlServerOptions): Promise
   }
 
   await app.ready();
-  attachSocketHub(app.server, { identity, bus: runtime.bus });
   return app;
+}
+
+/**
+ * Every HTTP server this app is actually listening on.
+ *
+ * Fastify serves `localhost` by binding BOTH loopback addresses: ::1 as the
+ * primary and 127.0.0.1 as a secondary (see `multipleBindings` in
+ * fastify/lib/server.js). It keeps the extras on the instance under
+ * `kServerBindings`, and there is no public accessor.
+ *
+ * That symbol is `Symbol('fastify.serverBindings')`, NOT
+ * `Symbol.for('fastify.serverBindings')` - a private symbol, not a registered
+ * one. Reaching for the registered spelling silently returns undefined, which
+ * is exactly how the first attempt at this fix looked correct and left the
+ * second address with no socket. So it is found by DESCRIPTION instead, and if
+ * a future Fastify renames it we fall back to the primary rather than throwing:
+ * one working stack beats a boot failure.
+ */
+function listeningServers(app: FastifyInstance): HttpServer[] {
+  const holder = app as unknown as Record<symbol, unknown>;
+  const key = Object.getOwnPropertySymbols(holder).find(
+    (symbol) => symbol.description === 'fastify.serverBindings',
+  );
+  const extra = key ? holder[key] : undefined;
+  const secondaries = Array.isArray(extra) ? (extra as HttpServer[]) : [];
+  return [app.server, ...secondaries];
+}
+
+/**
+ * Start the run-status WebSocket. Call AFTER `listen()`.
+ *
+ * After, because the secondary bindings do not exist until then - and it was
+ * called before, from inside buildControlServer, so the socket only ever
+ * existed on one of the two loopback addresses. Whichever one the browser did
+ * not choose got working HTTP and a dead upgrade.
+ *
+ * @returns the hub, so the caller can close it and release the bus subscription.
+ */
+export async function attachRealtime(
+  app: FastifyInstance,
+  runtime: MetisRuntime,
+): Promise<SocketHub> {
+  return attachSocketHub(listeningServers(app), {
+    identity: await runtime.identity,
+    bus: runtime.bus,
+  });
 }

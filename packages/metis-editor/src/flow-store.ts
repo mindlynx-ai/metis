@@ -51,6 +51,8 @@ export interface FlowState {
   moveNode(nodeId: string, position: { x: number; y: number }): void;
   applyLayout(positions: { id: string; position: { x: number; y: number } }[]): void;
   connect(input: { source: string; target: string; sourceHandle?: string | null }): void;
+  /** Unlink two steps, keeping both. The opposite of connect. */
+  removeEdge(edgeId: string): void;
   removeNode(nodeId: string): void;
   select(nodeId?: string): void;
   updateConfig(nodeId: string, config: Record<string, unknown>): void;
@@ -181,6 +183,17 @@ export const useFlow = create<FlowState>((set, get) => ({
         sourceHandle: input.sourceHandle ?? null,
       };
       return { ...state, edges: [...state.edges, edge], dirty: true };
+    });
+  },
+
+  removeEdge(edgeId) {
+    set((state) => {
+      const edges = state.edges.filter((edge) => edge.id !== edgeId);
+      // Nothing matched: leave the state object alone rather than marking the
+      // graph dirty. A Save offered for an edit that did not happen is worse
+      // than no feedback at all.
+      if (edges.length === state.edges.length) return state;
+      return { ...state, edges, dirty: true };
     });
   },
 

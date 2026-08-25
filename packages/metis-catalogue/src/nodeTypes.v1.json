@@ -907,7 +907,8 @@
               "typescript",
               "python"
             ],
-            "default": "typescript"
+            "default": "typescript",
+            "description": "Which language this step is written in. TypeScript (the default) and JavaScript run in a sandbox with no disk or network. Python runs a real interpreter with BOTH, and only works if the operator has enabled it."
           },
           "timeout": {
             "type": "integer",
@@ -936,10 +937,10 @@
         "label": "Code",
         "icon": "terminal",
         "colour": "emerald-500",
-        "description": "Run a sandboxed JavaScript snippet."
+        "description": "Run a snippet of JavaScript, TypeScript or Python."
       },
       "tier": "open",
-      "docs": "## What it is\nRun a JavaScript snippet in a sandbox - the escape hatch when no node fits.\n\n## How it works\nYour code runs sandboxed with a time limit and must `return` a value; that value becomes the step's output for downstream references. `{{...}}` references in the code string are substituted before it runs.\n\n## Gotchas\n- No network or filesystem access - transform data, don't fetch it (use the HTTP/API node to fetch).\n- Keep returns small; outputs ride the workflow state."
+      "docs": "## What it is\nRun a snippet of code - the escape hatch when no other step fits. JavaScript and TypeScript run in a sandbox; Python runs on the machine and is off by default.\n\n## How it works\nYour code must `return` a value (Python: `print` a JSON value as its last line); that value becomes the step's output for downstream references. Whatever you wire into \"Data in\" arrives as `input`. `{{...}}` references in the code string are substituted before it runs.\n\n## Languages\n- **TypeScript** (the default) - types are stripped and the result runs in the sandbox. Type annotations only: a `const enum` or a decorator needs real compilation and is refused with a message saying so.\n- **JavaScript** - the same sandbox, no stripping step.\n- **Python** - a real interpreter, and **NOT sandboxed**. See the gotcha below.\n\n## Gotchas\n- JavaScript and TypeScript have no network or filesystem access - transform data, don't fetch it (use the HTTP/API node to fetch).\n- **Python is not sandboxed.** It runs as whoever runs Metis, with that user's files and network, and is refused entirely unless an operator sets `METIS_PYTHON`. Only the step's timeout applies, enforced by killing the process. Treat authoring a Python step as equivalent to handing out a shell.\n- `Date.now` and `Math.random` are denied in the JavaScript sandbox so a replayed run behaves the same way.\n- Keep returns small; outputs ride the workflow state."
     },
     {
       "type": "sql",

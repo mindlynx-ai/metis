@@ -101,6 +101,10 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # The full unit suite, not just the boot spec. This job used to run one
+      # file, so nothing on Windows ever exercised the code node, the socket hub
+      # or the credential store - and a tester found all three before CI did.
+      - run: npm test
       - run: npx vitest run packages/metis-cli/src/temporal/__tests__/boot.e2e.spec.ts
 
   compose-boot:

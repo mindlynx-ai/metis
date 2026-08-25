@@ -168,7 +168,39 @@ const SAMPLE_WORKFLOW = {
   },
 };
 
-const GITIGNORE = ['.metis/', 'node_modules/', '*.log', ''].join('\n');
+const GITIGNORE = ['.metis/', 'node_modules/', '*.log', '.env', ''].join('\n');
+
+/**
+ * The project's settings file.
+ *
+ * Scaffolded EMPTY of a secret on purpose. Metis refuses to serve on its
+ * published default, so a first boot stops and says exactly what to change -
+ * which is the right first experience. Writing a working secret here would mean
+ * every scaffolded project shared one that is printed in this repository.
+ *
+ * A file rather than a documented `export` line, because `export` is bash-only:
+ * a Windows reader following the old README got a refusal that read like a
+ * broken CLI.
+ */
+const ENV_FILE = [
+  '# Metis reads this automatically, on every platform. No `export` (bash) or',
+  '# `$env:` (PowerShell) needed. A real environment variable still wins over',
+  '# anything here, so you can override one value for a single command.',
+  '#',
+  '# This file is git-ignored. Keep real secrets out of version control.',
+  '',
+  '# REQUIRED. Metis will not start until this is something other than the',
+  '# published default. Pick your own.',
+  'METIS_ADMIN_SECRET=',
+  '',
+  '# Attach to a Temporal you already run instead of Metis managing its own.',
+  '# METIS_TEMPORAL_ADDRESS=127.0.0.1:7233',
+  '',
+  '# Run Python code steps with a real interpreter. Unlike JavaScript steps,',
+  '# Python is NOT sandboxed: it can read this machine and reach the network.',
+  '# METIS_PYTHON=auto',
+  '',
+].join('\n');
 
 export interface ScaffoldResult {
   created: string[];
@@ -201,6 +233,7 @@ export function scaffoldProject(cwd: string): ScaffoldResult {
     'metis.config.json',
   );
   writeIfAbsent(join(cwd, '.gitignore'), GITIGNORE, result, '.gitignore');
+  writeIfAbsent(join(cwd, '.env'), ENV_FILE, result, '.env');
   writeIfAbsent(
     join(cwd, 'workflows', 'hello.json'),
     `${JSON.stringify(SAMPLE_WORKFLOW, null, 2)}\n`,

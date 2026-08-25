@@ -22,14 +22,23 @@
  */
 import { proxyActivities, sleep } from '@temporalio/workflow';
 import { getWaitTimeMs } from '../nodes/waituntil.js';
-import { getAvailableNodes, isDone, sourcesOf } from './graph.js';
+import {
+  applySwitchPartition,
+  BRANCH_NODE_TYPES,
+  getAvailableNodes,
+  isDone,
+  sourcesOf,
+} from './graph.js';
+import { buildExecuteRequest } from './execute-request.js';
 import { ENGINE_ACTIVITY_RETRY } from '../types.js';
 import type {
   EngineActivities,
+  ExecuteNodeResult,
   HelixApiWorkflowResult,
   HelixWorkflowInput,
   NodeStateEntry,
   RuntimeNode,
+  SwitchNodeOutput,
 } from '../types.js';
 
 const activities = proxyActivities<EngineActivities>({
@@ -70,14 +79,18 @@ export async function helixApiWorkflow(input: HelixWorkflowInput): Promise<Helix
       const waitMs = getWaitTimeMs(node.config, Date.now());
       if (waitMs > 0) await sleep(waitMs);
     }
-    const result = await activities.executeNode({
-      tenantId: input.tenantId,
-      workflowId: input.workflowId,
-      executionId: input.executionId,
-      node: { id: node.id, type: node.type, version: node.version, config: node.config },
-      states,
-      sequence,
-    });
+    // The SAME request builder helixWorkflow uses. Hand-rolling it here left
+    // out four things a node needs and nothing said so: the run input (a code
+    // node saw `input` as null, and a branch had nothing to test), the outgoing
+    // targets (so a switch selected a branch and then orphaned NOTHING, and
+    // every path below it ran), a merge node's sources, and the per-node retry
+    // policy and cloud routing.
+    const nodeType = node.type.toLowerCase();
+    const isBranch = BRANCH_NODE_TYPES.has(nodeType);
+    const result = await activities.executeNode(
+      buildExecuteRequest(input, states, nodes, edges, node, nodeType, isBranch, sequence),
+    );
+    if (isBranch) await reportBranchPartition(node, edges, result);
     if (result.outcome !== 'completed') {
       // Fail-fast, including unimplemented (the origin api walker
       // treats a 501 as terminal).
@@ -90,6 +103,41 @@ export async function helixApiWorkflow(input: HelixWorkflowInput): Promise<Helix
       nodeId: node.id,
       stateId: String(sequence),
       stateData: { status: 200, data: result.output },
+    });
+  }
+
+  /**
+   * Orphan the branches a branch node did not take, so the walker skips them
+   * (`isDone` already counts Orphaned, so no other guard changes). A node this
+   * edition cannot run took NONE of them, the same refusal helixWorkflow makes:
+   * an approval that could not be evaluated must not open every path below it.
+   */
+  async function reportBranchPartition(
+    node: RuntimeNode,
+    graphEdges: typeof edges,
+    result: ExecuteNodeResult,
+  ): Promise<void> {
+    let partition: SwitchNodeOutput | undefined;
+    if (result.outcome === 'completed') partition = result.output as SwitchNodeOutput;
+    else if (result.outcome === 'unimplemented') {
+      partition = {
+        selectedSources: [],
+        selectedTargetIds: [],
+        orphanedTargetIds: graphEdges
+          .filter((edge) => edge.source === node.id)
+          .map((edge) => edge.target),
+      };
+    }
+    if (!partition) return;
+    const orphanedNow = applySwitchPartition(node.id, partition, nodes, graphEdges);
+    if (orphanedNow.length === 0) return;
+    sequence += 1;
+    await activities.markNodesOrphaned({
+      tenantId: input.tenantId,
+      workflowId: input.workflowId,
+      executionId: input.executionId,
+      nodeIds: orphanedNow,
+      sequence,
     });
   }
 
@@ -131,7 +179,16 @@ export async function helixApiWorkflow(input: HelixWorkflowInput): Promise<Helix
   // or the Helix data.config shape), not the raw definition where config may
   // sit under data.config and be missed.
   const apiend = nodes.find((node) => node.type.toLowerCase() === 'apiend');
-  const sourceEdge = edges.find((edge) => edge.target === apiend?.id);
+  // Which upstream node answers, when apiend does not name one. The one that
+  // actually RAN, not merely the first edge drawn into it: a branch above means
+  // several nodes are wired here and only one of them is live, so first-edge
+  // order decided the response and a graph whose losing branch happened to be
+  // drawn first answered null. An unbranched graph has exactly one live source,
+  // so this is the same answer it always gave.
+  const intoEnd = edges.filter((edge) => edge.target === apiend?.id);
+  const ranSource = (edge: { source: string }): boolean =>
+    nodes.find((candidate) => candidate.id === edge.source)?.nodeStatus === 'Complete';
+  const sourceEdge = intoEnd.find(ranSource) ?? intoEnd[0];
   const built = await activities.buildApiResponse({
     tenantId: input.tenantId,
     workflowId: input.workflowId,

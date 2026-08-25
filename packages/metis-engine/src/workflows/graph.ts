@@ -144,6 +144,14 @@ export function cascadeOrphan(
  * the one dead source however Complete it reads; every other source has to be
  * dead in its own right before a target loses its last live path.
  */
+/**
+ * The node types that PARTITION their outgoing edges rather than firing all of
+ * them. Shared, because both walkers have to agree: a walker that does not know
+ * a node is a branch hands it no targets, and a branch with no targets orphans
+ * nothing - so every path below it runs.
+ */
+export const BRANCH_NODE_TYPES = new Set(['switch', 'logic', 'filter', 'comparedatasets', 'approval']);
+
 export function applySwitchPartition(
   branchNodeId: string,
   partition: SwitchNodeOutput,

@@ -34,7 +34,15 @@
 import { condition, defineSignal, executeChild, proxyActivities, setHandler, workflowInfo } from '@temporalio/workflow';
 import { getWaitTimeMs } from '../nodes/waituntil.js';
 import { LOOP_CHILD_OUTPUT_BYTES, LOOP_RESULTS_BYTES, type LoopPlan } from '../nodes/loop.js';
-import { applySwitchPartition, getAvailableNodes, isDone, loopBodyIds, signalTarget, sourcesOf } from './graph.js';
+import {
+  applySwitchPartition,
+  BRANCH_NODE_TYPES,
+  getAvailableNodes,
+  isDone,
+  loopBodyIds,
+  signalTarget,
+  sourcesOf,
+} from './graph.js';
 import { awaitCloudJob } from './cloud-park.js';
 import { settleDecisions } from './decision-park.js';
 import { buildExecuteRequest } from './execute-request.js';
@@ -80,7 +88,7 @@ export const helixCancelSignal = defineSignal<[HelixCancelSignalPayload]>('helix
 
 const TRIGGER_CONFIG_TYPES = new Set(['webhookconfig', 'scheduleconfig', 'apiconfig']);
 // Branch nodes: their activity result carries selected/orphaned targets.
-const BRANCH_NODE_TYPES = new Set(['switch', 'logic', 'filter', 'comparedatasets', 'approval']);
+
 
 /**
  * ponytail: loop bodies never run in the parent walk - each iteration executes

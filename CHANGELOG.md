@@ -155,6 +155,20 @@ Five of these change behaviour you may be relying on; they are marked
 
 ### Fixed
 
+- **An API workflow ran EVERY branch of a switch, and could answer from the one
+  it did not take.** `helixApiWorkflow` hand-built its `executeNode` request
+  instead of using the builder `helixWorkflow` shares, and left four things off
+  it. Without `targets` a branch node selected a path and then orphaned nothing,
+  so both sides of a decision ran - in a synchronous API endpoint that means
+  both sides send the mail or take the payment. Without `inputData` a code step
+  saw `input` as `null`, though the same step reached by a webhook received the
+  payload. Merge nodes lost their sources, and per-node retry policy and cloud
+  routing were ignored. Separately, API End answered from the FIRST edge drawn
+  into it rather than the branch that ran, so a graph whose losing branch
+  happened to be drawn first returned null. Both walkers now share one request
+  builder and one branch-type set, the API walker orphans the paths a branch did
+  not take (recording the same `workflow.node.orphaned` event), and API End
+  answers from the source that completed.
 - **The Data node's table picker kept the schema (breaking a silent wrong
   answer).** The connection reports every table as name AND schema, and the
   handler has always honoured `config.schema` - but the picker mapped the list

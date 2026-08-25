@@ -38,6 +38,9 @@ const TASK_QUEUE = 'metis-api-spec';
 const CFG = 'node-71aaaaaa-1111-4222-8333-444444444444';
 const WORK = 'node-72bbbbbb-1111-4222-8333-444444444444';
 const END = 'node-73cccccc-1111-4222-8333-444444444444';
+const SW = 'node-75eeeeee-1111-4222-8333-444444444444';
+const TAKEN = 'node-76ffffff-1111-4222-8333-444444444444';
+const NOTTAKEN = 'node-77aaaaaa-1111-4222-8333-444444444444';
 const SLOW = 'node-74dddddd-1111-4222-8333-444444444444';
 
 describe('helixApiWorkflow and start-time validation', () => {
@@ -56,6 +59,16 @@ describe('helixApiWorkflow and start-time validation', () => {
     const nodes = new NodeHandlerRegistry();
     nodes.registerNodeHandler('echo', (ctx) =>
       Promise.resolve({ status: 200, message: 'ok', nodeData: { data: { echoed: ctx.nodeRef.config } } }),
+    );
+    // Registered as `code` on purpose: buildExecuteRequest hands the run input
+    // to branch nodes and code nodes only, so this is the type that can report
+    // whether the request body arrived.
+    nodes.registerNodeHandler('code', (ctx) =>
+      Promise.resolve({
+        status: 200,
+        message: 'ok',
+        nodeData: { data: { sawInput: ctx.inputData ?? null, mark: ctx.nodeRef.config.mark } },
+      }),
     );
     worker = await Worker.create({
       connection: env.nativeConnection,
@@ -207,6 +220,72 @@ describe('helixApiWorkflow and start-time validation', () => {
     expect(result.status).toBe('completed');
     expect(result.response).toEqual({ picked: 'mapped-me' });
   }, 60_000);
+
+  it('hands the request body to a code node as the run input', async () => {
+    // It did not. helixApiWorkflow hand-built its executeNode request and left
+    // `inputData` off, so `input` inside a code step was null for every API
+    // workflow ever run - while the same step reached by a webhook got it.
+    const { result } = await execute(
+      'helixApiWorkflow',
+      {
+        nodes: [
+          { id: CFG, type: 'apiconfig', config: {} },
+          { id: WORK, type: 'code', config: {} },
+          { id: END, type: 'apiend', config: { responseType: 'sourcedata' } },
+        ],
+        edges: [
+          { source: CFG, target: WORK },
+          { source: WORK, target: END },
+        ],
+      },
+      { input: { qty: 3 } },
+    );
+    expect(result.status).toBe('completed');
+    expect((result.response as { sawInput: unknown }).sawInput).toEqual({ qty: 3 });
+  }, 60_000);
+
+  it('takes ONE branch of a switch, and answers from the branch that ran', async () => {
+    // Two faults met here. Without `targets` the switch chose a branch and then
+    // orphaned nothing, so BOTH paths ran - in an API workflow that means both
+    // sides of a decision send the mail or take the payment. And apiend read
+    // the FIRST edge drawn into it rather than the one that ran, so the
+    // response could come from the branch that did not happen.
+    const branch = {
+      switchOptions: [
+        {
+          id: 'branch-1',
+          name: 'big',
+          conditions: [{ property: `${'{{'}${CFG}.data.amount${'}}'}`, checkValue: 100, checkOperator: '>' }],
+        },
+      ],
+    };
+    const graph = {
+      nodes: [
+        { id: CFG, type: 'apiconfig', config: {} },
+        { id: SW, type: 'switch', config: branch },
+        { id: TAKEN, type: 'code', config: { mark: 'BIG' } },
+        { id: NOTTAKEN, type: 'code', config: { mark: 'SMALL' } },
+        { id: END, type: 'apiend', config: { responseType: 'sourcedata' } },
+      ],
+      edges: [
+        { source: CFG, target: SW },
+        { source: SW, target: TAKEN, sourceHandle: 'source-branch-1' },
+        { source: SW, target: NOTTAKEN, sourceHandle: 'source-default' },
+        { source: TAKEN, target: END },
+        { source: NOTTAKEN, target: END },
+      ],
+    };
+
+    const big = await execute('helixApiWorkflow', graph, { input: { amount: 500 } });
+    expect(big.result.status).toBe('completed');
+    expect((big.result.response as { mark: string }).mark).toBe('BIG');
+
+    const small = await execute('helixApiWorkflow', graph, { input: { amount: 5 } });
+    expect(small.result.status).toBe('completed');
+    // The default branch, and the response comes from it - not from the BIG
+    // node whose edge into apiend happens to be drawn first.
+    expect((small.result.response as { mark: string }).mark).toBe('SMALL');
+  }, 90_000);
 
   it('fails cleanly when the bounded deadline is exceeded', async () => {
     const { executionId, result } = await execute(

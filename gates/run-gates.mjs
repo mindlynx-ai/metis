@@ -19,6 +19,7 @@ import { runCatalogueTierGate } from './gate3-catalogue-tier.mjs';
 import { runIdentifierScanGate } from './gate4-identifier-scan.mjs';
 import { runStandaloneBootGate } from './gate5-standalone-boot.mjs';
 import { runDocAllowlistGate } from './gate6-doc-allowlist.mjs';
+import { runGeneratedDocsGate } from './gate7-generated-docs.mjs';
 
 const GATES = [
   { id: 1, name: 'module boundary', run: runModuleBoundaryGate },
@@ -27,6 +28,7 @@ const GATES = [
   { id: 4, name: 'identifier scan', run: runIdentifierScanGate },
   { id: 5, name: 'standalone boot topology', run: runStandaloneBootGate },
   { id: 6, name: 'doc allowlist', run: runDocAllowlistGate },
+  { id: 7, name: 'generated node docs', run: runGeneratedDocsGate },
 ];
 
 const root = process.cwd();

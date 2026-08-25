@@ -22,8 +22,8 @@ Your code must `return` a value (Python: `print` a JSON value as its last line);
 ## Configuration reference
 
 - `inputData` - The data this step transforms. Reference an earlier step, e.g. {{step.data.rows}} for a database read. It arrives in your code as `input`. Leave empty for a step that needs no input.
-- `code` (required) - JavaScript that returns this step's output. Whatever you wire into "Data in" arrives as the variable `input`; `return` the shape you want to pass on.
-- `language` - Which language this step is written in. TypeScript (the default) and JavaScript run in a sandbox with no disk or network. Python runs a real interpreter with BOTH, and only works if the operator has enabled it.
+- `code` (required) - The code this step runs. Whatever you wire into "Data in" arrives as `input`. JavaScript and TypeScript must `return` the shape you want to pass on; Python must `print` a JSON value as its last line.
+- `language` (required) - TypeScript (the default) and JavaScript run in a sandbox with no disk and no network. Python runs a real interpreter that has BOTH, and only works if your operator has enabled it - choose it only for code you would be happy to run on this machine yourself.
 - `timeout` - Execution timeout in milliseconds.
 - `script` - DEPRECATED: use `code` instead. Backward-compatible alias for existing workflows.
 

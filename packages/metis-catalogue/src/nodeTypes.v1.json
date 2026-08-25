@@ -888,7 +888,8 @@
       "configSchema": {
         "type": "object",
         "required": [
-          "code"
+          "code",
+          "language"
         ],
         "properties": {
           "inputData": {
@@ -898,7 +899,8 @@
           },
           "code": {
             "type": "string",
-            "description": "JavaScript that returns this step's output. Whatever you wire into \"Data in\" arrives as the variable `input`; `return` the shape you want to pass on."
+            "description": "The code this step runs. Whatever you wire into \"Data in\" arrives as `input`. JavaScript and TypeScript must `return` the shape you want to pass on; Python must `print` a JSON value as its last line.",
+            "title": "Code"
           },
           "language": {
             "type": "string",
@@ -908,14 +910,16 @@
               "python"
             ],
             "default": "typescript",
-            "description": "Which language this step is written in. TypeScript (the default) and JavaScript run in a sandbox with no disk or network. Python runs a real interpreter with BOTH, and only works if the operator has enabled it."
+            "description": "TypeScript (the default) and JavaScript run in a sandbox with no disk and no network. Python runs a real interpreter that has BOTH, and only works if your operator has enabled it - choose it only for code you would be happy to run on this machine yourself.",
+            "title": "Language"
           },
           "timeout": {
             "type": "integer",
             "minimum": 1000,
             "maximum": 300000,
             "default": 30000,
-            "description": "Execution timeout in milliseconds."
+            "description": "Execution timeout in milliseconds.",
+            "title": "Time limit"
           },
           "script": {
             "type": "string",

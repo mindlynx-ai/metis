@@ -31,10 +31,10 @@ describe('editorLanguageFor', () => {
     expect(editorLanguageFor('code', 'textarea', {})).toBe('javascript');
   });
 
-  it('highlights a step saved as typescript as javascript', () => {
-    // TypeScript is gone from the picker but old steps still run, and Metis
-    // strips the types anyway. Highlighting it as JavaScript is honest: that is
-    // what actually executes.
+  it('falls back to javascript for a language Metis no longer runs', () => {
+    // TypeScript is gone entirely. The step will be refused by name at run
+    // time; colouring it as JavaScript is the least misleading thing the editor
+    // can do in the meantime.
     expect(editorLanguageFor('code', 'textarea', { language: 'typescript' })).toBe('javascript');
   });
 

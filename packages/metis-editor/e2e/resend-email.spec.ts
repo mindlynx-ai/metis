@@ -57,7 +57,7 @@ test('a Resend node shows typed From / To / Subject / Body fields and persists t
   await expect(inspector.locator('[data-field="param-subject"] label')).toContainText('Subject');
   await expect(inspector.locator('[data-field="param-html"] label')).toContainText('Body');
   // The body is a code editor (type: text); the rest are single-line inputs.
-  await expect(inspector.locator('[data-field="param-html"] .cm-content')).toBeVisible();
+  await expect(inspector.locator('[data-field="param-html"] .monaco-editor')).toBeVisible();
   await expect(inspector.locator('[data-field="param-to"] input')).toBeVisible();
 
   // Fill the email and persist it.

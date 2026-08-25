@@ -21,8 +21,8 @@
  * stubs execution - a stubbed run cannot produce a JavaScript syntax error, so
  * asserting a marked line here would prove nothing.
  *
- * Driven in a browser because none of it can be unit-tested: CodeMirror needs a
- * DOM and this repository's unit suite ships none. The pure parts that CAN be
+ * Driven in a browser because none of it can be unit-tested: Monaco reaches for
+ * `window` at import time and this repository's unit suite ships no DOM. The pure parts that CAN be
  * tested without one - which grammar a field gets, which line an error blames,
  * who owns the insert handle - have their own specs.
  */
@@ -44,10 +44,16 @@ test('the editor replaces the textarea and shows line numbers', async ({ page })
   await page.locator('.metis-node').first().click();
 
   const field = page.locator('[data-field="code"]');
-  await expect(field.locator('.cm-content')).toBeVisible();
-  await expect(field.locator('.cm-gutters')).toBeVisible();
-  // The thing it replaced must be gone, or both would be editing the same value.
-  await expect(field.locator('textarea')).toHaveCount(0);
+  await expect(field.locator('.monaco-editor')).toBeVisible();
+  await expect(field.locator('.margin-view-overlays')).toBeVisible();
+
+  // Monaco DOES have a textarea - a hidden `.ime-text-area` for keyboard and
+  // IME - and it is exactly why the variable palette needs a registered handle
+  // rather than the DOM insert that serves ordinary fields: it would pass an
+  // `instanceof HTMLTextAreaElement` check and then swallow the insert, because
+  // the model is the source of truth and that textarea is not. What must NOT
+  // exist is a plain textarea holding the value: two things editing one field.
+  await expect(field.locator('textarea:not(.ime-text-area)')).toHaveCount(0);
 });
 
 test('the workbench holds what it receives, the code, a run and what it passes on', async ({

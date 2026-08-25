@@ -40,7 +40,7 @@ import {
 import type { WorkflowStore } from '@mindlynx/metis-data-gateway';
 import { buildCoreServer, type UpliftDeps } from '@mindlynx/metis-core';
 import { ScheduleService } from '@mindlynx/metis-orchestrator';
-import { DefaultConnectionTester, buildDataSources } from '@mindlynx/metis-nodes';
+import { checkSyntax, DefaultConnectionTester, buildDataSources } from '@mindlynx/metis-nodes';
 import { METIS_TASK_QUEUE } from '@mindlynx/metis-engine';
 import { TENANT, type MetisRuntime } from './runtime.js';
 
@@ -156,12 +156,18 @@ export function resolveStaticTarget(
   return exists(candidate) ? { file: candidate } : { notFound: true };
 }
 
-const CONTENT_TYPES: Record<string, string> = {
+export const CONTENT_TYPES: Record<string, string> = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json',
   '.woff2': 'font/woff2',
+  // Monaco ships its icon font as a .ttf. Without this it still served - the
+  // file is there - but as application/octet-stream, which is undefined
+  // behaviour for @font-face rather than a clean failure.
+  '.ttf': 'font/ttf',
+  '.woff': 'font/woff',
+  '.map': 'application/json',
   '.svg': 'image/svg+xml',
   // robots.txt served as application/octet-stream is a file a crawler may
   // decline to read, which would waste the point of shipping one.
@@ -233,6 +239,9 @@ export async function buildControlServer(options: ControlServerOptions): Promise
     credentials: runtime.credentials,
     audit: runtime.audit,
     connectionTester: new DefaultConnectionTester(dataSources),
+    // The editor's Validate button and its live squiggles, answered by the
+    // same V8 and CPython that will run the step.
+    syntaxCheck: checkSyntax,
     dataSources,
     schedules: scheduleService,
     uplift: buildUpliftDeps(runtime),

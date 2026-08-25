@@ -24,7 +24,7 @@
  * exposed through references, so the sandbox cannot reach back.
  */
 import { createHash, randomUUID } from 'node:crypto';
-import { createRequire, stripTypeScriptTypes } from 'node:module';
+import { createRequire } from 'node:module';
 import { JS_PRELUDE, retargetJsPositions } from './error-positions.js';
 import { resolvePythonBinary, runPython } from './python-runner.js';
 import type ivmType from 'isolated-vm';
@@ -43,7 +43,7 @@ const requireModule = createRequire(import.meta.url);
  * of the product was fine. This is the same shape as loadSqlServer() next door.
  */
 let ivmModule: typeof ivmType | undefined;
-function loadIvm(): typeof ivmType {
+export function loadIvm(): typeof ivmType {
   if (ivmModule) return ivmModule;
   try {
     ivmModule = requireModule('isolated-vm') as typeof ivmType;
@@ -172,56 +172,28 @@ interface CodeNodeConfig {
   input?: unknown; // legacy Metis alias for inputData
   timeout?: number; // primary timeout in ms (catalogue + Helix)
   timeoutMs?: number; // legacy alias
-  language?: string; // javascript | typescript | python (catalogue default: typescript)
+  language?: string; // javascript | python (catalogue default: javascript)
 }
 
 /**
  * What the catalogue offers, and what the default is when nobody chose.
  *
- * JavaScript. TypeScript was the default and is no longer offered: Metis only
- * ever STRIPPED the types rather than checking them, so it gave authors the
- * syntax and none of the safety while implying otherwise.
- *
- * The stripping path below stays for steps already saved as `typescript`. They
- * keep running exactly as before; the language simply cannot be chosen again.
+ * JavaScript and Python. TypeScript was once the default and is gone entirely:
+ * Metis only ever STRIPPED the types rather than checking them, so it gave
+ * authors the syntax and none of the safety while implying otherwise. Nothing
+ * is live on it, so there is no compatibility path to keep - a language nobody
+ * can choose is dead weight, and dead weight is where the next bug hides.
  */
 const DEFAULT_LANGUAGE = 'javascript';
 
-/**
- * Strip the types off TypeScript so the isolate can run it.
- *
- * Node's own stripper: types-only syntax erased, nothing transpiled, no
- * dependency. That is the honest limit and it is documented on the node - a
- * `const enum`, a decorator or anything else that needs real code generation is
- * not supported, and says so rather than failing strangely.
- */
-function stripTypes(source: string): string {
-  // The user writes a function BODY, not a module: `return x;` at the top level
-  // is what every code step looks like. Handing that to a parser is a syntax
-  // error before it ever reaches a type, so wrap it, strip, and cut the wrapper
-  // back off.
-  //
-  // Slicing by length is safe BECAUSE the stripper blanks types in place rather
-  // than removing them - `const x: number` becomes `const x         ` - so every
-  // offset after the wrapper is exactly where it started. A test pins that.
-  const prefix = 'async function __metis_wrap() {\n';
-  const suffix = '\n}';
-  // The API is flagged experimental, so Node prints a warning the first time it
-  // is called. That warning is about Node, not about the user's workflow, and
-  // seeing it in a run log reads as "your step is broken". Silence only this
-  // one, only for the duration of the call.
-  const emit = process.emitWarning;
-  process.emitWarning = ((warning: string | Error, ...rest: unknown[]) => {
-    const text = typeof warning === 'string' ? warning : warning.message;
-    if (text.includes('stripTypeScriptTypes')) return;
-    (emit as (...args: unknown[]) => void)(warning, ...rest);
-  }) as typeof process.emitWarning;
-  try {
-    const stripped = stripTypeScriptTypes(prefix + source + suffix);
-    return stripped.slice(prefix.length, stripped.length - suffix.length);
-  } finally {
-    process.emitWarning = emit;
-  }
+interface CodeNodeConfig {
+  code?: string;
+  script?: string; // catalogue alias for `code`
+  inputData?: unknown; // the resolved input payload (Helix key)
+  input?: unknown; // legacy Metis alias for inputData
+  timeout?: number; // primary timeout in ms (catalogue + Helix)
+  timeoutMs?: number; // legacy alias
+  language?: string; // javascript | python (catalogue default: javascript)
 }
 
 /**
@@ -287,28 +259,16 @@ export function createCodeNodeHandler(): NodeHandler {
       return runPythonStep(ctx, code, inputPayload, timeoutMs);
     }
 
-    let source = code;
-    if (language === 'typescript') {
-      try {
-        source = stripTypes(code);
-      } catch (error) {
-        return {
-          status: 500,
-          message: `this step will not parse as TypeScript: ${
-            error instanceof Error ? error.message : String(error)
-          }`,
-        };
-      }
-    } else if (language !== 'javascript') {
+    if (language !== 'javascript') {
       // Named, not ignored. Running an unknown language as JavaScript is how
       // `python` silently became JavaScript in the first place.
       return {
         status: 500,
-        message: `this step is set to "${language}", which Metis cannot run. Choose javascript, typescript or python.`,
+        message: `this step is set to "${language}", which Metis cannot run. Choose javascript or python.`,
       };
     }
 
-    const result = await runUserCode(source, inputPayload, timeoutMs);
+    const result = await runUserCode(code, inputPayload, timeoutMs);
     if (result.status === 'ok') {
       return { status: 200, message: 'ok', nodeData: stateEnvelope(ctx.nodeRef.id, ctx.nodeRef.type, result.value) };
     }

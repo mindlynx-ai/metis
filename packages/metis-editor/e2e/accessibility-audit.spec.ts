@@ -86,6 +86,36 @@ for (const theme of THEMES) {
   });
 }
 
+for (const theme of THEMES) {
+  test(`the code workbench passes axe including contrast in ${theme}`, async ({ page }) => {
+    await login(page);
+    await page.addInitScript((wanted) => localStorage.setItem('metis-theme', wanted), theme);
+    await page.goto('http://127.0.0.1:4180/workflows/workbench-audit/edit');
+    // Its own surface, and its own scan: a portalled dialog with a focus trap,
+    // an editor that draws its own gutter and squiggles, and a verdict line
+    // that is the only place a syntax error is spelled out. None of that is
+    // inside `.inspector`, so the inspector's audit above never sees it.
+    await addStep(page, /^Code/);
+    await page.locator('.metis-node').first().click();
+    await page.getByRole('button', { name: 'Open the editor' }).click();
+    await expect(page.locator('.modal-wide')).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    await page.waitForTimeout(150);
+
+    const results = await new AxeBuilder({ page })
+      .include('.modal-wide')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21aa'])
+      .analyze();
+    const blocking = results.violations.filter(
+      (violation: { impact?: string | null }) =>
+        violation.impact === 'serious' || violation.impact === 'critical',
+    );
+    expect(
+      blocking.map((violation: { id: string; help: string }) => `${violation.id}: ${violation.help}`),
+    ).toEqual([]);
+  });
+}
+
 test('the builder is operable by keyboard alone: add, configure, save', async ({ page }) => {
   await login(page);
   await page.goto('http://127.0.0.1:4180/workflows/keyboard-flow/edit');

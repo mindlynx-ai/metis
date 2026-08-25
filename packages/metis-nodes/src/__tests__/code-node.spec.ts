@@ -15,7 +15,6 @@
  */
 import { describe, it, expect } from 'vitest';
 import { nodeCtx, nodeOutput } from '@mindlynx/metis-ports';
-import { stripTypeScriptTypes } from 'node:module';
 import { createCodeNodeHandler } from '../code-node.js';
 
 const handler = createCodeNodeHandler();
@@ -99,12 +98,15 @@ describe('code node sandbox', () => {
 });
 
 /**
- * The `language` field. The catalogue has always offered javascript, typescript
- * and python and DEFAULTED to typescript - and the handler never read the field
- * at all, so it ran everything as raw JavaScript. Typed source got a V8
- * SyntaxError and Python ran as JavaScript until it happened to throw. A tester
- * reported it as "the code node is not working", which was exactly right for
- * anyone who trusted the default.
+ * The `language` field. The catalogue offered javascript, typescript and python
+ * and DEFAULTED to typescript - and the handler never read the field at all, so
+ * it ran everything as raw JavaScript. Typed source got a V8 SyntaxError and
+ * Python ran as JavaScript until it happened to throw. A tester reported it as
+ * "the code node is not working", which was exactly right for anyone who
+ * trusted the default.
+ *
+ * TypeScript has since gone entirely: Metis stripped types rather than checking
+ * them, so it offered the syntax and none of the safety.
  */
 describe('the language field', () => {
   const runIn = (language: string, code: string, input?: unknown) =>
@@ -116,16 +118,6 @@ describe('the language field', () => {
     expect(nodeOutput(result)).toBe(8);
   });
 
-  it('runs TYPED source, which is what the default promises', async () => {
-    const result = await runIn(
-      'typescript',
-      'const n: number = input.n as number;\nconst out: { doubled: number } = { doubled: n * 2 };\nreturn out;',
-      { n: 21 },
-    );
-    expect(result.status).toBe(200);
-    expect(nodeOutput(result)).toEqual({ doubled: 42 });
-  });
-
   it('treats an absent language as JavaScript, matching the catalogue default', async () => {
     // The catalogue says default: "javascript". Anything else here would mean
     // the field's stated default and its real behaviour disagree again, which
@@ -135,34 +127,14 @@ describe('the language field', () => {
     expect(nodeOutput(result)).toBe(7);
   });
 
-  it('still runs a step already saved as TypeScript', async () => {
-    // TypeScript is gone from the picker because Metis only ever stripped the
-    // types rather than checking them. Steps authored before that decision must
-    // keep working: removing a language from a menu is not a reason to break
-    // somebody's live workflow.
+  it('refuses TypeScript by name, rather than running it as JavaScript', async () => {
+    // Nothing is live on it, so it is gone rather than quietly stripped. Running
+    // typed source as JavaScript is what the original bug did, and it failed
+    // confusingly instead of saying what was wrong.
     const result = await runIn('typescript', 'const n: number = 21;\nreturn n * 2;');
-    expect(result.status).toBe(200);
-    expect(nodeOutput(result)).toBe(42);
-  });
-
-  it('keeps every offset when it strips, which is what makes the wrapper safe', () => {
-    // stripTypes wraps the body, strips, then slices the wrapper off by LENGTH.
-    // That only works because Node blanks types in place instead of deleting
-    // them. If a future Node ever shortens the output, this fails here rather
-    // than by silently truncating somebody's code.
-    const source = 'const x: number = 1; return x;';
-    const stripped = stripTypeScriptTypes(`async function __w() {\n${source}\n}`);
-    expect(stripped).toHaveLength(`async function __w() {\n${source}\n}`.length);
-    expect(stripped).toContain('const x         = 1;');
-  });
-
-  it('says so when the source needs more than type stripping', async () => {
-    // A const enum is real code generation, not a type annotation. Node's
-    // stripper refuses it, and the node has to explain that rather than
-    // reporting something from deep inside V8.
-    const result = await runIn('typescript', 'const enum E { A = 1 }\nreturn E.A;');
     expect(result.status).toBe(500);
-    expect(result.message).toMatch(/TypeScript/i);
+    expect(result.message).toMatch(/typescript/);
+    expect(result.message).toMatch(/javascript or python/);
   });
 
   it('refuses a language it cannot run, by name', async () => {

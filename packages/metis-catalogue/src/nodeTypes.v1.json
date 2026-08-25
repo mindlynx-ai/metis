@@ -899,7 +899,7 @@
           },
           "code": {
             "type": "string",
-            "description": "The code this step runs. Whatever you wire into \"Data in\" arrives as `input`. JavaScript and TypeScript must `return` the shape you want to pass on; Python must `print` a JSON value as its last line.",
+            "description": "The code this step runs. Whatever you wire into \"Data in\" arrives as `input`. JavaScript must `return` the shape you want to pass on; Python must `print` a JSON value as its last line.",
             "title": "Code"
           },
           "language": {

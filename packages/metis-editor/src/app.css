@@ -5193,21 +5193,36 @@ a.locked-card:hover .upgrade {
   box-shadow: 0 0 0 2px var(--brand-wash);
 }
 
-.code-editor .cm-editor {
-  height: 100%;
+/* Monaco paints its own background, so the container's job is only the frame
+   and the clipping. */
+.code-editor .monaco-editor,
+.code-editor .monaco-editor .overflow-guard {
+  border-radius: var(--radius-md);
 }
 
-/* The line the last run failed on. Marked in both the gutter and the line so it
-   is findable whichever half you are looking at, and cleared the moment that
-   line is edited - a stale marker is the same species of lie as a wrong line
-   number. */
-.code-editor .cm-line.cm-error-line {
-  background: color-mix(in srgb, var(--danger-text) 12%, transparent);
+/* The squiggle Monaco draws for our markers, in the product's own error colour
+   rather than its default red. */
+.code-editor .squiggly-error {
+  border-bottom: 2px dotted var(--danger-text);
+  background: color-mix(in srgb, var(--danger-text) 10%, transparent);
 }
 
-.code-editor .cm-gutterElement.cm-error-gutter {
+/* Validate, beside Run. */
+.workbench-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.check-ok {
+  color: var(--success-text, var(--text-muted));
+  font-size: var(--text-sm);
+}
+
+.check-bad {
   color: var(--danger-text);
-  font-weight: 600;
+  font-size: var(--text-sm);
 }
 
 /* The wide modal. 520px is right for a confirm dialog and useless for code. */

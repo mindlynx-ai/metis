@@ -17,6 +17,10 @@
 // a real browser by variables.spec.ts; the pure cursor maths is unit-tested
 // here so it needs no DOM environment (the editor suite ships none).
 import { describe, it, expect, afterEach } from 'vitest';
+// isReferenceTarget is not tested here: it needs HTMLTextAreaElement, and this
+// suite has no DOM. Its Monaco exclusion is proven end to end by the chip
+// insert in code-workbench.spec.ts, which would land in the wrong place - or
+// nowhere - if the guard claimed Monaco's hidden textarea.
 import {
   activeInsertHandle,
   computeInsertion,
@@ -45,9 +49,9 @@ describe('computeInsertion', () => {
  * The editor's route in.
  *
  * The DOM insert works by writing a native `value` setter and firing a
- * synthetic `input` event. CodeMirror is a contenteditable with a document
- * model, so that reaches nothing - every `{{...}}` chip would silently fall
- * back to "copied to the clipboard". The editor hands over a real insert
+ * synthetic `input` event. Monaco's value lives in a model, not in an element,
+ * and the only textarea it has is a hidden one for IME - so that insert would
+ * appear to succeed and change nothing. The editor hands over a real insert
  * function for as long as it holds focus instead.
  *
  * Pure registry, no DOM, so it is unit-tested here rather than only in a

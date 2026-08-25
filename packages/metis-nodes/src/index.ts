@@ -15,6 +15,7 @@
  */
 export * from './http-node.js';
 export * from './code-node.js';
+export * from './syntax-check.js';
 export * from './postgres-node.js';
 export * from './postgres-pool.js';
 export * from './sendgrid-node.js';

@@ -59,28 +59,44 @@ test('a sample input reaches the code, and the result comes back beside it', asy
   await expect(page.locator('.test-output')).toContainText('"doubled": 42', { timeout: 20_000 });
 });
 
-test('a failing line is marked in the gutter, and clears when it is edited', async ({ page }) => {
+test('a syntax error is underlined on the line that has it, and Validate agrees', async ({
+  page,
+}) => {
   await login(page);
   await openWorkbench(page);
 
-  // A SYNTAX error, because that is the class that carries a position. The
-  // mistake is on line 3, and line 3 is what must light up - it used to be
-  // reported as line 5, which is why marking anything was pointless before.
+  // The mistake is on line 3. It used to be reported as line 5, which is why
+  // underlining anything would have been pointless before.
   await setEditorValue(page, '.modal', 'const a = 1;\nconst b = 2;\nreturn a b c;');
-  await page.getByRole('button', { name: /Run this step/ }).click();
 
-  const marked = page.locator('.modal .cm-error-line');
-  await expect(marked).toBeVisible({ timeout: 20_000 });
-  await expect(marked).toHaveText('return a b c;');
-  // Visible rather than counted: the editor draws two gutter columns (line
-  // numbers and folding) and the marker lands in both, which is right and not
-  // worth pinning to a number that changes if a gutter is ever added.
-  await expect(page.locator('.modal .cm-error-gutter').first()).toBeVisible();
-  await expect(page.locator('.workbench')).toContainText('line 3');
+  // Live, without pressing anything: the check is debounced and comes from the
+  // real engine, not a parser in the browser.
+  await expect(page.locator('.modal .squiggly-error').first()).toBeVisible({ timeout: 20_000 });
+  await expect(page.locator('.check-bad')).toContainText('Line 3', { timeout: 20_000 });
 
-  // Editing clears it: a marker that outlives the mistake is its own kind of lie.
-  await page.locator('.modal .cm-content').click();
-  await page.keyboard.type(' ');
-  await expect(page.locator('.modal .cm-error-line')).toHaveCount(0);
+  // The marker is on the third line, not merely somewhere.
+  const markedLine = await page.locator('.modal .monaco-editor').evaluate((element) => {
+    const squiggle = element.querySelector('.squiggly-error') as HTMLElement | null;
+    if (!squiggle) return -1;
+    const top = Number.parseInt(squiggle.parentElement?.style.top ?? '-1', 10);
+    const lines = Array.from(element.querySelectorAll<HTMLElement>('.view-line'));
+    const match = lines.find((line) => Number.parseInt(line.style.top ?? '-1', 10) === top);
+    return match ? lines.indexOf(match) + 1 : -1;
+  });
+  expect(markedLine).toBe(3);
+
+  // Fixing it clears the underline, without pressing Validate again.
+  await setEditorValue(page, '.modal', 'const a = 1;\nconst b = 2;\nreturn a + b;');
+  await expect(page.locator('.modal .squiggly-error')).toHaveCount(0, { timeout: 20_000 });
+  await expect(page.locator('.check-ok')).toContainText('Parses', { timeout: 20_000 });
 });
 
+test('Validate answers on demand, and never runs the code', async ({ page }) => {
+  await login(page);
+  await openWorkbench(page);
+
+  // An infinite loop. Validating parses and returns; running would not.
+  await setEditorValue(page, '.modal', 'while (true) {}\nreturn 1;');
+  await page.getByRole('button', { name: 'Validate' }).click();
+  await expect(page.locator('.check-ok')).toContainText('Parses', { timeout: 20_000 });
+});

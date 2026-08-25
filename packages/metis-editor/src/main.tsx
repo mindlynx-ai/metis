@@ -15,8 +15,14 @@
  */
 import { createRoot } from 'react-dom/client';
 import { App } from './App.js';
+import { installMonacoWorkers } from './monaco-workers.js';
 import '../design/tokens.css';
 import './app.css';
+
+// Before anything renders an editor: without this Monaco reaches for a CDN,
+// which is broken on an air-gapped install and an outbound request nobody
+// asked for.
+installMonacoWorkers();
 
 const container = document.getElementById('root');
 if (!container) throw new Error('missing #root element');

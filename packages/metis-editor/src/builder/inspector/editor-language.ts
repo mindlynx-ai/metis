@@ -34,10 +34,6 @@ const BY_NAME: Record<string, EditorLanguage> = {
 const BY_STEP_LANGUAGE: Record<string, EditorLanguage> = {
   javascript: 'javascript',
   python: 'python',
-  // Gone from the picker, still runnable, and Metis strips the types before the
-  // isolate sees them - so JavaScript is what actually executes, and colouring
-  // it as anything else would be a lie about the runtime.
-  typescript: 'javascript',
 };
 
 /**

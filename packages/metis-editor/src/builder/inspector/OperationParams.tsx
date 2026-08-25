@@ -23,41 +23,17 @@
  * owned in local state and committed together into the node's `params` object.
  */
 import { useEffect, useState } from 'react';
-import { type ConnectorDef, type WorkflowNode, type OperationParameter } from '../../api.js';
+import { type ConnectorDef, type WorkflowNode } from '../../api.js';
 import { useFlow } from '../../flow-store.js';
 import { loadConnectors } from './connectors-cache.js';
 import { CodeEditor } from './CodeEditor.js';
+import { paramsFromFields, type Field } from './operation-params.js';
+
+export { paramsFromFields, type Field };
 
 const placeholdersOf = (pathTemplate: string): string[] =>
   [...pathTemplate.matchAll(/\{(\w+)\}/g)].map((match) => match[1] ?? '');
 
-export interface Field {
-  key: string;
-  value: string;
-  /** 'declared' + 'placeholder' fields have a fixed key; 'extra' keys are editable. */
-  kind: 'declared' | 'placeholder' | 'extra';
-  label?: string;
-  type?: OperationParameter['type'];
-  required?: boolean;
-  placeholder?: string;
-  description?: string;
-}
-
-/**
- * What actually gets stored as the node's `params`. A blank box means "not
- * set", never "set to empty": an optional field nobody filled in must not
- * reach the API. Slack answers `limit=` with "must provide a number", so
- * declaring an optional parameter would otherwise break the call for every
- * author who left it alone.
- */
-export function paramsFromFields(fields: Field[]): Record<string, string> {
-  const params: Record<string, string> = {};
-  for (const field of fields) {
-    const key = field.key.trim();
-    if (key !== '' && field.value !== '') params[key] = field.value;
-  }
-  return params;
-}
 
 export function OperationParams({
   node,

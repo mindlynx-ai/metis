@@ -43,6 +43,13 @@ export function isReferenceTarget(
     el instanceof HTMLInputElement && (el.type === 'text' || el.type === 'url');
   if (!isTextInput && !(el instanceof HTMLTextAreaElement)) return false;
   const field = el as HTMLInputElement | HTMLTextAreaElement;
+  // Monaco's hidden IME textarea. It passes the instanceof check above and is
+  // NOT the editor's value - the model is - so writing to it would look like a
+  // successful insert and do nothing. The editor registers a real handle
+  // instead (registerInsertHandle), which insertReference prefers; this is the
+  // belt to that braces, so the DOM path can never claim it even if the
+  // ordering ever changes.
+  if (field.classList.contains('ime-text-area')) return false;
   // Key inputs and the non-config text areas take names/notes, not references.
   // The logic node's field is a ctx.input path, not a {{node}} reference.
   if (field.classList.contains('kv-key') || field.classList.contains('logic-field')) return false;
@@ -75,9 +82,10 @@ export function insertAtCursor(el: HTMLInputElement | HTMLTextAreaElement, text:
  *
  * `insertAtCursor` below works by writing through a native `value` setter and
  * firing a synthetic `input` event. That is exactly right for an `<input>` or a
- * `<textarea>` and reaches nothing at all in CodeMirror, which is a
- * contenteditable over a document model. Without this every `{{...}}` chip on a
- * code, SQL or JSON field would silently degrade to "copied to the clipboard".
+ * `<textarea>` and reaches nothing at all in Monaco, whose value lives in a
+ * model. Worse than nothing: its hidden `.ime-text-area` IS a textarea, so the
+ * write would look like it worked. Without this every `{{...}}` chip on a code,
+ * SQL or JSON field would land nowhere while reporting success.
  *
  * It also fixes the modal, which is the other reason it is a module-level
  * registry rather than a ref on the panel: `insertReference` requires the

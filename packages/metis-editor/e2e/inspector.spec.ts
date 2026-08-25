@@ -51,8 +51,8 @@ test('three differently-shaped entries render from their schemas alone', async (
   await expect(name).toHaveValue('Code');
   // A code editor now, not a textarea: line numbers and highlighting, because a
   // step that reports "line 3" needs a line 3 you can see.
-  await expect(inspector.locator('[data-field="code"] .cm-content')).toBeVisible();
-  await expect(inspector.locator('[data-field="code"] .cm-gutters')).toBeVisible();
+  await expect(inspector.locator('[data-field="code"] .monaco-editor')).toBeVisible();
+  await expect(inspector.locator('[data-field="code"] .margin-view-overlays')).toBeVisible();
 });
 
 test('edits merge live, save and read back exactly', async ({ page }) => {

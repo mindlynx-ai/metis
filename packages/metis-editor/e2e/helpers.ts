@@ -39,43 +39,78 @@ export const addStep = async (page: Page, label: RegExp) => {
 };
 
 /**
- * Type into a code editor field.
+ * Drive a code editor field through Monaco's MODEL, never the keyboard.
  *
- * Every long-form field is CodeMirror now, not a textarea, so `fill()` and
- * `toHaveValue()` do not apply: it is a contenteditable over a document model.
- * One helper rather than six specs each learning that, so the next change to the
- * editor touches this file and nothing else.
- *
- * @param page - the page.
- * @param field - the `data-field` value, or any selector containing the editor.
- * @param text - what to type. Replaces whatever is there.
+ * Typing is not a way to set a value here: Monaco auto-closes brackets and
+ * quotes, so `page.keyboard.type('{"a":"b"}')` arrives as something else
+ * entirely - three specs failed exactly that way when these helpers typed.
+ * `monaco.editor.getEditors()` is the registry Monaco keeps of every editor on
+ * the page (CodeEditor.tsx puts the api on the window); the right one is
+ * whichever owns this field's DOM node. `setValue` fires the same change event
+ * a keystroke does, so React still commits on it.
  */
-export const setEditorValue = async (page: Page, field: string, text: string): Promise<void> => {
+const onEditor = (
+  page: Page,
+  field: string,
+  action: 'get' | 'set' | 'cursor',
+  arg = '',
+): Promise<string> => {
   const selector = field.startsWith('.') || field.startsWith('#') ? field : `[data-field="${field}"]`;
-  const content = page.locator(`${selector} .cm-content`).first();
-  await content.click();
-  // Select-all inside the editor, not the page: the editor owns the selection
-  // and a page-level clear would take the rest of the form with it.
-  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+a' : 'Control+a');
-  await page.keyboard.press('Backspace');
-  if (text !== '') await page.keyboard.type(text);
+  return page
+    .locator(`${selector} .monaco-editor`)
+    .first()
+    .evaluate((element, payload) => {
+      const win = window as unknown as {
+        monaco?: {
+          editor: {
+            getEditors(): {
+              getDomNode(): HTMLElement | null;
+              getValue(): string;
+              setValue(value: string): void;
+              setPosition(at: { lineNumber: number; column: number }): void;
+              getModel(): { getPositionAt(offset: number): { lineNumber: number; column: number } } | null;
+              focus(): void;
+            }[];
+          };
+        };
+      };
+      const editor = (win.monaco?.editor.getEditors() ?? []).find((candidate) => {
+        const dom = candidate.getDomNode();
+        return dom === element || dom?.contains(element) === true;
+      });
+      if (!editor) throw new Error('no Monaco editor owns that field');
+      if (payload.action === 'set') editor.setValue(payload.arg);
+      if (payload.action === 'cursor') {
+        const model = editor.getModel();
+        if (model) editor.setPosition(model.getPositionAt(Number(payload.arg)));
+        editor.focus();
+      }
+      return editor.getValue();
+    }, { action, arg });
 };
 
-/** What a code editor field currently holds. */
-export const editorValue = async (page: Page, field: string): Promise<string> => {
+/** Replace a code editor field's whole value. */
+export const setEditorValue = async (page: Page, field: string, text: string): Promise<void> => {
   const selector = field.startsWith('.') || field.startsWith('#') ? field : `[data-field="${field}"]`;
-  return page.locator(`${selector} .cm-content`).first().innerText();
+  // Click first: the variable palette only offers an insert into a FOCUSED
+  // editor, and specs that set a value then click a chip depend on that.
+  await page.locator(`${selector} .monaco-editor`).first().click();
+  await onEditor(page, field, 'set', text);
+  // React commits on the change event; give it the tick before anything asserts.
+  await page.waitForTimeout(120);
 };
+
+/** What a code editor field currently holds, read from the model. */
+export const editorValue = (page: Page, field: string): Promise<string> =>
+  onEditor(page, field, 'get');
 
 /**
  * Put the caret at a character offset, for tests that then insert a reference.
- * The textarea equivalent was `setSelectionRange`, which a contenteditable has
- * no answer for.
+ * The textarea equivalent was `setSelectionRange`, which Monaco has no answer
+ * for from the outside - but its model converts an offset to a position.
  */
 export const setEditorCursor = async (page: Page, field: string, offset: number): Promise<void> => {
   const selector = field.startsWith('.') || field.startsWith('#') ? field : `[data-field="${field}"]`;
-  const content = page.locator(`${selector} .cm-content`).first();
-  await content.click();
-  await page.keyboard.press(process.platform === 'darwin' ? 'Meta+ArrowUp' : 'Control+Home');
-  for (let i = 0; i < offset; i += 1) await page.keyboard.press('ArrowRight');
+  await page.locator(`${selector} .monaco-editor`).first().click();
+  await onEditor(page, field, 'cursor', String(offset));
 };

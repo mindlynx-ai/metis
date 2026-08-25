@@ -31,7 +31,7 @@
  * drift, and the last thing that drifted was the sample-input box quietly doing
  * nothing at all.
  */
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Modal } from './Modal.js';
 import { CodeEditor } from './CodeEditor.js';
 import { editorLanguageFor } from './editor-language.js';
@@ -43,7 +43,8 @@ import { collectUpstreamVariables } from './upstream-variables.js';
 import { activeInsertHandle } from './insert-reference.js';
 import { toast } from '../../toast-store.js';
 import { useFlow } from '../../flow-store.js';
-import type { CatalogueEntry, WorkflowNode } from '../../api.js';
+import { type CatalogueEntry, type WorkflowNode } from '../../api.js';
+import { validateCode, type SyntaxVerdict } from '../../code-api.js';
 
 /** Which config key holds the source, honouring the deprecated alias. */
 function sourceField(node: WorkflowNode): 'code' | 'script' {
@@ -58,6 +59,19 @@ function stringify(value: unknown): string {
   } catch {
     return String(value);
   }
+}
+
+/**
+ * One statement of where the problem is, not two. The engine's own message
+ * already ends in "[line 3, column 39]" - it has to, because the run path has
+ * no separate line field to read - so prefixing "Line 3:" as well says it
+ * twice. Take the position off the message and lead with it.
+ */
+function verdictText(check: SyntaxVerdict): string {
+  const message = (check.message ?? 'will not parse').replace(/\[line \d+, column \d+\]$/, '').trim();
+  if (check.line === undefined) return message;
+  const at = check.column === undefined ? `Line ${check.line}` : `Line ${check.line}, column ${check.column}`;
+  return `${at}: ${message}`;
 }
 
 export function CodeWorkbench({
@@ -82,9 +96,53 @@ export function CodeWorkbench({
     [node.id, flow.nodes, flow.edges, catalogue],
   );
 
-  // Whatever the last run blamed. The editor clears it on the next keystroke,
-  // so it never outlives the mistake.
-  const errorLine = failingLineOf(test.nodeLog?.error?.message);
+  // Whatever the last run blamed.
+  const runLine = failingLineOf(test.nodeLog?.error?.message);
+  const language = editorLanguageFor(field, 'textarea', node.data?.config);
+
+  // What the engine says about the code as it stands, without running it.
+  const [check, setCheck] = useState<{ ok: boolean; message?: string; line?: number; column?: number }>();
+  const [checking, setChecking] = useState(false);
+
+  const validate = useCallback(
+    async (source: string) => {
+      if (language !== 'javascript' && language !== 'python') return;
+      setChecking(true);
+      try {
+        setCheck(await validateCode(language, source));
+      } catch {
+        // A failed check is not a failed step. Saying nothing beats claiming
+        // somebody's code is broken because a request did not land.
+        setCheck(undefined);
+      } finally {
+        setChecking(false);
+      }
+    },
+    [language],
+  );
+
+  // Live, debounced. Long enough not to ask on every keystroke, short enough to
+  // land before you have moved on.
+  useEffect(() => {
+    if (value.trim() === '') {
+      setCheck(undefined);
+      return undefined;
+    }
+    const timer = setTimeout(() => void validate(value), 700);
+    return () => clearTimeout(timer);
+  }, [value, validate]);
+
+  // A syntax error wins: until it parses, the last run's failure is about code
+  // that no longer exists.
+  const markers = useMemo(() => {
+    if (check && !check.ok && check.line) {
+      return [{ line: check.line, column: check.column, message: check.message ?? 'will not parse' }];
+    }
+    if (runLine) {
+      return [{ line: runLine, message: test.nodeLog?.error?.message ?? 'this line failed' }];
+    }
+    return [];
+  }, [check, runLine, test.nodeLog]);
 
   return (
     <Modal title={`Edit ${node.data?.label ?? 'step'}`} onClose={onClose} wide>
@@ -115,10 +173,10 @@ export function CodeWorkbench({
             ariaLabel="Code"
             value={value}
             onChange={(next) => flow.updateConfigField(node.id, field, next === '' ? undefined : next)}
-            language={editorLanguageFor(field, 'textarea', node.data?.config)}
+            language={language}
             minLines={16}
             maxLines={28}
-            errorLine={errorLine}
+            markers={markers}
           />
         </section>
 
@@ -138,6 +196,21 @@ export function CodeWorkbench({
             aria-label="Sample input JSON"
             onChange={(event) => setInput(event.target.value)}
           />
+          <div className="workbench-actions">
+            <button
+              type="button"
+              className="btn btn-quiet"
+              onClick={() => void validate(value)}
+              disabled={checking || value.trim() === ''}
+            >
+              {checking ? 'Checking' : 'Validate'}
+            </button>
+            {check && (
+              <span className={check.ok ? 'check-ok' : 'check-bad'} role="status">
+                {check.ok ? 'Parses' : verdictText(check)}
+              </span>
+            )}
+          </div>
           <button
             type="button"
             className="btn btn-primary"

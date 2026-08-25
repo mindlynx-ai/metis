@@ -22,7 +22,7 @@
  * optional field alone.
  */
 import { describe, it, expect } from 'vitest';
-import { paramsFromFields, type Field } from '../builder/inspector/OperationParams.js';
+import { paramsFromFields, type Field } from '../builder/inspector/operation-params.js';
 
 const field = (key: string, value: string, kind: Field['kind'] = 'declared'): Field => ({
   key,

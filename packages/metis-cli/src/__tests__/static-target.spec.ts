@@ -22,7 +22,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { join } from 'node:path';
-import { resolveStaticTarget } from '../control-server.js';
+import { CONTENT_TYPES, resolveStaticTarget } from '../control-server.js';
 
 const DIR = '/app/editor';
 const shell = join(DIR, 'index.html');
@@ -159,6 +159,27 @@ describe('resolveStaticTarget and the socket path', () => {
     // 'wsl-guide' is not the socket path. A bare prefix test would eat it.
     expect(resolveStaticTarget(DIR, 'wsl-guide', exists)).toEqual({ file: shell });
     expect(resolveStaticTarget(DIR, 'workflows', exists)).toEqual({ file: shell });
+  });
+});
+
+/**
+ * Content types for what the editor bundle actually emits.
+ *
+ * An unmapped extension does not 404 - the file is there - it is served as
+ * application/octet-stream, which browsers treat as undefined behaviour for a
+ * font rather than a clean failure. Easier to map them than to debug a font
+ * that renders on one machine and not another.
+ */
+describe('CONTENT_TYPES covers what the editor ships', () => {
+  it.each([
+    ['.js', 'text/javascript; charset=utf-8'],
+    ['.css', 'text/css; charset=utf-8'],
+    ['.woff2', 'font/woff2'],
+    ['.ttf', 'font/ttf'],
+    ['.woff', 'font/woff'],
+    ['.map', 'application/json'],
+  ])('serves %s as %s', (extension, type) => {
+    expect(CONTENT_TYPES[extension]).toBe(type);
   });
 });
 

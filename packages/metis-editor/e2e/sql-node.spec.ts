@@ -33,7 +33,7 @@ test('the Data node has a connection picker and a SQL editor that persists', asy
 
   // A connection field (scoped to a data source) and a SQL query editor.
   await expect(inspector.getByText('Connection', { exact: true })).toBeVisible();
-  await expect(inspector.locator('[data-field="dataBuilder"] .cm-content')).toBeVisible();
+  await expect(inspector.locator('[data-field="dataBuilder"] .monaco-editor')).toBeVisible();
   await setEditorValue(page, 'dataBuilder', 'select id, customer, amount from orders order by amount desc');
   await page.getByRole('button', { name: 'Save draft' }).click();
   await expect(page.locator('.toast-success')).toBeVisible();

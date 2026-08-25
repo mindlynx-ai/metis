@@ -131,10 +131,20 @@ Five of these change behaviour you may be relying on; they are marked
 
 - **A real editor for every long-form field.** Code, SQL, HTTP bodies, JSON and
   connector text params were all plain textareas: no line numbers, no
-  highlighting, no indentation, no bracket matching. They are now one CodeMirror
-  widget with a grammar chosen per field. CodeMirror rather than Monaco on the
-  numbers - 93 MB installed against about 5 MB, for a published bundle that grew
-  by 153 KB rather than roughly 4 MB.
+  highlighting, no indentation, no bracket matching. They are now one Monaco
+  widget - the editor from VS Code - with a grammar chosen per field.
+  The published bundle went from 1,076,134 to 3,927,002 bytes. That is the whole
+  cost, and it is far below the 15 MB the `monaco-editor` barrel produces:
+  importing the barrel drags every language FEATURE and each feature's web
+  worker, of which ts.worker alone is 7 MB. Metis imports the core api and four
+  tokenizers, so it pays for colouring and editing and not for browser-side
+  diagnostics it deliberately does not show.
+- **A Validate button, and squiggles as you type.** `POST /api/code/validate`
+  parses without running. It is answered by the same V8 isolate or CPython that
+  will run the step, so it agrees with the runtime - unlike a checker in the
+  browser, which passes `fetch(...)`, refuses top-level `return`, and has
+  nothing to say about Python at all. The button answers on demand; a 700 ms
+  pause in typing asks the same question and underlines the answer.
 - **A workbench for code steps.** "Open the editor" gives a wide window holding
   what the step receives, the code, a sample input, Run, and what it passes on -
   the loop you are actually in, rather than the code in one tab and the result

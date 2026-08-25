@@ -48,6 +48,7 @@ import { registerExecutionLifecycleRoutes } from './execution-lifecycle-routes.j
 import { registerApiWorkflowRoute } from './api-workflow-ingress.js';
 import { registerConnectionRoutes } from './connection-routes.js';
 import { registerDataResourceRoutes } from './data-resource-routes.js';
+import { registerCodeValidateRoutes, type SyntaxCheck } from './code-validate-routes.js';
 import { registerScheduleRoutes, type SchedulesLike } from './schedule-routes.js';
 import { registerTriggerMgmtRoutes, type TriggersPort } from './trigger-mgmt-routes.js';
 import { registerOAuthAuthedRoutes, registerOAuthCallback } from './oauth-routes.js';
@@ -90,6 +91,9 @@ export interface CoreDependencies {
   /** When supplied, the Data node's visual builder can list a connection's
    *  tables/columns through the DataSourcePort (postgres in the open build). */
   dataSources?: DataSourceRegistry;
+  /** Parses a code step without running it. Injected: the checker lives in
+   *  metis-nodes, beside the runners, and core must not depend on it. */
+  syntaxCheck?: SyntaxCheck;
   /** When supplied, Operate can list/pause/resume Temporal Schedules.
    *  Structural (no orchestrator dependency): ScheduleService satisfies it. */
   schedules?: SchedulesLike;
@@ -262,6 +266,9 @@ export function buildCoreServer(deps: CoreDependencies): FastifyInstance {
       if (deps.dataSources) {
         registerDataResourceRoutes(authed, deps.credentials, deps.dataSources);
       }
+    }
+    if (deps.syntaxCheck) {
+      registerCodeValidateRoutes(authed, deps.syntaxCheck);
     }
 
     if (deps.schedules) {

@@ -17,148 +17,137 @@
 /**
  * The one editor every long-form field uses: code, SQL, JSON bodies, HTML.
  *
- * A plain textarea gave none of what writing code needs - no line numbers, no
- * highlighting, no indentation, no bracket matching - and a line number is
- * exactly what an error message hands you.
+ * Monaco, the editor from VS Code. It costs about 4 MB in the bundle and a
+ * large install, and buys editing people already know: multiple cursors, the
+ * command palette, real find and replace, completion for the language's own
+ * built-ins.
  *
- * CodeMirror rather than Monaco, decided on numbers: Monaco is 93 MB installed
- * against roughly 5 MB, in a repository that made a 60 MB SQL driver optional
- * over the same argument. Monaco's headline feature is TypeScript IntelliSense,
- * and Metis strips types rather than checking them, so it would have flagged
- * errors the runtime never enforces.
+ * WHAT IT IS DELIBERATELY NOT DOING, and this is the important part: its
+ * built-in JavaScript diagnostics are OFF. Those are TypeScript's, run in the
+ * browser, against the browser's idea of JavaScript - they pass `fetch(...)`
+ * and `require(...)`, neither of which exists in this sandbox, and they refuse
+ * top-level `return` and `await`, which is how every step here is written. An
+ * editor that disagrees with the runtime teaches people to distrust the
+ * runtime. Errors come from `POST /api/code/validate` instead, which asks the
+ * same V8 and CPython that will run the step. Python has no browser-side
+ * diagnostics at all, so this is also the only way both languages get the same
+ * answer.
  *
  * TWO THINGS TO KNOW BEFORE CHANGING ANYTHING HERE.
  *
- * 1. It is a CONTROLLED component over a `contenteditable`, not an input. The
- *    host owns the string and commits on every keystroke (SetupPanel has no
- *    blur-commit). `value` arriving different from the document means the host
- *    changed it - a different step selected - so the document is replaced;
- *    echoing our own change back would fight the cursor.
- * 2. It is NOT a textarea, so the variable palette's DOM insert cannot reach it
- *    (see insert-reference.ts). It registers an imperative handle while focused
- *    instead. Without that, every `{{...}}` chip silently degrades to "copied to
- *    the clipboard".
+ * 1. It is a CONTROLLED component. The host owns the string and commits on
+ *    every keystroke (there is no blur-commit). A `value` arriving different
+ *    from the model means the host changed it - a different step selected - so
+ *    the model is replaced; echoing our own change back would fight the cursor.
+ * 2. Its focusable element is a hidden textarea Monaco owns. That would PASS
+ *    the variable palette's `isReferenceTarget` check and then swallow the
+ *    insert, because the model is the source of truth and not that textarea. It
+ *    registers an imperative handle instead, and the guard excludes Monaco's
+ *    input explicitly.
  */
 import { useEffect, useRef } from 'react';
-import { EditorState, RangeSet, StateEffect, StateField, type Extension } from '@codemirror/state';
-import {
-  Decoration,
-  EditorView,
-  gutterLineClass,
-  GutterMarker,
-  highlightActiveLine,
-  highlightActiveLineGutter,
-  keymap,
-  lineNumbers,
-  placeholder as cmPlaceholder,
-  type DecorationSet,
-} from '@codemirror/view';
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
-import { bracketMatching, indentOnInput, syntaxHighlighting, defaultHighlightStyle, foldGutter } from '@codemirror/language';
-import { searchKeymap } from '@codemirror/search';
-import { javascript } from '@codemirror/lang-javascript';
-import { python } from '@codemirror/lang-python';
-import { sql } from '@codemirror/lang-sql';
-import { json } from '@codemirror/lang-json';
-import { html } from '@codemirror/lang-html';
+// The CORE api and five tokenizers, not the `monaco-editor` barrel.
+//
+// The barrel pulls in every language FEATURE, and each feature drags its web
+// worker: importing it whole produced a 15 MB build of which 9 MB was
+// ts.worker, css.worker, html.worker and json.worker. Those workers exist to
+// provide diagnostics in the browser - the one thing this editor deliberately
+// does not do, because the browser's idea of JavaScript is not this sandbox's
+// and it has no idea about Python at all. Errors come from the engine.
+//
+// So: the api, and tokenizers for colouring. Nothing that thinks.
+import * as monaco from 'monaco-editor/editor/editor.api';
+import 'monaco-editor/languages/definitions/javascript/register';
+import 'monaco-editor/languages/definitions/python/register';
+import 'monaco-editor/languages/definitions/sql/register';
+import 'monaco-editor/languages/definitions/html/register';
 import { registerInsertHandle } from './insert-reference.js';
 
-/** Which grammar to use. `text` means no grammar, just the editing affordances. */
+// The editor API, on the window, the way the standalone build has always
+// offered it. It is how the end-to-end tests read and set an editor's value:
+// through the MODEL, which is this component's source of truth, rather than
+// through keystrokes. Typing into Monaco is not a way to set a value - it
+// auto-closes brackets and quotes, so `{"a":"b"}` typed character by character
+// arrives as something else entirely. There is nothing private here; it is the
+// same object every Monaco page exposes, and a console handle for anyone
+// debugging a field.
+(globalThis as unknown as { monaco?: typeof monaco }).monaco = monaco;
+
+/** Which grammar to use. `text` means none, just the editing affordances. */
 export type EditorLanguage = 'javascript' | 'python' | 'sql' | 'json' | 'html' | 'text';
 
-function grammarFor(language: EditorLanguage): Extension[] {
-  switch (language) {
-    case 'javascript':
-      return [javascript()];
-    case 'python':
-      return [python()];
-    case 'sql':
-      return [sql()];
-    case 'json':
-      return [json()];
-    case 'html':
-      // autoCloseTags off. It inserts a closing tag as you type the opening
-      // one, so anyone typing complete HTML - which is what an email body is -
-      // ends up with `</p></p>`. Helpful in a page editor, surprising in a
-      // field where people paste markup they already have.
-      return [html({ autoCloseTags: false })];
-    default:
-      return [];
+/** A problem to underline, in the author's own line numbers. */
+export interface EditorMarker {
+  line: number;
+  column?: number;
+  message: string;
+}
+
+const MONACO_LANGUAGE: Record<EditorLanguage, string> = {
+  javascript: 'javascript',
+  python: 'python',
+  sql: 'sql',
+  // JSON coloured by the JavaScript tokenizer. Monaco ships no standalone JSON
+  // tokenizer - it only comes with the language FEATURE and its 400 KB worker,
+  // whose job is the validation we deliberately do not do in the browser. JSON
+  // is a subset of JavaScript's literal syntax, so the colours are right and
+  // the worker is not shipped.
+  json: 'javascript',
+  html: 'html',
+  text: 'plaintext',
+};
+
+/** Ours, not Monaco's: the markers we own must not clobber anything else. */
+const MARKER_OWNER = 'metis';
+
+let configured = false;
+
+/**
+ * One-time theme setup.
+ *
+ * There are no checkers to silence: the language features that would have done
+ * the checking are simply not imported. That is not a saving trick - teaching
+ * TypeScript about this sandbox (no DOM, no require, no fetch, top-level
+ * return and await) is a lot of configuration to arrive somewhere less accurate
+ * than asking the engine, and Python would still have nothing.
+ */
+function configureMonaco(): void {
+  if (configured) return;
+  configured = true;
+
+  // Colours read from the product's own tokens so the editor follows the app.
+  // Monaco needs literal hex, so they are resolved from the document at define
+  // time and redefined whenever the theme changes.
+  for (const [name, base] of [
+    ['metis-light', 'vs'],
+    ['metis-dark', 'vs-dark'],
+  ] as const) {
+    monaco.editor.defineTheme(name, {
+      base,
+      inherit: true,
+      rules: [],
+      colors: {},
+    });
   }
 }
 
-/**
- * Colours come from the product's own tokens rather than a bundled theme, so
- * light and dark follow the app and nothing new has to be kept in step. The
- * token names are read at paint time by the browser, so a theme switch needs no
- * editor rebuild.
- */
-const metisTheme = EditorView.theme({
-  '&': { backgroundColor: 'var(--surface-base)', color: 'var(--text-primary)', fontSize: 'var(--text-sm)' },
-  '.cm-content': { fontFamily: 'var(--font-mono)', padding: '8px 0' },
-  '.cm-gutters': {
-    backgroundColor: 'var(--surface-sunken)',
-    color: 'var(--text-faint)',
-    border: 'none',
-    borderRight: '1px solid var(--border-subtle)',
-  },
-  '.cm-activeLine': { backgroundColor: 'var(--brand-wash)' },
-  '.cm-activeLineGutter': { backgroundColor: 'var(--brand-wash)', color: 'var(--text-muted)' },
-  '.cm-cursor': { borderLeftColor: 'var(--text-primary)' },
-  '&.cm-focused': { outline: 'none' },
-  '.cm-selectionBackground, ::selection': { backgroundColor: 'var(--brand-wash)' },
-  '.cm-scroller': { overflow: 'auto', lineHeight: '1.55' },
-});
-
-/**
- * The failing line, held in editor state so it survives re-renders and moves
- * with the document if lines are inserted above it.
- */
-const setErrorLine = StateEffect.define<number | undefined>();
-
-const errorLineField = StateField.define<number | undefined>({
-  create: () => undefined,
-  update(current, transaction) {
-    for (const effect of transaction.effects) {
-      if (effect.is(setErrorLine)) return effect.value;
-    }
-    // Any edit clears it. A marker that outlives the mistake it describes is
-    // the same species of lie as a line number that is two out.
-    return transaction.docChanged ? undefined : current;
-  },
-});
-
-const errorLineDecoration = Decoration.line({ class: 'cm-error-line' });
-
-const errorLineHighlight = EditorView.decorations.compute([errorLineField], (state) => {
-  const line = state.field(errorLineField);
-  if (!line || line > state.doc.lines) return Decoration.none;
-  return Decoration.set([errorLineDecoration.range(state.doc.line(line).from)]) as DecorationSet;
-});
-
-/** The gutter wants a GutterMarker, not a Decoration - different range set. */
-const errorGutterMarker = new (class extends GutterMarker {
-  elementClass = 'cm-error-gutter';
-})();
-
-const errorGutterClass = gutterLineClass.compute([errorLineField], (state) => {
-  const line = state.field(errorLineField);
-  if (!line || line > state.doc.lines) return RangeSet.empty;
-  return RangeSet.of([errorGutterMarker.range(state.doc.line(line).from)]);
-});
+/** The theme that matches the app right now. */
+function currentTheme(): string {
+  return document.documentElement.dataset.theme === 'dark' ? 'metis-dark' : 'metis-light';
+}
 
 export interface CodeEditorProps {
   value: string;
   onChange: (next: string) => void;
   language?: EditorLanguage;
-  /** Rows of content before it scrolls. Small fields should stay small. */
+  /** Lines of content before it scrolls. Small fields should stay small. */
   minLines?: number;
   maxLines?: number;
   placeholder?: string;
   ariaLabel?: string;
   id?: string;
-  /** 1-based line the last run failed on; cleared as soon as it is edited. */
-  errorLine?: number;
+  /** Problems to underline. Cleared by the host when the code changes. */
+  markers?: EditorMarker[];
 }
 
 export function CodeEditor({
@@ -170,94 +159,119 @@ export function CodeEditor({
   placeholder,
   ariaLabel,
   id,
-  errorLine,
+  markers,
 }: CodeEditorProps) {
   const host = useRef<HTMLDivElement | null>(null);
-  const view = useRef<EditorView | null>(null);
-  // The latest onChange, read from inside CodeMirror's listener. Without this
-  // the extension would close over the first render's callback for ever.
+  const editor = useRef<monaco.editor.IStandaloneCodeEditor | null>(null);
+  // The latest onChange, read from inside Monaco's listener; without this it
+  // would close over the first render's callback for ever.
   const emit = useRef(onChange);
   emit.current = onChange;
 
   useEffect(() => {
     if (!host.current) return undefined;
-    const editor = new EditorView({
-      parent: host.current,
-      state: EditorState.create({
-        doc: value,
-        extensions: [
-          lineNumbers(),
-          errorLineField,
-          errorLineHighlight,
-          errorGutterClass,
-          highlightActiveLineGutter(),
-          highlightActiveLine(),
-          foldGutter(),
-          history(),
-          bracketMatching(),
-          indentOnInput(),
-          syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
-          keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap, indentWithTab]),
-          ...grammarFor(language),
-          metisTheme,
-          EditorView.lineWrapping,
-          ...(placeholder ? [cmPlaceholder(placeholder)] : []),
-          EditorView.contentAttributes.of({
-            ...(ariaLabel ? { 'aria-label': ariaLabel } : {}),
-            ...(id ? { id } : {}),
-          }),
-          EditorView.updateListener.of((update) => {
-            if (update.docChanged) emit.current(update.state.doc.toString());
-          }),
-        ],
-      }),
+    configureMonaco();
+    const created = monaco.editor.create(host.current, {
+      value,
+      language: MONACO_LANGUAGE[language],
+      theme: currentTheme(),
+      automaticLayout: true,
+      minimap: { enabled: false },
+      scrollBeyondLastLine: false,
+      lineNumbers: 'on',
+      folding: true,
+      wordWrap: 'on',
+      fontFamily: 'var(--font-mono)',
+      fontSize: 13,
+      renderLineHighlight: 'line',
+      scrollbar: { alwaysConsumeMouseWheel: false },
+      placeholder,
+      ariaLabel,
     });
-    view.current = editor;
-    return () => {
-      editor.destroy();
-      view.current = null;
+    editor.current = created;
+    const listener = created.onDidChangeModelContent(() => {
+      emit.current(created.getValue());
+    });
+    // Monaco fills its container, so the container has to have a height. Grow
+    // with the content between the two bounds rather than picking one number:
+    // the same widget holds a two-line JSON body and a fifty-line program, and
+    // a fixed height is wrong for one of them.
+    const lineHeight = created.getOption(monaco.editor.EditorOption.lineHeight);
+    const resize = () => {
+      if (!host.current) return;
+      const wanted = created.getContentHeight() + lineHeight;
+      const height = Math.min(Math.max(wanted, minLines * lineHeight), maxLines * lineHeight);
+      host.current.style.height = `${height}px`;
+      created.layout();
     };
-    // Rebuilt only when the GRAMMAR changes - a code step switching language.
-    // `value` is deliberately NOT a dependency: rebuilding the editor on every
-    // keystroke would destroy the cursor. Outside changes are reconciled by the
-    // effect below instead. `placeholder`, `ariaLabel` and `id` are read once at
-    // construction and never change for a given field.
+    const sizeListener = created.onDidContentSizeChange(resize);
+    resize();
+    return () => {
+      sizeListener.dispose();
+      listener.dispose();
+      created.getModel()?.dispose();
+      created.dispose();
+      editor.current = null;
+    };
+    // Rebuilt only when the GRAMMAR changes. `value` is deliberately absent:
+    // rebuilding on every keystroke would destroy the cursor. Outside changes
+    // are reconciled below instead.
   }, [language]);
 
-  // Reconcile an outside change - a different step selected, a reset - without
-  // disturbing the caret while somebody is typing.
+  // Reconcile an outside change without disturbing the caret mid-typing.
   useEffect(() => {
-    const editor = view.current;
-    if (!editor) return;
-    const current = editor.state.doc.toString();
-    if (current === value) return;
-    editor.dispatch({ changes: { from: 0, to: current.length, insert: value } });
+    const live = editor.current;
+    if (!live || live.getValue() === value) return;
+    live.setValue(value);
   }, [value]);
 
-  // Mark whichever line the last run blamed.
+  // Follow the app's theme. Monaco themes are global, so this is a set, not a
+  // rebuild, and every editor on the page follows.
   useEffect(() => {
-    view.current?.dispatch({ effects: setErrorLine.of(errorLine) });
-  }, [errorLine]);
+    const apply = () => monaco.editor.setTheme(currentTheme());
+    apply();
+    const watch = new MutationObserver(apply);
+    watch.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => watch.disconnect();
+  }, []);
 
-  // The variable palette's route in. A contenteditable cannot take the DOM
-  // insert that inputs and textareas do, so hand it a real one for as long as
-  // this editor holds focus.
+  // Underline whatever the engine said was wrong.
   useEffect(() => {
-    const editor = view.current;
-    if (!editor) return undefined;
+    const model = editor.current?.getModel();
+    if (!model) return;
+    monaco.editor.setModelMarkers(
+      model,
+      MARKER_OWNER,
+      (markers ?? []).map((marker) => ({
+        severity: monaco.MarkerSeverity.Error,
+        message: marker.message,
+        startLineNumber: marker.line,
+        endLineNumber: marker.line,
+        startColumn: marker.column ?? 1,
+        // To the end of the line: a parser's column is where it gave up, which
+        // is rarely where the mistake starts, and a one-character squiggle is
+        // easy to miss.
+        endColumn: model.getLineMaxColumn(Math.min(marker.line, model.getLineCount())),
+      })),
+    );
+  }, [markers]);
+
+  // The variable palette's route in. Monaco's own textarea would swallow a DOM
+  // insert, so hand over a real one for as long as this editor holds focus.
+  useEffect(() => {
+    const live = editor.current;
+    if (!live) return undefined;
     const insert = (text: string) => {
-      const { from, to } = editor.state.selection.main;
-      editor.dispatch({ changes: { from, to, insert: text }, selection: { anchor: from + text.length } });
-      editor.focus();
+      const selection = live.getSelection();
+      if (selection) live.executeEdits('metis-insert', [{ range: selection, text, forceMoveMarkers: true }]);
+      live.focus();
     };
-    const claim = () => registerInsertHandle(insert);
-    const release = () => registerInsertHandle(undefined, insert);
-    editor.contentDOM.addEventListener('focusin', claim);
-    editor.contentDOM.addEventListener('focusout', release);
+    const claim = live.onDidFocusEditorText(() => registerInsertHandle(insert));
+    const release = live.onDidBlurEditorText(() => registerInsertHandle(undefined, insert));
     return () => {
-      editor.contentDOM.removeEventListener('focusin', claim);
-      editor.contentDOM.removeEventListener('focusout', release);
-      release();
+      claim.dispose();
+      release.dispose();
+      registerInsertHandle(undefined, insert);
     };
   }, []);
 
@@ -265,11 +279,10 @@ export function CodeEditor({
     <div
       ref={host}
       className="code-editor"
-      style={{
-        // Lines, not pixels: a two-line JSON field should not open as a slab.
-        minHeight: `${minLines * 1.55}em`,
-        maxHeight: `${maxLines * 1.55}em`,
-      }}
+      data-editor-id={id}
+      // Height is set imperatively from the content; this is the first paint
+      // before Monaco has measured anything.
+      style={{ height: `${minLines * 1.5}em` }}
     />
   );
 }

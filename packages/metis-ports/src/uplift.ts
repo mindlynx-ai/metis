@@ -384,7 +384,7 @@ export class CapabilityGatewayClient {
     await this.request(`/v1/jobs/${jobId}/cancel`, { method: 'POST' });
   }
 
-  private async attempt(
+  protected async attempt(
     path: string,
     init: { method?: string; body?: string } | undefined,
     bearer: string | undefined,
@@ -404,7 +404,7 @@ export class CapabilityGatewayClient {
     }
   }
 
-  private async request(path: string, init?: { method?: string; body?: string }): Promise<Response> {
+  protected async request(path: string, init?: { method?: string; body?: string }): Promise<Response> {
     const bearer = await bearerWithin(this.options);
     let response = await this.attempt(path, init, bearer);
     // 401 with a bearer attached: force ONE refresh and retry once. A 403
@@ -430,6 +430,65 @@ export class CapabilityGatewayClient {
     }
     if (!response.ok) throw new GatewayUnreachableError(new Error(`gateway responded ${response.status}`));
     return response;
+  }
+}
+
+/**
+ * The `cap.webhook` relay client (see UPLIFT-WEBHOOK-PLAN).
+ *
+ * It extends the gateway client because it IS the gateway: same base URL, same
+ * bearer, same 401-refresh-once rule, same contract header. Only the five paths
+ * differ. Copying the transport to get a second set of paths is how two clients
+ * end up disagreeing about what a 403 means.
+ *
+ * Note what is NOT here: nothing pushes. An instance behind a router has no
+ * inbound route - the reason the capability exists at all - so `deliveries()`
+ * is the instance asking, and the answer travels back down the connection it
+ * opened.
+ */
+export interface RelayEndpoint {
+  endpointId: string;
+  url: string;
+  /** The relay's own signing secret for this endpoint. Never a provider's. */
+  secret: string;
+}
+
+export interface RelayedDelivery {
+  id: string;
+  endpointId: string;
+  receivedAt: string;
+  /** The provider's headers, untouched, so its signature still verifies here. */
+  headers: Record<string, string>;
+  body: string;
+  /** The RELAY's signature, keyed by the endpoint secret. */
+  signature: string;
+}
+
+export class WebhookRelayClient extends CapabilityGatewayClient {
+  /** Claim (or re-claim) the public address for one trigger. Idempotent. */
+  async claim(triggerId: string): Promise<RelayEndpoint> {
+    const response = await this.request('/v1/capabilities/webhook/endpoints', {
+      method: 'POST',
+      body: JSON.stringify({ triggerId }),
+    });
+    return (await response.json()) as RelayEndpoint;
+  }
+
+  /** Collect everything held after `cursor`. Long-polls; may answer empty. */
+  async deliveries(cursor?: string): Promise<{ deliveries: RelayedDelivery[]; cursor?: string }> {
+    const query = cursor ? `?after=${encodeURIComponent(cursor)}` : '';
+    const response = await this.request(`/v1/capabilities/webhook/deliveries${query}`);
+    return (await response.json()) as { deliveries: RelayedDelivery[]; cursor?: string };
+  }
+
+  /** Done with it. Until this lands the relay must keep holding it. */
+  async ack(deliveryId: string): Promise<void> {
+    await this.request(`/v1/capabilities/webhook/deliveries/${deliveryId}/ack`, { method: 'POST' });
+  }
+
+  /** Give the address back. It stops answering immediately. */
+  async release(endpointId: string): Promise<void> {
+    await this.request(`/v1/capabilities/webhook/endpoints/${endpointId}`, { method: 'DELETE' });
   }
 }
 

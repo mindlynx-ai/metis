@@ -142,6 +142,23 @@ Five of these change behaviour you may be relying on; they are marked
   here with smaller data." - true of the data node and of nothing else. A
   capability now states its own limitation (`OfferEntry.local`) and its own
   entitled line (`.entitledHint`), with the old sentences as fallbacks.
+- **The `cap.webhook` relay: stub, client and poller.** The instance side of the
+  public webhook address is built and proven against an in-repo stub, which is
+  the WP14 rule - the stub IS the contract the Helix service will implement.
+  Five surfaces (claim, receive, long-poll, ack, release), a
+  `WebhookRelayClient` that extends the gateway client because it is the same
+  gateway, and a poller that feeds relayed deliveries into the SAME
+  `handleWebhook` a local POST uses, so a cloud delivery and a direct one are
+  indistinguishable downstream.
+  It PULLS, and must: an instance behind a router has no inbound route, which is
+  the whole reason the capability exists. Two rules the relay must keep are
+  encoded and tested - it answers the provider immediately and holds the payload
+  (a sleeping laptop must not look like a broken endpoint and get disabled), and
+  it passes the provider's headers through untouched so the provider's own
+  signature still verifies on the instance, against a secret the cloud never
+  holds. The relay signs what it relays as well, so a forged delivery to the
+  ingress is detectable: two signatures, neither substituting for the other.
+  Not started in `runtime.ts` yet - there is no service to poll.
 - **A real editor for every long-form field.** Code, SQL, HTTP bodies, JSON and
   connector text params were all plain textareas: no line numbers, no
   highlighting, no indentation, no bracket matching. They are now one Monaco

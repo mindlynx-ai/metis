@@ -26,6 +26,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { generateKeyPairSync, randomUUID, sign as cryptoSign } from 'node:crypto';
 import { HELIX_CONTRACT_VERSION, type CloudJob, type OfferEntry } from '../uplift.js';
+import { createRelayStub, type RelayStub } from './helix-stub-webhook.js';
 
 export const STUB_OFFERS: OfferEntry[] = [
   {
@@ -119,10 +120,14 @@ export interface HelixStubOptions {
   idTokenClaims?: Record<string, unknown>;
   /** Break the id_token signature (negative-path tests). */
   tamperIdTokenSignature?: boolean;
+  /** How long the webhook relay holds an empty poll. Default 0 (answer now). */
+  relayPollHoldMs?: number;
 }
 
 export interface HelixStub {
   url: string;
+  /** The cap.webhook relay: claimed endpoints and held deliveries. */
+  relay: RelayStub;
   port: number;
   /** Mint a bearer without the OIDC dance (test convenience). */
   issueToken(email?: string): string;
@@ -368,6 +373,19 @@ export async function startHelixStub(options: HelixStubOptions = {}, port = 0): 
     return false;
   };
 
+  // The relay's five surfaces. It shares the stub's bearer + entitlement
+  // rules, because in the real service they are the same account.
+  const relay = createRelayStub({
+    baseUrl: () => baseUrl,
+    entitled: (request) => {
+      const account = bearerOf(request);
+      if (!account) return 'unauthorised';
+      return entitled.has('cap.webhook') ? { email: account.email } : 'unentitled';
+    },
+    json,
+    pollHoldMs: options.relayPollHoldMs,
+  });
+
   const server: Server = createServer((request, response) => {
     // The base is only for parsing the path; the stub itself is loopback http.
     const url = new URL(request.url ?? '/', 'https://stub');
@@ -376,6 +394,7 @@ export async function startHelixStub(options: HelixStubOptions = {}, port = 0): 
     if (handleJobs(request, response, url.pathname)) return;
     if (handleOidcMeta(request, response, url.pathname)) return;
     if (handleOidc(request, response, url)) return;
+    if (relay.handle(request, response, url.pathname)) return;
     json(response, 404, { error: 'not found' });
   });
 
@@ -397,6 +416,7 @@ export async function startHelixStub(options: HelixStubOptions = {}, port = 0): 
 
   return {
     url: baseUrl,
+    relay,
     port: boundPort,
     issueToken,
     revokeAccessTokens: () => tokens.clear(),

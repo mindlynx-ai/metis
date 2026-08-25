@@ -155,6 +155,17 @@ Five of these change behaviour you may be relying on; they are marked
 
 ### Fixed
 
+- **The MCP server could hang for ever on a refused token.** Its control-plane
+  client retried a 401 by logging in and calling itself again, with no limit.
+  That is fine while a fresh token works, and fatal when one does not - a
+  rotated signing key, clock skew, an evicted session - because the recursion
+  never ends: the process dies of a stack overflow, and the AI tool driving it
+  simply waits. It now retries exactly once and reports the 401.
+- **The MCP server said only "fetch failed" when Metis was not running.** That
+  is what `fetch` throws for a refused connection, a wrong port and an
+  unresolvable host alike, and it names none of them - so the commonest failure
+  there is read as an unexplained dead end to the one reader who has to act on
+  it. It now names the URL it tried and how to fix it.
 - **An API workflow ran EVERY branch of a switch, and could answer from the one
   it did not take.** `helixApiWorkflow` hand-built its `executeNode` request
   instead of using the builder `helixWorkflow` shares, and left four things off

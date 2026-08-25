@@ -27,6 +27,9 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
+import { MetisApiClient, type McpEnv } from './mcp-client.js';
+
+export { MetisApiClient, type McpEnv };
 
 /** The canvas handle ids each branching node routes by - an edge whose
  *  sourceHandle does not match never fires. Mirrors the engine + editor. */
@@ -49,63 +52,6 @@ const NODE_SHAPE_HELP = [
   'start node (no incoming edges) and no cycles.',
 ].join(' ');
 
-export interface McpEnv {
-  url: string;
-  token?: string;
-  user: string;
-  secret: string;
-  fetchImpl?: typeof fetch;
-}
-
-/** A tiny authenticated client for the Metis control plane. */
-export class MetisApiClient {
-  private token: string | undefined;
-  private readonly fetchImpl: typeof fetch;
-
-  constructor(private readonly env: McpEnv) {
-    this.token = env.token;
-    this.fetchImpl = env.fetchImpl ?? fetch;
-  }
-
-  private async login(): Promise<string> {
-    const response = await this.fetchImpl(`${this.env.url}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ userId: this.env.user, secret: this.env.secret }),
-    });
-    if (!response.ok) throw new Error(`login failed (${response.status}) - set METIS_TOKEN or METIS_USER/METIS_SECRET`);
-    const body = (await response.json()) as { token: string };
-    this.token = body.token;
-    return body.token;
-  }
-
-  async call<T>(method: string, path: string, body?: unknown): Promise<T> {
-    const token = this.token ?? (await this.login());
-    const response = await this.fetchImpl(`${this.env.url}${path}`, {
-      method,
-      headers: {
-        authorization: `Bearer ${token}`,
-        ...(body === undefined ? {} : { 'content-type': 'application/json' }),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
-    });
-    if (response.status === 401) {
-      // The token died (restart, expiry): log in once and retry.
-      this.token = undefined;
-      await this.login();
-      return this.call(method, path, body);
-    }
-    if (!response.ok) {
-      const detail = await response.text().catch(() => '');
-      throw new Error(`${method} ${path} -> ${response.status}: ${detail.slice(0, 300)}`);
-    }
-    // 204 (delete) and other empty responses have no JSON body.
-    if (response.status === 204 || response.headers.get('content-length') === '0') {
-      return undefined as T;
-    }
-    return (await response.json()) as T;
-  }
-}
 
 const text = (value: unknown) => ({
   content: [{ type: 'text' as const, text: typeof value === 'string' ? value : JSON.stringify(value, null, 2) }],

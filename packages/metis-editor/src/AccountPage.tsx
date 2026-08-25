@@ -41,6 +41,14 @@ const CAP_DETAILS: Record<string, { icon: IconName; adds: string[] }> = {
       'Results come straight back to the run',
     ],
   },
+  'cap.webhook': {
+    icon: 'webhook',
+    adds: [
+      'A permanent https address, not a tunnel that expires',
+      'Deliveries reach this Metis behind any router',
+      'Retries and a delivery log when you are offline',
+    ],
+  },
   'cap.memory': {
     icon: 'memory',
     adds: [

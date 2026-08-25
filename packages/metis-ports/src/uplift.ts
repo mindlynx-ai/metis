@@ -226,6 +226,25 @@ export interface OfferEntry {
    * exactly as it did.
    */
   scope?: 'step' | 'plan';
+  /**
+   * What the LOCAL version of this capability does, as the palette's lead-in.
+   *
+   * It used to be one hardcoded sentence, "Works here with smaller data.",
+   * which is true of the data capability and of nothing else. A webhook's local
+   * limit is not size, it is REACH: the address works on this computer and
+   * nowhere else. A capability that cannot state its own limitation gets
+   * described by whichever one was written first.
+   *
+   * Absent keeps the original sentence, so a gateway that predates this field
+   * reads exactly as it did.
+   */
+  local?: string;
+  /**
+   * What to say once the account IS entitled. The data capability points at the
+   * step's own settings ("choose where this step runs"); a webhook has no such
+   * switch - its public address simply exists. Absent keeps the original.
+   */
+  entitledHint?: string;
 }
 
 /**

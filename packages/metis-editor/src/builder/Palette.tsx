@@ -318,11 +318,16 @@ export function Palette({
                   <span className="up-connected">
                     <Icon name="check" size={12} /> Cloud: connected
                   </span>{' '}
-                  {'\u2014'} choose where this step runs in its settings.
+                  {'\u2014'} {offer?.entitledHint ?? 'choose where this step runs in its settings.'}
                 </>
               ) : (
                 <>
-                  Works here with smaller data. <b>Full version in the cloud</b>{' '}
+                  {/* The capability states its own limitation. Hardcoding
+                      "smaller data" described the data node and mis-described
+                      every other one: a webhook's local limit is reach, not
+                      size. The fallbacks are the sentences that used to be
+                      here, so a manifest without the fields is unchanged. */}
+                  {offer?.local ?? 'Works here with smaller data.'} <b>Full version in the cloud</b>{' '}
                   {offer?.message ?? offer?.description ?? 'does more.'}
                   <br />
                   <Link className="up-link" to={`/account#${entry.entitlement}`}>

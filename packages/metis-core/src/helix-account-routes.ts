@@ -70,9 +70,34 @@ export const STATIC_OFFERS: OfferEntry[] = [
     state: 'available',
     ctaUrl: PLANS_URL,
     price: PRO_PRICE,
-    // The palette's uplift pitch tail; mirrors the live manifest so the
-    // strip reads the same offline.
+    // The palette's uplift pitch; mirrors the live manifest so the strip reads
+    // the same offline. These three lines were hardcoded in the palette until a
+    // second capability needed different ones.
+    local: 'Works here with smaller data.',
     message: 'handles millions of rows.',
+    entitledHint: 'choose where this step runs in its settings.',
+  },
+  {
+    // The webhook's limit is REACH, not size. A downloaded Metis listens on
+    // loopback, so the URL a webhook trigger hands you means "this computer"
+    // and every provider that would call it is somewhere else. Nothing is
+    // wrong with the local endpoint - anything on this machine or this network
+    // can already use it - it simply cannot be reached from the internet
+    // without putting a public address in front of it yourself.
+    //
+    // Coming soon, and honestly so: no Helix-side ingress exists yet. The
+    // contract it will implement is in the uplift plan; until then this
+    // capability advertises and sells nothing.
+    id: 'cap.webhook',
+    title: 'Public webhook address',
+    description:
+      'A permanent https address that takes deliveries from Stripe, GitHub and anything else, '
+      + 'and passes them to this Metis - no tunnel, no port forwarding, no fixed IP.',
+    state: 'coming-soon',
+    ctaUrl: PLANS_URL,
+    local: 'Works on this computer and this network.',
+    message: 'takes deliveries from anywhere.',
+    entitledHint: 'its public address is on the trigger.',
   },
   {
     id: 'cap.memory',

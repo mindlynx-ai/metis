@@ -129,6 +129,19 @@ Five of these change behaviour you may be relying on; they are marked
 
 ### Added
 
+- **`cap.webhook` - a public webhook address, as a cloud uplift.** A downloaded
+  Metis listens on loopback, so the URL a webhook trigger hands you means "this
+  computer" while every provider that would call it is somewhere else. The
+  local side now says so plainly (see Fixed); this is the paid way out, and it
+  is the honest kind - a permanent address on infrastructure somebody else
+  operates cannot happen on your laptop, which is the same test `cap.data`
+  passes. It ships `coming-soon` and sells nothing, because no cloud ingress
+  exists yet. The local endpoint is unchanged and always will be: anything on
+  the same machine or network can call it exactly as before.
+  Building it generalised the palette's uplift strip, which hardcoded "Works
+  here with smaller data." - true of the data node and of nothing else. A
+  capability now states its own limitation (`OfferEntry.local`) and its own
+  entitled line (`.entitledHint`), with the old sentences as fallbacks.
 - **A real editor for every long-form field.** Code, SQL, HTTP bodies, JSON and
   connector text params were all plain textareas: no line numbers, no
   highlighting, no indentation, no bracket matching. They are now one Monaco

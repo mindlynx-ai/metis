@@ -41,6 +41,12 @@ export interface OfferEntry {
   /** 'step' shows in the builder palette; 'plan' is about the shape of the
    *  instance and belongs only on the account page. Absent means 'step'. */
   scope?: 'step' | 'plan';
+  /** The palette strip's lead-in: what the LOCAL version does. Each capability
+   *  states its own, because they are limited in different ways - the data node
+   *  by size, a webhook by reach. Absent keeps the original sentence. */
+  local?: string;
+  /** What to say once entitled. Absent keeps the original sentence. */
+  entitledHint?: string;
 }
 
 /**

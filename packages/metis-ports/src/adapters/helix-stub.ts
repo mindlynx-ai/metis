@@ -34,9 +34,25 @@ export const STUB_OFFERS: OfferEntry[] = [
     description: 'Query millions of rows and run heavy transforms in the cloud.',
     state: 'available',
     ctaUrl: 'https://helix.example/plans',
-    // The palette's uplift pitch tail ("Full version in the cloud ..."):
-    // the manifest owns the marketing line, not the editor.
+    // The palette's uplift pitch ("Works here ... Full version in the cloud
+    // ..."): the manifest owns the marketing line, not the editor.
+    local: 'Works here with smaller data.',
     message: 'handles millions of rows.',
+    entitledHint: 'choose where this step runs in its settings.',
+  },
+  {
+    // The stub mirrors the offline manifest in metis-core; the two must agree
+    // on shape or the strip reads differently online and off.
+    id: 'cap.webhook',
+    title: 'Public webhook address',
+    description:
+      'A permanent https address that takes deliveries from Stripe, GitHub and anything else, '
+      + 'and passes them to this Metis - no tunnel, no port forwarding, no fixed IP.',
+    state: 'coming-soon',
+    ctaUrl: 'https://helix.example/plans',
+    local: 'Works on this computer and this network.',
+    message: 'takes deliveries from anywhere.',
+    entitledHint: 'its public address is on the trigger.',
   },
   {
     id: 'cap.memory',

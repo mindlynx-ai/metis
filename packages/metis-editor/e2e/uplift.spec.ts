@@ -102,6 +102,36 @@ test('open cards are unchanged; the Data card carries the quiet uplift reveal', 
   await expect(page.locator('.cloud-chip')).toHaveCount(0);
 });
 
+test('a second uplift capability speaks for itself, not in the data one\'s words', async ({ page }) => {
+  // The strip's lead-in and its entitled line used to be hardcoded sentences
+  // about SIZE, which is true of the data node and of nothing else. A webhook's
+  // local limit is REACH: the address works on this computer and nowhere the
+  // internet can call. Both lines now come from the offers manifest.
+  await login(page);
+  await page.goto('http://127.0.0.1:4180/workflows/uplift-webhook/edit');
+  await page.getByRole('button', { name: 'Add step' }).click();
+  const lib = page.locator('.library');
+  await lib.getByLabel('Find a step').fill('webhook');
+
+  const uplift = lib.locator('.lib-uplift').first();
+  await expect(uplift.locator('.up-glyph')).toBeVisible();
+  await uplift.locator('.lib-item').focus();
+  const strip = uplift.locator('.up-strip');
+  await expect(strip).toBeVisible();
+  await expect(strip).toContainText('Works on this computer and this network.');
+  await expect(strip).toContainText('Full version in the cloud takes deliveries from anywhere.');
+  // NOT the data capability's pitch.
+  await expect(strip).not.toContainText('smaller data');
+  await expect(strip.getByRole('link', { name: /See what full adds/ })).toHaveAttribute(
+    'href',
+    '/account#cap.webhook',
+  );
+
+  // And the card still adds the ordinary local trigger, as every uplift card does.
+  await uplift.locator('.lib-item').click();
+  await expect(page.locator('.metis-node')).toHaveCount(1);
+});
+
 test('locked cards are offers-overlaid links with the Cloud only pill', async ({ page }) => {
   await login(page);
   await page.goto('http://127.0.0.1:4180/workflows/uplift-locked/edit');
@@ -440,11 +470,17 @@ test('the account page: disconnected hero + the capability grid from offers', as
   await expect(page.getByRole('button', { name: 'New here? Create an account' })).toBeVisible();
 
   const cards = page.locator('.capcard');
-  await expect(cards).toHaveCount(6);
+  await expect(cards).toHaveCount(7);
   const bigData = page.locator('.capcard', { hasText: 'Big data' });
   await expect(bigData.locator('.chip')).toHaveText('Available');
   await expect(bigData).toContainText('Millions of rows, not thousands');
-  await expect(page.locator('.chip', { hasText: 'Coming soon' })).toHaveCount(5);
+  await expect(page.locator('.chip', { hasText: 'Coming soon' })).toHaveCount(6);
+  // The webhook capability is a STEP one, so it appears both here and in the
+  // palette - unlike the two plan-level ones below.
+  const webhook = page.locator('.capcard', { hasText: 'Public webhook address' });
+  await expect(webhook).toHaveCount(1);
+  await expect(webhook.locator('.chip')).toHaveText('Coming soon');
+  await expect(webhook).toContainText('permanent https address');
   // The plan-level capabilities live here and nowhere else: the palette is a
   // list of steps and neither of these is one.
   await expect(page.locator('.capcard', { hasText: 'Multi-tenancy' })).toHaveCount(1);
@@ -457,7 +493,7 @@ for (const theme of THEMES) {
     await login(page);
     await setTheme(page, theme);
     await page.goto('http://127.0.0.1:4180/account');
-    await expect(page.locator('.capcard')).toHaveCount(6);
+    await expect(page.locator('.capcard')).toHaveCount(7);
     await settle(page);
     if (mac) await expect(page).toHaveScreenshot(`account-disconnected-${theme}.png`);
   });
@@ -469,7 +505,7 @@ test('account fidelity at 390px', async ({ browser }) => {
   await login(page);
   await setTheme(page, 'dark');
   await page.goto('http://127.0.0.1:4180/account');
-  await expect(page.locator('.capcard')).toHaveCount(6);
+  await expect(page.locator('.capcard')).toHaveCount(7);
   await settle(page);
   if (mac) await expect(page).toHaveScreenshot('account-390.png', { fullPage: true });
   await context.close();
@@ -519,10 +555,12 @@ test('stub down: the static manifest still renders and the hero reads offline', 
     await login(page);
     await page.goto('http://127.0.0.1:4180/account');
     await expect(page.locator('.offline-note')).toContainText("You're offline.");
-    // The bundled manifest keeps the grid rendering: six capabilities, of
-    // which Big data is the one that can be bought.
-    await expect(page.locator('.capcard')).toHaveCount(6);
-    await expect(page.locator('.chip', { hasText: 'Coming soon' })).toHaveCount(5);
+    // The bundled manifest keeps the grid rendering: seven capabilities, of
+    // which Big data is the one that can be bought. The offline manifest and
+    // the live one must agree on this, or the page reads differently online.
+    await expect(page.locator('.capcard')).toHaveCount(7);
+    await expect(page.locator('.chip', { hasText: 'Coming soon' })).toHaveCount(6);
+    await expect(page.locator('.capcard', { hasText: 'Public webhook address' })).toHaveCount(1);
     await expect(page.locator('.chip', { hasText: 'Available' })).toHaveCount(1);
     // The account page is where a plan-level capability belongs, so unlike the
     // palette it does show them.

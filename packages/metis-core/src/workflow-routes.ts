@@ -32,6 +32,7 @@ import {
   toHelixWorkflow,
 } from './workflow-schema.js';
 import type { TriggersPort } from './trigger-mgmt-routes.js';
+import { missingRequiredConfig } from './required-config.js';
 
 export function registerWorkflowRoutes(
   app: FastifyInstance,
@@ -278,6 +279,16 @@ export function registerWorkflowRoutes(
       });
       if (!validation.valid) {
         return reply.code(422).send({ error: 'invalid definition', details: validation.errors });
+      }
+      // Shape is not enough. validateDefinition never looks inside a node, so a
+      // step with its required config left empty published happily and only
+      // failed once the trigger fired it - by which point it is running on its
+      // own and nobody is watching.
+      const missing = missingRequiredConfig(
+        latest.definition as unknown as { nodes?: { type?: string }[] },
+      );
+      if (missing.length > 0) {
+        return reply.code(422).send({ error: 'steps are not finished', details: missing });
       }
       await store.putWorkflowVersion({ ...latest, status: 'published' });
       await trail(session, 'workflow.published', workflowId, { version: latest.version });

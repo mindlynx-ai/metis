@@ -174,6 +174,21 @@ Five of these change behaviour you may be relying on; they are marked
 - **A missing `isolated-vm` no longer takes down the whole boot.** It was
   required at module scope, so a failed native build killed `metis up` with a
   raw node-gyp error naming nothing. It loads on first use and explains itself.
+- **Publishing refuses a step that is not finished.** The catalogue has always
+  declared which fields a step cannot work without, and nothing enforced it:
+  `validateDefinition` checks the SHAPE of a graph and never looks inside a
+  node. So a code step with no code saved without a murmur and published
+  cheerfully - "your workflow is live", for a workflow that could not possibly
+  run - and the only sign was a failed run once the trigger had already fired.
+  Publish now names the step and the field. Presence only: it does not
+  type-check values or parse anybody's code. **A workflow already published with
+  a gap will refuse to re-publish until it is filled in.**
+- **The code step's language is a primary field**, not something behind "Show
+  advanced". It picks the execution engine, and for Python decides whether the
+  step can reach the disk and the network, so it belongs in front of you. Its
+  fields are properly titled, and the description no longer claims the step runs
+  JavaScript now that the default is TypeScript and Python prints rather than
+  returns.
 - **The Reviews empty state says what it is waiting for**, rather than being
   indistinguishable from a broken page.
 

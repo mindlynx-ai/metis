@@ -35,6 +35,7 @@ import {
   helixAccountBearer,
   HELIX_ACCOUNT_CONNECTOR_ID,
   type HelixStub,
+  HELIX_CLIENT_ID,
 } from '@mindlynx/metis-ports';
 import {
   AuditStore,
@@ -163,18 +164,24 @@ describe('connect flow against the stub OIDC', () => {
     expect(body.account?.email).toBe('jeremy@helix.example');
   });
 
-  it('the authorize URL carries the realm client id (metis-editor) by default', async () => {
-    // Regression for the live-test finding: the connect flow used to hardcode
-    // client_id 'metis', but the realm-as-code ships 'metis-editor'. The
-    // default must match the realm so connect works with no extra config.
+  it('authorizes as the SAME client it refreshes as, with no extra config', async () => {
+    // The invariant, not the literal. This used to pin 'metis-editor' after a
+    // Keycloak realm while metis-ports refreshed as 'metis' - two names for one
+    // product. A real authorization server has one row registered for us, so
+    // authorize answered invalid_client; had it not, the refresh would have
+    // rotated a token against a different client than the one that minted it.
+    // Asserting them EQUAL is what stops that returning under a third name.
     const connect = await app.inject({
       method: 'POST',
       url: '/api/account/connect',
       headers: { authorization: `Bearer ${token}` },
     });
-    expect(new URL((connect.json() as { authorizeUrl: string }).authorizeUrl).searchParams.get('client_id')).toBe(
-      'metis-editor',
-    );
+    const authorizeClient = new URL(
+      (connect.json() as { authorizeUrl: string }).authorizeUrl,
+    ).searchParams.get('client_id');
+
+    expect(authorizeClient).toBe(HELIX_CLIENT_ID);
+    expect(authorizeClient).toBe('metis');
   });
 
   it('offers come back live from the stub manifest', async () => {

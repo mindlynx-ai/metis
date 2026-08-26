@@ -31,6 +31,22 @@ export const HELIX_CONTRACT_VERSION = '1';
 /** The reserved vault connection holding the linked Helix account's bearer. */
 export const HELIX_ACCOUNT_CONNECTOR_ID = 'helix-account';
 
+/**
+ * The OAuth client id this product authorizes AND refreshes as.
+ *
+ * One constant because it was two literals, and they drifted: the authorize leg
+ * (metis-core helix-account-routes.ts) said `metis-editor` after a Keycloak
+ * realm, while the refresh below said `metis`. Against a real authorization
+ * server - which has exactly one row registered for us, `metis` - authorize
+ * answered `invalid_client`, and had it not, a refresh would have rotated a
+ * token against a different client than the one that minted it. Every stub in
+ * this repo accepted both, so only a live connect could show it.
+ *
+ * A deployment whose provider registers a different id sets
+ * METIS_HELIX_CLIENT_ID; nothing here is a licence to hardcode a second name.
+ */
+export const HELIX_CLIENT_ID = 'metis';
+
 /** The OIDC discovery document (the fields this build needs from it). */
 export interface OidcDiscoveryDocument {
   issuer: string;
@@ -123,7 +139,7 @@ export function helixAccountBearer(
         body: new URLSearchParams({
           grant_type: 'refresh_token',
           refresh_token: refreshToken,
-          client_id: bearerOptions.clientId ?? 'metis',
+          client_id: bearerOptions.clientId ?? HELIX_CLIENT_ID,
         }).toString(),
         signal: AbortSignal.timeout(IDENTITY_TIMEOUT_MS),
       });

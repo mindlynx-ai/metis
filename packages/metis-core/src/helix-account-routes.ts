@@ -28,7 +28,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { ConnectorCredentialStore, OfferEntry, Session } from '@mindlynx/metis-ports';
-import { HELIX_ACCOUNT_CONNECTOR_ID, discoverOidc } from '@mindlynx/metis-ports';
+import { HELIX_ACCOUNT_CONNECTOR_ID, HELIX_CLIENT_ID, discoverOidc } from '@mindlynx/metis-ports';
 import type { CloudEntitlementsClient, OffersClient } from '@mindlynx/metis-ports';
 import type { AuditStore } from '@mindlynx/metis-data-gateway';
 import { requireAction } from './auth-gate.js';
@@ -156,16 +156,34 @@ export interface UpliftDeps {
   /** Base for this instance's own callback URL (mirrors OAuthConfig.redirectBase). */
   redirectBase: string;
   /**
-   * The OIDC client this instance authenticates as. Defaults to the
-   * realm-as-code client `metis-editor`; the id_token `aud` (and so the
-   * verify audience) is this client. Configurable via METIS_HELIX_CLIENT_ID
-   * for a realm that registers a different client id.
+   * The OIDC client this instance authenticates as - `HELIX_CLIENT_ID`, the
+   * one constant metis-ports refreshes with too, so the two legs cannot name
+   * different clients. The id_token `aud` (and so the verify audience) is this
+   * client. Configurable via METIS_HELIX_CLIENT_ID for a provider that
+   * registers a different id.
    */
   clientId?: string;
 }
 
-/** The realm-as-code client id (terraform/keycloak clients.tf: metis-editor). */
-const DEFAULT_CLIENT_ID = 'metis-editor';
+/**
+ * The client id this build authorizes as.
+ *
+ * It must be the SAME string metis-ports uses to refresh with
+ * (`uplift.ts` `client_id: bearerOptions.clientId ?? 'metis'`) and the same one
+ * the authorization server has registered. It was `metis-editor`, named after a
+ * Keycloak terraform client, while the two halves of this product disagreed:
+ * the authorize leg said `metis-editor` and the refresh leg said `metis`.
+ *
+ * Against a real server that is not a cosmetic mismatch. Helix's provider has
+ * ONE row seeded for us - `metis` - so authorize answered
+ * `invalid_client`, and had it not, the refresh would have rotated a token
+ * against a different client than the one that minted it. Found by connecting
+ * to a live authorization server; every stub in this repo accepted both.
+ *
+ * A deployment still pointing at a Keycloak realm whose client is named
+ * differently sets METIS_HELIX_CLIENT_ID explicitly.
+ */
+const DEFAULT_CLIENT_ID = HELIX_CLIENT_ID;
 
 /** The configured client id, or the realm default. */
 function clientIdFor(deps: UpliftDeps): string {

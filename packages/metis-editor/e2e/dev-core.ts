@@ -55,19 +55,36 @@ const identity = await SingleTenantIdentity.create('t1', [
 // fast suite exercises the real uplift surfaces; /e2e/helix-stub can stop
 // and restart it to prove the offline static fallback.
 const HELIX_STUB_PORT = 4182;
-const HELIX_STUB_URL = `http://127.0.0.1:${HELIX_STUB_PORT}`;
-let helixStub: HelixStub | undefined = await startHelixStub({}, HELIX_STUB_PORT);
+/**
+ * Point the harness at a REAL Helix instead of the stub.
+ *
+ * The stub is the contract, and the whole suite proves Metis against it - but a
+ * stub can only ever prove Metis agrees with our OWN idea of the contract. The
+ * one thing it cannot catch is the two sides drifting apart, which is exactly
+ * the class of bug that reaches a customer on the day they connect. With this
+ * set, the same specs run against a live helix-core.
+ *
+ * Off by default and deliberately so: the fast suite must not need a database,
+ * a Postgres, or anything outside this repo.
+ */
+const HELIX_STUB_URL = process.env.METIS_E2E_HELIX_URL ?? `http://127.0.0.1:${HELIX_STUB_PORT}`;
+const usingRealHelix = process.env.METIS_E2E_HELIX_URL !== undefined;
+let helixStub: HelixStub | undefined = usingRealHelix
+  ? undefined
+  : await startHelixStub({}, HELIX_STUB_PORT);
+if (usingRealHelix) process.stdout.write(`[dev-core] uplift points at REAL Helix: ${HELIX_STUB_URL}\n`);
 const credentials = new FakeCredentialPort();
 // Zero TTLs: the suite flips the stub up/down and every read must be live.
+const HELIX_IDENTITY_URL = process.env.METIS_E2E_HELIX_IDENTITY_URL ?? HELIX_STUB_URL;
 const getBearer = helixAccountBearer(credentials, 't1', {
-  identityUrl: HELIX_STUB_URL,
-  clientId: 'metis',
+  identityUrl: HELIX_IDENTITY_URL,
+  clientId: process.env.METIS_E2E_HELIX_CLIENT_ID ?? 'metis',
 });
 const uplift = {
   offers: new OffersClient({ baseUrl: HELIX_STUB_URL, ttlMs: 0 }),
   entitlements: new CloudEntitlementsClient({ baseUrl: HELIX_STUB_URL, getBearer, ttlMs: 0 }),
   credentials,
-  identityUrl: HELIX_STUB_URL,
+  identityUrl: HELIX_IDENTITY_URL,
   redirectBase: 'http://127.0.0.1:4180',
 };
 

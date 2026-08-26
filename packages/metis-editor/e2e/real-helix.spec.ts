@@ -75,6 +75,24 @@ test('the live manifest carries every capability this build bundles', async ({ p
   }
 });
 
+test('the purchasable capability quotes the price Stripe actually charges', async ({ page }) => {
+  // The price is never declared in either repo: helix-core reads it off the
+  // live Stripe price object that checkout charges, and Metis renders whatever
+  // the manifest carries. That is the whole defence against the storefront and
+  // the card disagreeing, which is exactly what happened once (Stripe took £29
+  // while the page advertised £9).
+  await login(page);
+  await page.goto('http://127.0.0.1:4180/account');
+
+  const bigData = page.locator('.capcard', { hasText: 'Big data' });
+  await expect(bigData).toBeVisible({ timeout: 15_000 });
+  await expect(bigData).toContainText('£9/month');
+
+  // And nothing coming-soon quotes a number: only what can be bought has one.
+  const soon = page.locator('.capcard', { hasText: 'Public webhook address' });
+  await expect(soon).not.toContainText('£');
+});
+
 test('each capability states its own local limit, not the data one\'s', async ({ page }) => {
   // The webhook's local limit is REACH; big data's is SIZE. When the live
   // manifest drops `local`, both silently read as "Works here with smaller

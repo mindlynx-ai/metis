@@ -19,6 +19,8 @@ export * from './schedules.js';
 export * from './status-reconciler.js';
 export * from './triggers.js';
 export * from './webhook-ingress.js';
+export * from './relay-poller.js';
+export * from './relay-signature.js';
 export * from './connector-poller.js';
 export * from './outbound-webhooks.js';
 export * from './socket-hub.js';

@@ -29,12 +29,20 @@ import { join, extname, resolve, sep } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import type { Server as HttpServer } from 'node:http';
 import type { FastifyInstance } from 'fastify';
-import { attachSocketHub, handleWebhook, type SocketHub, type TriggerService } from '@mindlynx/metis-orchestrator';
+import {
+  attachSocketHub,
+  handleWebhook,
+  RelayPoller,
+  type SocketHub,
+  type TriggerService,
+} from '@mindlynx/metis-orchestrator';
 import { TemporalExecutionAdapter } from '@mindlynx/metis-orchestrator';
 import {
   CloudEntitlementsClient,
   OffersClient,
   helixAccountBearer,
+  HELIX_CLIENT_ID,
+  WebhookRelayClient,
   type ExecutionPort,
 } from '@mindlynx/metis-ports';
 import type { WorkflowStore } from '@mindlynx/metis-data-gateway';
@@ -189,13 +197,18 @@ export interface ControlServerOptions {
  * nothing cloud). METIS_HELIX_REDIRECT_BASE overrides where the OIDC
  * callback lands (defaults to the editor dev origin).
  */
+/** How often an instance asks the relay for anything it is holding. */
+const RELAY_POLL_INTERVAL_MS = 15_000;
+
 function buildUpliftDeps(runtime: MetisRuntime): UpliftDeps | undefined {
   const gatewayUrl = process.env.METIS_HELIX_GATEWAY_URL;
   const identityUrl = process.env.METIS_HELIX_IDENTITY_URL ?? gatewayUrl;
   if (!gatewayUrl || !identityUrl) return undefined;
-  // The OIDC client this instance authenticates as (defaults to the
-  // realm-as-code client 'metis-editor'; override for a differently-named realm).
-  const clientId = process.env.METIS_HELIX_CLIENT_ID ?? 'metis-editor';
+  // The OIDC client this instance authenticates as. HELIX_CLIENT_ID, the one
+  // constant metis-core authorizes with and metis-ports refreshes with - this
+  // was a THIRD copy of the literal, and it named the dead Keycloak client
+  // while the other two had already been corrected to agree with each other.
+  const clientId = process.env.METIS_HELIX_CLIENT_ID ?? HELIX_CLIENT_ID;
   // Rotation-safe bearer: the token endpoint comes from the identity
   // provider's discovery document, resolved lazily and cached.
   const getBearer = helixAccountBearer(runtime.credentials, TENANT, { identityUrl, clientId });
@@ -207,6 +220,65 @@ function buildUpliftDeps(runtime: MetisRuntime): UpliftDeps | undefined {
     redirectBase: process.env.METIS_HELIX_REDIRECT_BASE ?? 'http://127.0.0.1:4180',
     clientId,
   };
+}
+
+/**
+ * Collect webhook deliveries the cloud is holding for this instance.
+ *
+ * The poller has existed and been tested since the relay client shipped, but
+ * was deliberately NOT started: with no service behind it, every install would
+ * have run a loop against nothing. There is a service now.
+ *
+ * It stays silent when it should be. `relay()` answers undefined with no
+ * gateway configured or no account linked, and the poller then does nothing at
+ * all - no claim, no poll, no error - so an Open build is unchanged.
+ *
+ * Deliveries reach `handleWebhook`, the SAME function a direct
+ * POST /hooks/:triggerId calls. A relayed delivery is not a second kind of
+ * webhook, and giving it its own path is how the two would drift.
+ *
+ * @param app - the control server, so the poller stops when it closes
+ * @param runtime - for the trigger list and the credential vault
+ * @param deps - what handleWebhook needs, shared with the direct route
+ */
+function startRelayPoller(
+  app: FastifyInstance,
+  runtime: MetisRuntime,
+  deps: WebhookRouteDeps,
+): void {
+  const gatewayUrl = process.env.METIS_HELIX_GATEWAY_URL;
+  const identityUrl = process.env.METIS_HELIX_IDENTITY_URL ?? gatewayUrl;
+  if (!gatewayUrl || !identityUrl) return;
+
+  const getBearer = helixAccountBearer(runtime.credentials, TENANT, {
+    identityUrl,
+    clientId: process.env.METIS_HELIX_CLIENT_ID ?? HELIX_CLIENT_ID,
+  });
+  const client = new WebhookRelayClient({ baseUrl: gatewayUrl, getBearer });
+
+  const poller = new RelayPoller({
+    triggers: runtime.triggers,
+    // A fresh read each tick rather than a captured client: an account
+    // connected AFTER boot must start working without a restart.
+    relay: () => client,
+    deliver: async ({ triggerId, rawBody, headers }) => {
+      const result = await handleWebhook(
+        {
+          triggers: deps.triggers,
+          store: deps.store,
+          executions: deps.executions,
+          tenantId: deps.tenantId,
+          newExecutionId: () => `exec_${randomUUID()}`,
+          now: () => new Date().toISOString(),
+        },
+        { triggerId, rawBody, headers },
+      );
+      return { status: result.status, ...(result.error ? { error: result.error } : {}) };
+    },
+  });
+
+  poller.start(RELAY_POLL_INTERVAL_MS);
+  app.addHook('onClose', async () => poller.stop());
 }
 
 export async function buildControlServer(options: ControlServerOptions): Promise<FastifyInstance> {
@@ -272,12 +344,14 @@ export async function buildControlServer(options: ControlServerOptions): Promise
     },
   });
 
-  await registerWebhookRoute(app, {
+  const webhookDeps = {
     triggers: runtime.triggers,
     store: runtime.store,
     executions,
     tenantId: TENANT,
-  });
+  };
+  await registerWebhookRoute(app, webhookDeps);
+  startRelayPoller(app, runtime, webhookDeps);
 
   if (options.editorDir && existsSync(join(options.editorDir, 'index.html'))) {
     const editorDir = options.editorDir;

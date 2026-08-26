@@ -27,20 +27,23 @@ This is not a trial of something else. It is the product.
 
 ## Cloud
 
-**£9 per month.** Metis, hosted and operated for you at
-[app.metisflow.io](https://app.metisflow.io) - plus the one capability that
-genuinely cannot run on your own machine.
+**£9 per month.** The capabilities that genuinely cannot run on your own
+machine, unlocked on the Metis you already run.
 
 | Capability | What it does | State |
 |---|---|---|
-| Big data | Query millions of rows and run heavy transforms on a warehouse we operate. The step is in the Open build and runs locally against your own database; the cloud backend is what the plan unlocks | Built, awaiting checkout |
+| Big data | Query millions of rows and run heavy transforms on a warehouse we operate. The step is in the Open build and runs locally against your own database; the cloud backend is what the plan unlocks | Built both sides, not yet published |
+| Public webhook address | A permanent https address that takes deliveries from Stripe, GitHub and anything else, and passes them to your Metis - no tunnel, no port forwarding, no fixed IP | Built on the Metis side only |
 
-!!! note "There is no checkout yet"
+!!! note "You still cannot buy it"
 
-    The price is set and the capability is built on both sides, but you cannot
-    buy it today and nobody has been charged. Until that changes, treat this
-    page as a statement of intent rather than an offer. If you want it, open an
-    issue and say so - that is what decides how soon it follows.
+    Big data is built on both sides and the checkout exists, but the gateway
+    those calls go to is not published yet, so no purchase can complete and
+    nobody has been charged. The public webhook address is built inside Metis
+    and is waiting on the relay that answers it. Until both are reachable,
+    treat this page as a statement of intent rather than an offer. If you want
+    either, open an issue and say so - that is what decides how soon it
+    follows.
 
 ### Coming to Cloud
 

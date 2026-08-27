@@ -33,6 +33,7 @@ import {
   formatConnectorList,
   DEFAULT_TENANT,
 } from './connectors.js';
+import { describeAge, editorFreshness } from './editor-freshness.js';
 import { parseFlags, buildTriggerInput, formatTriggerList } from './triggers.js';
 import { buildWebhookInput, formatWebhookList } from './webhooks.js';
 import { assertServableSecret } from './seed-users.js';
@@ -265,6 +266,16 @@ export async function cmdUp(context: CliContext): Promise<number> {
   }
   if (editor) {
     context.stdout(`Editor and API on http://localhost:${config.ports.editor}`);
+    // What bundle, and how old. A stale editor is a COMPLETE, working editor
+    // that behaves like the day it was built, so every fix since looks absent
+    // and the reader concludes the fix does not work. Nothing used to say.
+    const freshness = editorFreshness(context.cwd, editor);
+    if (freshness.builtAt > 0) {
+      context.stdout(`  Serving ${editor}, built ${describeAge(freshness.builtAt)}.`);
+    }
+    if (freshness.staleReason) {
+      context.stdout(`  WARNING: ${freshness.staleReason}`);
+    }
   } else {
     // Saying "Editor and API" with no bundle to serve sends the reader to a
     // raw 404 and lets them conclude Metis is broken. It is not: the API is
